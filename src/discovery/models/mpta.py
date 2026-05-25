@@ -18,9 +18,6 @@ def write_ml_json(df, savename):
         json.dump(ml_params, f, indent=2)
     return
 
-def powerlaw_bkgrnd(f, df): # fixed amplitude and slope for a GWB at A = 2*10**-15
-    return ((2 * 10**(-15))**2) / 12.0 / jnp.pi**2 * const.fyr ** (4.33 - 3.0) * f ** (-4.33) * df
-
 def update_priordict_standard_mpta():
     # Update the standard prior dictionary with PTA-specific parameters
     prior.priordict_standard.update({
@@ -28,6 +25,7 @@ def update_priordict_standard_mpta():
         '(.*_)?efac':               [0.5, 2],
         '(.*_)?log10_tnequad':      [-10, -5],
         '(.*_)?log10_ecorr':        [-10, -5],
+        '(.*_)?log10_ecorr_q.*':    [-10, -5],
         # Per-pulsar GW background parameters
         '(.*_)?bkgrnd_log10_A':     [-18, -11],
         # GP parameters
@@ -44,6 +42,8 @@ def update_priordict_standard_mpta():
         '(.*_)?sw_gp_gamma':        [0, 4],
         '(.*_)?band_gp_log10_A':    [-18, -11],
         '(.*_)?band_gp_gamma':      [0, 7],
+        '(.*_)?band_low_gp_gamma':      [0, 7],
+        '(.*_)?band_low_gp_log10_A':      [-18, -11],
         '(.*_)?band_low_gp_fcutoff':    [856, 1712], # MeerKAT L-band
         '(.*_)?band_gp_flow':       [856, 1712], # MeerKAT L-band
         '(.*_)?band_gp_fhigh':      [856, 1712], # MeerKAT L-band
@@ -67,13 +67,39 @@ def update_priordict_standard_mpta():
         '(.*_)?chrom_1yr_alpha': [0, 7],
         '(.*_)?chrom_gauss_t0': [58525, 60900], # MPTA 6-yr range
         '(.*_)?chrom_gauss_log10_Amp': [-10, -4],
-        '(.*_)?chrom_gauss_log10_sigma': [0, 4],
+        '(.*_)?chrom_gauss_log10_sigma': [0.5, 4],
         '(.*_)?chrom_gauss_sign_param': [-1, 1],
         '(.*_)?chrom_gauss_alpha': [0, 7],
+        r'(.*_)?chrom_sphere_t0': [58525, 60900],
+        r'(.*_)?chrom_sphere_log10_Amp': [-10, -4],
+        r'(.*_)?chrom_sphere_log10_tau': [1.0, 4.0],
+        r'(.*_)?chrom_sphere_sign_param': [-1, 1],
+        r'(.*_)?chrom_sphere_alpha': [0, 14],
+        r'(.*_)?chrom_sphere_smooth': [10, 200],
+        r'(.*_)?chrom_step_t0': [58525, 60900],
+        r'(.*_)?chrom_step_log10_Amp': [-10, -4],
+        r'(.*_)?chrom_step_log10_span': [1.0, 4.0],
+        r'(.*_)?chrom_step_sign_param': [-1, 1],
+        r'(.*_)?chrom_step_alpha': [0, 14],
+        r'(.*_)?chrom_step_smooth': [10, 200], 
         r'(.*_)?timingmodel_coefficients\(\d+\)': [-20.0, 20.0],
         r'(.*_)?alpha_scaling\(\d+\)': [0.0, 100.0],
         r'(.*_)?h3': [0.0, 10**-5],
-        r'(.*_)?stig': [0.0, 1.0]
+        r'(.*_)?stig': [0.0, 1.0],
+        r'(.*_)?cosi': [0.0, 1.0],
+        r'(.*_)?orbital_dm_amp': [0.0, 1e-3],        # pc cm^-3
+        r'(.*_)?orbital_dm_phi0': [-1.0, 1.0],           # radians
+        r'(.*_)?orbital_dm_sigma_phi': [0.0, 0.5],      # radians
+        r'(.*_)?orbital_dm_fourier_cos\d+': [-1e-4, 1e-4],
+        r'(.*_)?orbital_dm_fourier_sin\d+': [-1e-4, 1e-4],
+        r'(.*_)?orbital_dm_gp_log10_A': [-12, -4],
+        r'(.*_)?orbital_dm_gp_gamma': [0, 7],
+        r"(.*_)?chrom_gp_CM0": [-1e-4, 1e-4], # <100us at 1.4 GHz
+        r"(.*_)?chrom_gp_CM1": [-1e-5, 1e-5], # <10us/yr at 1.4 GHz
+        r"(.*_)?chrom_gp_CM2": [-1e-6, 1e-6], # <1us/yr^2 at 1.4 GHz
+        r"(.*_)?chrom_gp_c0": [-1e-4, 1e-4],
+        r"(.*_)?chrom_gp_c1": [-1e-4, 1e-4],
+        r"(.*_)?chrom_gp_c2": [-1e-4, 1e-4],
     })
     return
 
@@ -98,42 +124,46 @@ def gps2commongp(gps):
     return matrix.VariableGP(matrix.VectorNoiseMatrix1D_var(prior), Fs)
 
 
-def make_psr_gps_fourier(psr, max_cadence_days=14, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, sw=True, band=False, band_low=False, band_alpha=False):
+def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, band=False, band_low=False, band_alpha=False):
     psr_Tspan = signals.getspan(psr) if Tspan is None else Tspan
     psr_components = int(psr_Tspan / (max_cadence_days * 86400))
 
-    return (([signals.makegp_fourier(psr, powerlaw_bkgrnd, components=psr_components, name='bkgrnd')] if background else []) + \
+    return (([signals.makegp_fourier(psr, signals.powerlaw_gwb(log10_A=bkgrnd_log10_A), components=psr_components, name='bkgrnd')] if background else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, name='red_noise')] if red else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, name='red_noise2')] if red2 else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_dm, name='dm_gp')] if dm else [])+ \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_chrom, name='chrom_gp')] if chrom else [])+ \
+            ([signals.makegp_chrom_poly_svd(psr, name="chrom_gp")] if (chrom and chrom_poly) else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=solar.fourierbasis_solar_dm, name='sw_gp')] if sw else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_band_range, name='band_gp')] if band else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_band, name='band_low_gp')] if band_low else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_band_range_alpha, name='bandalpha_gp')] if band_alpha else []))
 
 
-def make_psr_gps_fftint(psr, max_cadence_days=14, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, sw=True, band=False, band_low=False, band_alpha=False):
+def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, band=False, band_low=False, band_alpha=False, orbital_dm_gp=False):
     psr_Tspan = signals.getspan(psr) if Tspan is None else Tspan
     psr_components = int(psr_Tspan / (max_cadence_days * 86400))
     psr_knots = 2 * psr_components + 1
 
-    return (([signals.makegp_fftcov(psr, powerlaw_bkgrnd, components=psr_knots, name='bkgrnd')] if background else []) + \
+    return (([signals.makegp_fftcov(psr, signals.powerlaw_gwb(log10_A=bkgrnd_log10_A), components=psr_knots, name='bkgrnd')] if background else []) + \
             ([signals.makegp_fftcov(psr, signals.powerlaw, components=psr_knots, name='red_noise')] if red else []) + \
             ([signals.makegp_fftcov(psr, signals.powerlaw, components=psr_knots, name='red_noise2')] if red2 else []) + \
             ([signals.makegp_fftcov_dm(psr, signals.powerlaw, components=psr_knots, name='dm_gp')] if dm else [])+ \
             ([signals.makegp_fftcov_chrom(psr, signals.powerlaw, components=psr_knots, name='chrom_gp')] if chrom else [])+ \
+            ([signals.makegp_chrom_poly_svd(psr, name="chrom_gp")] if (chrom and chrom_poly) else []) + \
             ([signals.makegp_fftcov_solar(psr, signals.powerlaw, components=psr_knots, name='sw_gp')] if sw else []) + \
             ([signals.makegp_fftcov_band_range(psr, signals.powerlaw, components=psr_knots, name='band_gp')] if band else []) + \
             ([signals.makegp_fftcov_band(psr, signals.powerlaw, components=psr_knots, name='band_low_gp')] if band_low else []) + \
-            ([signals.makegp_fftcov_band_range_alpha(psr, signals.powerlaw, components=psr_knots, name='bandalpha_gp')] if band_alpha else []))
+            ([signals.makegp_fftcov_band_range_alpha(psr, signals.powerlaw, components=psr_knots, name='bandalpha_gp')] if band_alpha else []) + \
+            ([signals.makegp_fftcov_orbital_dm(psr, signals.powerlaw, components=psr_knots, name='orbital_dm_gp')] if orbital_dm_gp else []))
 
 
-def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={}, tm_variable=False, timing_inds=None, outliers=False, global_ecorr=False,
-                        background=True, red=True, red2=False, dm=True, chrom=True, sw=True, band=False, band_low=False, band_alpha=False, # GP models
-                        chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, shapiro=False, extra_gps=None): # Deterministic chromatic models
+def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, noisedict={}, tm_variable=False, timing_inds=None, ecorr=True, quadratic=True, global_ecorr=False,
+                        background=True, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, band=False, band_low=False, band_alpha=False, orbital_dm_gp=False, # GP models
+                        chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False,
+                        shapiro=False, orbital_dm=False, orbital_dm_fourier=False, extra_gps=None): # Deterministic chromatic models): 
     # Set up per-backend white noise
-    measurement_noise = signals.makenoise_measurement(psr, tnequad=True, noisedict=noisedict, outliers=outliers)
+    measurement_noise = signals.makenoise_measurement(psr, tnequad=True, noisedict=noisedict)
     # Set up timing model
     tm = signals.makegp_timing(psr, svd=True, variable=tm_variable, timing_inds=timing_inds)
     if not isinstance(tm, list): # ensure the timing model is unpacked if returning a list
@@ -142,7 +172,11 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     model_components = [psr.residuals]
     model_components += tm
     model_components += [measurement_noise]
-    model_components += [signals.makegp_ecorr(psr, noisedict=noisedict)]
+    if ecorr:
+        if quadratic:
+            model_components += [signals.makegp_quadratic_ecorr(psr, noisedict=noisedict)]
+        else:
+            model_components += [signals.makegp_ecorr(psr, noisedict=noisedict)]
     if global_ecorr: # add an additional global ECORR term
         model_components += [signals.makegp_ecorr_simple(psr, noisedict=noisedict)]
     # Add deterministic chromatic components
@@ -152,17 +186,28 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
         model_components += [signals.makedelay(psr, deterministic.chromatic_exponential(psr), name='chrom_exp')]
     if chrom_gaussian:
         model_components += [signals.makedelay(psr, deterministic.chromatic_gaussian(psr), name='chrom_gauss')]
-    if shapiro:
-        tasc = 59000.033444485320853 * 86400 # Example value for J2241-5236
-        pb = 1 / 7.9452845656629659959e-05 # Example value for J2241-5236
-        binphase = (2 * np.pi / pb) * (psr.toas - tasc)
-        print("warning: using example values for tasc and pb in shapiro delay model")
-        model_components += [signals.makedelay(psr, deterministic.orthometric_shapiro(psr, binphase), name='shapiro')]
+    if chrom_sphere:
+        model_components += [signals.makedelay(psr, deterministic.chromatic_sphere(psr), name='chrom_sphere')]
+    if chrom_step:
+        model_components += [signals.makedelay(psr, deterministic.chromatic_step(psr), name='chrom_step')]
+    # Models that require orbital phase information    
+    if shapiro or orbital_dm or orbital_dm_fourier:
+        if psr.tasc is None or psr.pb is None:
+            raise ValueError("Error: You must set psr.tasc and psr.pb to use the deterministic Shapiro delay function")
+        binphase = (2 * np.pi / psr.pb) * (psr.toas - psr.tasc)
+        if shapiro:
+            model_components += [signals.makedelay(psr, deterministic.shapiro_cosi(psr, binphase), name='shapiro')]
+        if orbital_dm:
+            model_components += [signals.makedelay(psr, deterministic.orbital_DM_gaussian(psr, binphase), name='orbital_dm')]
+        if orbital_dm_fourier:
+            model_components += [signals.makedelay(psr, deterministic.orbital_DM_fourier(psr, binphase), name='orbital_dm_fourier')]
+
     # Add GP components
     if fftint:
-        model_components += make_psr_gps_fftint(psr, max_cadence_days=max_cadence_days,Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, sw=sw, band=band, band_low=band_low, band_alpha=band_alpha)
+        model_components += make_psr_gps_fftint(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, chrom_poly=chrom_poly, sw=sw, band=band, band_low=band_low, band_alpha=band_alpha, orbital_dm_gp=orbital_dm_gp)
     else:
-        model_components += make_psr_gps_fourier(psr, max_cadence_days=max_cadence_days, Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, sw=sw, band=band, band_low=band_low, band_alpha=band_alpha)
+        model_components += make_psr_gps_fourier(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, chrom_poly=chrom_poly, sw=sw, band=band, band_low=band_low, band_alpha=band_alpha)
+    
     if extra_gps is not None:
         model_components += extra_gps
 
@@ -177,7 +222,7 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
 
     return m
 
-def common_noise(psrs, chain_dfs, fftInt=False, max_cadence_days=14, name="gw_crn"):
+def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn"):
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs an ArrayLikelihood
     def has_param(df, param_string="red_noise"):
         return any(f"{param_string}" in col for col in list(df.columns))
@@ -202,10 +247,10 @@ def common_noise(psrs, chain_dfs, fftInt=False, max_cadence_days=14, name="gw_cr
 
 
         # background = False, as we are including a common red noise process
-        m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=None, background=False, noisedict=noisedict, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
+        m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
                                 red=has_param(df, "red_noise"), dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), sw=has_param(df, "sw_gp"),
                                 band=has_param(df, "band_gp"), band_low=has_param(df, "band_low_gp"), band_alpha=has_param(df, "bandalpha_gp"),
-                                chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"),
+                                chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
                                 extra_gps=extra_gps)
 
         print("Including pulsar", psr.name, "with model parameters:\n", m.logL.params)

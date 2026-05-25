@@ -69,7 +69,6 @@ class PulsarLikelihood:
 
         if vgps:
             for vgp in vgps:
-                print(vgp.gpname )
                 if hasattr(vgp, 'gpname') and vgp.gpname == 'gw':
                     self.gw = vgp
                 elif hasattr(vgp, 'gpname') and vgp.gpname == 'curn':

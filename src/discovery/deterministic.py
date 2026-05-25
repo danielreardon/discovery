@@ -194,6 +194,39 @@ def chromatic_gaussian(psr, fref=1400.0):
     return delay
 
 
+def chromatic_sphere(psr, fref=1400.0):
+    """Chromatic delay from a uniform-density sphere crossing the line of sight."""
+    toas, fnorm = matrix.jnparray(psr.toas / const.day), matrix.jnparray(fref / psr.freqs)
+
+    def delay(t0, log10_Amp, log10_tau, sign_param, alpha, smooth):
+        tau = 10**log10_tau
+        x = (toas - t0) / tau
+        # Scale factor k controls the sharpness of the edge transition
+        chord = jnp.sqrt(jnp.logaddexp(0.0, smooth * (1.0 - x**2)) / smooth)
+        return jnp.sign(sign_param) * 10**log10_Amp * chord * fnorm**alpha
+
+    return delay
+
+
+def chromatic_step(psr, fref=1400.0):
+    """Chromatic delay from a flat-bottomed rise or drop with smooth edges."""
+    toas, fnorm = matrix.jnparray(psr.toas / const.day), matrix.jnparray(fref / psr.freqs)
+
+    def delay(t0, log10_Amp, log10_span, sign_param, alpha, smooth):
+        span = 10**log10_span
+        t_start = t0 - 0.5 * span
+        t_end = t0 + 0.5 * span
+
+        sigmoid_on = jnp.reciprocal(1.0 + jnp.exp(-(toas - t_start) * smooth / span))
+        sigmoid_off = jnp.reciprocal(1.0 + jnp.exp((toas - t_end) * smooth / span))
+
+        profile = sigmoid_on * sigmoid_off
+
+        return jnp.sign(sign_param) * 10**log10_Amp * profile * fnorm**alpha
+
+    return delay
+
+
 def orthometric_shapiro(psr, binphase):
     """Orthometric Shapiro delay model from Freire & Wex (2010)."""
     toas, binphase = matrix.jnparray(psr.toas / const.day), matrix.jnparray(binphase)
@@ -202,5 +235,157 @@ def orthometric_shapiro(psr, binphase):
 
     def delay(h3, stig):
         return -(2.0 * h3 / stig**3) * jnp.log(1 + stig**2 - 2 * stig * jnp.sin(binphase))
+
+    return delay
+
+def shapiro_cosi(psr, binphase):
+    """Orthometric Shapiro delay model from Freire & Wex (2010), 
+    modified for a uniform cos(i) prior."""
+    toas, binphase = matrix.jnparray(psr.toas / const.day), matrix.jnparray(binphase)
+    if not np.shape(binphase) == np.shape(toas):
+        raise ValueError("Input binphase must have the same shape as toas")
+
+    def delay(h3, cosi):
+        sin_i = jnp.sqrt(1.0 - cosi**2)
+        stig  = sin_i / (1.0 + cosi)
+        return -(2.0 * h3 / stig**3) * jnp.log(1 + stig**2 - 2 * stig * jnp.sin(binphase))
+
+    return delay
+
+
+def chromatic_polynomial(psr, dmepoch=59744.0, fref=1400.0):
+    """Deterministic linear + quadratic chromatic delay, referenced to DMEPOCH."""
+    t0_sec = float(dmepoch) * const.day
+    toas_yr = matrix.jnparray((psr.toas - t0_sec) / const.yr)
+    fnorm   = matrix.jnparray(fref / psr.freqs)
+
+    def delay(CM0, CM1, CM2, alpha):
+        return (CM0 + CM1 * toas_yr + CM2 * toas_yr**2) * fnorm**alpha
+    
+    return delay
+
+
+def chromatic_polynomial_svd(psr, dmepoch=None, fref=1400.0):
+    """SVD-orthogonalised deterministic chromatic polynomial delay.
+
+    Fits a (constant + linear + quadratic)-in-time chromatic delay
+    referenced to ``dmepoch``. The temporal design matrix [1, t, t**2]
+    is SVD-orthogonalised at setup so the three sampled coefficients
+    (c0, c1, c2) are dimensionless, decorrelated, and on a common scale.
+
+    A prior box ``[-A, A]`` on each c_k bounds that mode's RMS contribution
+    to the delay (in seconds) at ``fref``, since the columns of U are
+    orthonormal over the TOAs.
+
+    Conversion back to physical (CM0, CM1, CM2) coefficients is
+    available via the ``.svd`` attribute on the returned closure:
+        CM = (c / S) @ Vt           # shape (..., 3)
+    """
+    if dmepoch is None:
+        dmepoch = np.mean(psr.toas) / const.day
+
+    t0_sec  = float(dmepoch) * const.day
+    toas_yr = (psr.toas - t0_sec) / const.yr           # numpy, setup-time
+    fnorm   = fref / psr.freqs                          # numpy, setup-time
+
+    # Build temporal design matrix and SVD it once (numpy)
+    M = np.vstack([np.ones_like(toas_yr), toas_yr, toas_yr**2]).T   # (Ntoa, 3)
+    U, S, Vt = np.linalg.svd(M, full_matrices=False)                # U: (Ntoa, 3)
+
+    # Move basis to JAX-backed arrays
+    U0 = matrix.jnparray(U[:, 0])
+    U1 = matrix.jnparray(U[:, 1])
+    U2 = matrix.jnparray(U[:, 2])
+    fnorm_j = matrix.jnparray(fnorm)
+
+    def delay(c0, c1, c2, alpha):
+        temporal = c0 * U0 + c1 * U1 + c2 * U2
+        return temporal * fnorm_j**alpha
+
+    # Stash SVD pieces for post-hoc conversion to physical CM0/CM1/CM2
+    delay.svd = {'S': S, 'Vt': Vt}
+
+    return delay
+
+
+def orbital_DM_gaussian(psr, binphase):
+    """
+    An excess DM term centred near superior conjunction
+    (binphase = pi/2), with a phase offset phi0 and angular width sigma_phi.
+    """
+    toas, binphase = matrix.jnparray(psr.toas / const.day), matrix.jnparray(binphase)
+    if not np.shape(binphase) == np.shape(toas):
+        raise ValueError("Input binphase must have the same shape as toas")
+
+    freqs = matrix.jnparray(psr.freqs)
+    K_DM = 4.148808e3  # MHz^2 cm^3 pc^-1 s
+
+    def delay(dm_orb_amp, phi0, sigma_phi):
+        # Gaussian DM excess near superior conjunction
+        delta_phi = jnp.arctan2(jnp.cos(binphase - phi0), jnp.sin(binphase - phi0))
+        excess_dm = dm_orb_amp * jnp.exp(-0.5 * (delta_phi / sigma_phi) ** 2)
+
+        dm_delay = K_DM * excess_dm / freqs**2
+
+        return dm_delay
+
+    return delay
+
+
+def orbital_DM_fourier(psr, binphase, n_harmonics=16):
+    """
+    Excess DM as an arbitrary function of orbital phase, constructed
+    from a truncated Fourier series.
+    """
+    binphase = matrix.jnparray(binphase)
+    freqs = matrix.jnparray(psr.freqs)
+    K_DM = 4.148808e3  # MHz^2 cm^3 pc^-1 s
+
+    cos_harmonics = [matrix.jnparray(jnp.cos(k * binphase)) for k in range(1, n_harmonics + 1)]
+    sin_harmonics = [matrix.jnparray(jnp.sin(k * binphase)) for k in range(1, n_harmonics + 1)]
+
+    if n_harmonics == 4:
+        def delay(cos1, sin1, cos2, sin2, cos3, sin3, cos4, sin4):
+            series = (cos1 * cos_harmonics[0] + sin1 * sin_harmonics[0] +
+                        cos2 * cos_harmonics[1] + sin2 * sin_harmonics[1] +
+                        cos3 * cos_harmonics[2] + sin3 * sin_harmonics[2] +
+                        cos4 * cos_harmonics[3] + sin4 * sin_harmonics[3])
+            return K_DM * series / freqs**2
+    elif n_harmonics == 8:
+        def delay(cos1, sin1, cos2, sin2, cos3, sin3, cos4, sin4,
+                  cos5, sin5, cos6, sin6, cos7, sin7, cos8, sin8):
+            series = (cos1 * cos_harmonics[0] + sin1 * sin_harmonics[0] +
+                        cos2 * cos_harmonics[1] + sin2 * sin_harmonics[1] +
+                        cos3 * cos_harmonics[2] + sin3 * sin_harmonics[2] +
+                        cos4 * cos_harmonics[3] + sin4 * sin_harmonics[3] +
+                        cos5 * cos_harmonics[4] + sin5 * sin_harmonics[4] +
+                        cos6 * cos_harmonics[5] + sin6 * sin_harmonics[5] +
+                        cos7 * cos_harmonics[6] + sin7 * sin_harmonics[6] +
+                        cos8 * cos_harmonics[7] + sin8 * sin_harmonics[7])
+            return K_DM * series / freqs**2
+    elif n_harmonics == 16:
+        def delay(cos1, sin1, cos2, sin2, cos3, sin3, cos4, sin4,
+                  cos5, sin5, cos6, sin6, cos7, sin7, cos8, sin8,
+                  cos9, sin9, cos10, sin10, cos11, sin11, cos12, sin12,
+                  cos13, sin13, cos14, sin14, cos15, sin15, cos16, sin16):
+            series = (cos1 * cos_harmonics[0] + sin1 * sin_harmonics[0] +
+                      cos2 * cos_harmonics[1] + sin2 * sin_harmonics[1] +
+                      cos3 * cos_harmonics[2] + sin3 * sin_harmonics[2] +
+                      cos4 * cos_harmonics[3] + sin4 * sin_harmonics[3] +
+                      cos5 * cos_harmonics[4] + sin5 * sin_harmonics[4] +
+                      cos6 * cos_harmonics[5] + sin6 * sin_harmonics[5] +
+                      cos7 * cos_harmonics[6] + sin7 * sin_harmonics[6] +
+                      cos8 * cos_harmonics[7] + sin8 * sin_harmonics[7] +
+                      cos9 * cos_harmonics[8] + sin9 * sin_harmonics[8] +
+                      cos10 * cos_harmonics[9] + sin10 * sin_harmonics[9] +
+                      cos11 * cos_harmonics[10] + sin11 * sin_harmonics[10] +
+                      cos12 * cos_harmonics[11] + sin12 * sin_harmonics[11] +
+                      cos13 * cos_harmonics[12] + sin13 * sin_harmonics[12] +
+                      cos14 * cos_harmonics[13] + sin14 * sin_harmonics[13] +
+                      cos15 * cos_harmonics[14] + sin15 * sin_harmonics[14] +
+                      cos16 * cos_harmonics[15] + sin16 * sin_harmonics[15])
+            return K_DM * series / freqs**2     
+    else:
+        raise ValueError(f"n_harmonics={n_harmonics} not supported; use 4 or 8 or 16")
 
     return delay

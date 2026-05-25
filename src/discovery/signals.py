@@ -255,6 +255,103 @@ def makegp_ecorr(psr, noisedict={}, enterprise=False, scale=1.0, selection=selec
 
         return gp
 
+def makegp_quadratic_ecorr(psr, noisedict={}, enterprise=False, scale=1.0,
+                           selection=selection_backend_flags, variable=False,
+                           fref=None, name='quadecorrGP'):
+    """Rank-3 ECORR GP: each epoch carries three coefficients (constant, linear,
+    quadratic in normalized observing frequency), allowing the jitter-like noise
+    to decorrelate across frequency within an epoch. Three log10_ecorr parameters
+    are introduced per backend, one for each rank.
+
+    If ``fref`` is None (default), the reference frequency for the quadratic
+    basis is set per-backend to the mean of ``psr.freqs`` restricted to that
+    backend's TOAs. This keeps the {1, x, x^2} basis near-orthogonal regardless
+    of the absolute observing frequencies used.
+    """
+
+    freqs = np.asarray(psr.freqs)
+
+    backend_flags = selection(psr)
+    backends = [b for b in sorted(set(backend_flags)) if b != '']
+    masks = [np.array(backend_flags == backend) for backend in backends]
+
+    log10_ecorrs_per_rank = [[], [], []]
+    U_blocks_per_rank = [[], [], []]
+
+    for backend, mask in zip(backends, masks):
+        for r in range(3):
+            log10_ecorrs_per_rank[r].append(f'{psr.name}_{backend}_log10_ecorr_q{r}')
+
+        # per-backend reference frequency
+        fref_b = float(np.mean(freqs[mask])) if fref is None else float(fref)
+        x = freqs / fref_b - 1.0  # centered around fref_b
+
+        # quantize TOAs that belong to this backend
+        bins = quantize(psr.toas * mask)
+
+        if enterprise:
+            uniques, counts = np.unique(quantize(psr.toas * mask), return_counts=True)
+            U0 = np.vstack([bins == i for i, cnt in zip(uniques[1:], counts[1:]) if cnt > 1]).T
+        else:
+            U0 = np.vstack([bins == i for i in range(1, bins.max() + 1)]).T
+
+        U0 = U0.astype(np.float64)
+        U1 = U0 * x[:, None]
+        U2 = U0 * (x[:, None] ** 2)
+
+        U_blocks_per_rank[0].append(U0)
+        U_blocks_per_rank[1].append(U1)
+        U_blocks_per_rank[2].append(U2)
+
+    # full basis: [ rank0 columns | rank1 columns | rank2 columns ]
+    U_per_rank = [np.hstack(blocks) for blocks in U_blocks_per_rank]
+    Umatall = np.hstack(U_per_rank)
+
+    # build per-parameter masks selecting the corresponding columns of Umatall
+    pmasks, params = [], []
+    cnt = 0
+    for r in range(3):
+        for U_block, log10_ecorr in zip(U_blocks_per_rank[r], log10_ecorrs_per_rank[r]):
+            n = U_block.shape[1]
+            z = np.zeros(Umatall.shape[1], dtype=np.float64)
+            z[cnt:cnt + n] = 1.0
+            pmasks.append(z)
+            params.append(log10_ecorr)
+            cnt += n
+
+    logscale = np.log10(scale)
+
+    if all(par in noisedict for par in params):
+        phi = sum(10.0**(2 * (logscale + noisedict[log10_ecorr])) * pmask
+                  for (log10_ecorr, pmask) in zip(params, pmasks))
+
+        if variable:
+            def getphi(p):
+                return phi
+            getphi.params = []
+
+            gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), Umatall)
+            gp.index = {f'{psr.name}_{name}_coefficients({Umatall.shape[1]})': slice(0, Umatall.shape[1])}
+            gp.name, gp.pos = psr.name, psr.pos
+            gp.gpname, gp.gpcommon = name, []
+
+            return gp
+        else:
+            return matrix.ConstantGP(matrix.NoiseMatrix1D_novar(phi), Umatall)
+    else:
+        pmasks = [matrix.jnparray(pmask) for pmask in pmasks]
+        def getphi(p):
+            return sum(10.0**(2 * (logscale + p[log10_ecorr])) * pmask
+                       for (log10_ecorr, pmask) in zip(params, pmasks))
+        getphi.params = params
+
+        gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), Umatall)
+        gp.index = {f'{psr.name}_{name}_coefficients({Umatall.shape[1]})': slice(0, Umatall.shape[1])}
+        gp.name, gp.pos = psr.name, psr.pos
+        gp.gpname, gp.gpcommon = name, []
+
+        return gp
+
 # timing model
 def makegp_improper(psr, fmat, constant=1.0e40, name='improperGP', variable=False):
     if variable:
@@ -314,6 +411,42 @@ def makegp_timing(psr, constant=1.0e40, variance=None, svd=False, scale=1.0, var
 
     return [tm_delay, gp_marg]
 
+# Analytically-marginalised SVD chromatic polynomial GP.
+def makegp_chrom_poly_svd(psr, fref=1400.0, sigma_c=1e-5, name='chrom_gp'):
+    t0_sec  = float(np.mean(psr.toas))
+    toas_yr = (psr.toas - t0_sec) / const.yr
+    M = np.vstack([np.ones_like(toas_yr), toas_yr, toas_yr**2]).T
+    U, S, Vt = np.linalg.svd(M, full_matrices=False)
+
+    U_j     = matrix.jnparray(U)
+    fnorm_j = matrix.jnparray(fref / psr.freqs)
+
+    # Pre-compute orthonormal basis for the timing-model column space.
+    # Anything in this subspace is already marginalised by makegp_timing.
+    M = np.asarray(psr.Mmat)
+    M_norm = M / np.sqrt(np.sum(M**2, axis=0))   # unit-norm columns
+    Q_tm, _ = np.linalg.qr(M_norm)
+    Q_tm_j  = matrix.jnparray(Q_tm)
+
+    alpha_param = f'{psr.name}_{name}_alpha'
+
+    def fmatfunc(params):
+        alpha = params[alpha_param]
+        F = U_j * fnorm_j[:, None]**alpha           # chromatic polynomial basis
+        F = F - Q_tm_j @ (Q_tm_j.T @ F)             # remove timing-model subspace
+        col_norms = jnp.sqrt(jnp.sum(F * F, axis=0))
+        return F / col_norms[None, :]
+    fmatfunc.params = [alpha_param]
+
+    Phi_const = matrix.jnparray((sigma_c**2) * np.ones(3))
+    def getphi(params): return Phi_const
+    getphi.params = []
+
+    gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), fmatfunc)
+    gp.index = {f'{psr.name}_{name}_coefficients(3)': slice(0, 3)}
+    gp.name, gp.pos, gp.gpname, gp.gpcommon = psr.name, psr.pos, name, []
+    gp.svd = {'U': U, 'S': S, 'Vt': Vt}
+    return gp
 
 # Fourier GP
 
@@ -365,8 +498,8 @@ def fourierbasis_band(psr, components, T=None):
 
     fmat = matrix.jnparray(fmat)
     def fmatfunc(fcutoff):
-        scale = 5.0
-        band_filter = jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fcutoff) / scale))  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
+        scale = 5.0  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
+        band_filter = jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fcutoff) / scale))
         return fmat * band_filter[:, None]
 
     return f, df, fmatfunc
@@ -376,8 +509,8 @@ def fourierbasis_band_range(psr, components, T=None):
 
     fmat = matrix.jnparray(fmat)
     def fmatfunc(flow, fhigh):
-        scale = 5.0
-        band_filter = jnp.reciprocal(1.0 + jnp.exp((flow - psr.freqs) / scale)) * jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fhigh) / scale))  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
+        scale = 5.0  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
+        band_filter = jnp.reciprocal(1.0 + jnp.exp((flow - psr.freqs) / scale)) * jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fhigh) / scale))
         return fmat * band_filter[:, None]
 
     return f, df, fmatfunc
@@ -387,8 +520,8 @@ def fourierbasis_band_alpha(psr, components, T=None, fref=1400.0):
 
     fmat, fnorm = matrix.jnparray(fmat), matrix.jnparray(fref / psr.freqs)
     def fmatfunc(fcutoff, alpha):
-        scale = 5.0
-        band_filter = jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fcutoff) / scale))  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
+        scale = 5.0  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
+        band_filter = jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fcutoff) / scale))
         return fmat * fnorm[:, None]**alpha * band_filter[:, None]
 
     return f, df, fmatfunc
@@ -398,8 +531,8 @@ def fourierbasis_band_range_alpha(psr, components, T=None, fref=1400.0):
 
     fmat, fnorm = matrix.jnparray(fmat), matrix.jnparray(fref / psr.freqs)
     def fmatfunc(flow, fhigh, alpha):
-        scale = 5.0
-        band_filter = jnp.reciprocal(1.0 + jnp.exp((flow - psr.freqs) / scale)) * jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fhigh) / scale))  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
+        scale = 5.0  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
+        band_filter = jnp.reciprocal(1.0 + jnp.exp((flow - psr.freqs) / scale)) * jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fhigh) / scale))
         return fmat * fnorm[:, None]**alpha * band_filter[:, None]
 
     return f, df, fmatfunc
@@ -981,8 +1114,22 @@ def makeglobalgp_intcov(psr, prior, orf, components, T, timeinterpbasis=timeinte
 def powerlaw(f, df, log10_A, gamma):
     return (10.0**(2.0 * log10_A)) / 12.0 / jnp.pi**2 * const.fyr ** (gamma - 3.0) * f ** (-gamma) * df
 
-def powerlaw_gwb(f, df, log10_A): # Fixed gamma = 13/3 for GWB from SMBHBs
-    return (10.0**(2.0 * log10_A)) / 12.0 / jnp.pi**2 * const.fyr ** (4.33 - 3.0) * f ** (-4.33) * df
+def powerlaw_gwb(log10_A=None):
+    """Return a powerlaw spectral model with gamma fixed to 13/3.
+
+    If ``log10_A`` is None, the returned model takes ``log10_A`` as a sampled
+    parameter. Otherwise ``log10_A`` is used in as a fixed constant.
+    """
+    gamma = 13.0 / 3.0   # 4.33 isotropic GWB
+
+    if log10_A is None:
+        def powerlaw_model(f, df, log10_A):
+            return 10.0 ** (2.0 * log10_A) / 12.0 / jnp.pi**2* const.fyr ** (gamma - 3.0) * f ** (-gamma) * df
+    else:
+        def powerlaw_model(f, df):
+            return 10.0 ** (2.0 * float(log10_A)) / 12.0 / jnp.pi**2 * const.fyr ** (gamma - 3.0) * f ** (-gamma) * df
+
+    return powerlaw_model
 
 def brokenpowerlaw(f, df, log10_A, gamma, log10_fb):
     kappa = 0.1 # smoothness of transition
@@ -1092,3 +1239,60 @@ def makedelay(psr, delay, components=None, common=[], name='delay'):
 # use with makedelay to set residuals dynamically from arrays
 def getresiduals(y):
     return -y
+
+def make_phaseinterpbasis_orbital_dm(fref=1400.0, order=1):
+    """Phase-interpolation basis for orbital DM GP.
+
+    Coarse grid is evenly spaced in orbital phase [0, 2*pi).
+    Periodic boundary handling by padding knots on each side.
+    """
+
+    def phaseinterpbasis_orbital_dm(psr, components, T=None):
+        binphase = (2 * np.pi / psr.pb) * (psr.toas - psr.tasc)
+        binphase = binphase % (2 * np.pi)
+
+        # Coarse grid: components knots over [0, 2*pi), excluding endpoint
+        phi_coarse = np.linspace(0, 2 * np.pi, components, endpoint=False)
+        dphi_coarse = phi_coarse[1] - phi_coarse[0]
+
+        # Periodic padding: copy a few knots on each side for interpolation
+        n_pad = max(2, order + 1)
+        phi_padded = np.concatenate([
+            phi_coarse[-n_pad:] - 2 * np.pi,
+            phi_coarse,
+            phi_coarse[:n_pad] + 2 * np.pi
+        ])
+
+        identity = np.eye(components)
+        identity_padded = np.vstack([
+            identity[-n_pad:, :],
+            identity,
+            identity[:n_pad, :]
+        ])
+
+        Bmat = si.interp1d(phi_padded, identity_padded, kind=order, axis=0)(binphase)
+
+        # Dispersive frequency scaling
+        scale = (fref / psr.freqs) ** 2
+
+        return phi_coarse, dphi_coarse, scale[:, None] * Bmat
+
+    return phaseinterpbasis_orbital_dm
+
+
+def makegp_fftcov_orbital_dm(psr, prior, components, order=1,
+                              oversample=3, fmax_factor=1, cutoff=1,
+                              common=[], name='fftcovGP_orbital_dm', fref=1400.0):
+    """Orbital-phase GP with FFT covariance for DM variations."""
+    # Use T=1 so that frequencies from psd2cov are simply k = 1, 2, 3, ...
+    # (harmonic numbers). The powerlaw then evaluates as A^2 * k^(-gamma),
+    # which is a natural spectral model for orbital harmonics.
+    T_phase = 1.0
+    if components % 2 == 0:
+        components += 1
+
+    return makegp_fourier(psr,
+                          psd2cov(prior, components, T_phase, oversample, fmax_factor, cutoff),
+                          components, T=T_phase,
+                          fourierbasis=make_phaseinterpbasis_orbital_dm(fref=fref, order=order),
+                          common=common, name=name)

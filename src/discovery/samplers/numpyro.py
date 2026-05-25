@@ -59,6 +59,8 @@ def makesampler_nuts(numpyro_model, num_warmup=512, num_samples=1024, num_chains
 
     def _make_plots(save_name=None, diagnostics=False):
         import matplotlib.pyplot as plt
+        import matplotlib
+        matplotlib.use('Agg')
         import corner
         import re
 
