@@ -158,7 +158,7 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
             ([signals.makegp_fftcov_orbital_dm(psr, signals.powerlaw, components=psr_knots, name='orbital_dm_gp')] if orbital_dm_gp else []))
 
 
-def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, noisedict={}, tm_variable=False, timing_inds=None, ecorr=True, quadratic=True, global_ecorr=False,
+def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, noisedict={}, tm_variable=False, timing_inds=None, ecorr=True, quadratic=False, global_ecorr=False,
                         background=True, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, band=False, band_low=False, band_alpha=False, orbital_dm_gp=False, # GP models
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False,
                         shapiro=False, orbital_dm=False, orbital_dm_fourier=False, extra_gps=None): # Deterministic chromatic models): 
