@@ -158,14 +158,17 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
             ([signals.makegp_fftcov_orbital_dm(psr, signals.powerlaw, components=psr_knots, name='orbital_dm_gp')] if orbital_dm_gp else []))
 
 
-def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, noisedict={}, tm_variable=False, timing_inds=None, ecorr=True, quadratic=False, global_ecorr=False,
-                        background=True, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, band=False, band_low=False, band_alpha=False, orbital_dm_gp=False, # GP models
-                        chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False,
-                        shapiro=False, orbital_dm=False, orbital_dm_fourier=False, extra_gps=None): # Deterministic chromatic models): 
-    # Set up per-backend white noise
+def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={}, 
+                        ecorr=True, quadratic=False, global_ecorr=False, # ecorr options
+                        background=True, bkgrnd_log10_A=None, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, # Base model: gwb, red, dm, chromatic, solar wind
+                        band=False, band_low=False, band_alpha=False, # Additional GP models
+                        chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False, # Deterministic chromatic models
+                        shapiro=False, orbital_dm=False, orbital_dm_fourier=False, extra_gps=None, # Shapiro delay and orbital DM, and extra GPs
+                        return_components=False): # Whether to return the list of model components in addition to the likelihood object (useful for adding additional components)
+    # Set up per-backend white noise (efac and tnequad)
     measurement_noise = signals.makenoise_measurement(psr, tnequad=True, noisedict=noisedict)
     # Set up timing model
-    tm = signals.makegp_timing(psr, svd=True, variable=tm_variable, timing_inds=timing_inds)
+    tm = signals.makegp_timing(psr, svd=True)
     if not isinstance(tm, list): # ensure the timing model is unpacked if returning a list
         tm = [tm]
     # Set up model components
@@ -190,10 +193,12 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, bkgrnd_log10_A=No
         model_components += [signals.makedelay(psr, deterministic.chromatic_sphere(psr), name='chrom_sphere')]
     if chrom_step:
         model_components += [signals.makedelay(psr, deterministic.chromatic_step(psr), name='chrom_step')]
+    
     # Models that require orbital phase information    
     if shapiro or orbital_dm or orbital_dm_fourier:
         if psr.tasc is None or psr.pb is None:
             raise ValueError("Error: You must set psr.tasc and psr.pb to use the deterministic Shapiro delay function")
+        print("Warning: Binary phase calculation assumes constant orbital period and CIRCULAR ORBIT. Ensure this is a valid approximation for your pulsar and model choice.")
         binphase = (2 * np.pi / psr.pb) * (psr.toas - psr.tasc)
         if shapiro:
             model_components += [signals.makedelay(psr, deterministic.shapiro_cosi(psr, binphase), name='shapiro')]
@@ -220,6 +225,9 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, bkgrnd_log10_A=No
     m.all_params.extend(comp_params)
     m.logL.params = sorted(set(m.all_params))
 
+    if return_components:
+        return m, model_components
+    
     return m
 
 def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn"):
@@ -244,7 +252,6 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
         else:
             curn = signals.makegp_fftcov(psr, signals.powerlaw, common_knots, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
         extra_gps = curn if isinstance(curn, list) else [curn]
-
 
         # background = False, as we are including a common red noise process
         m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
