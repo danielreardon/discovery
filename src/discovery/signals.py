@@ -351,6 +351,133 @@ def makegp_quadratic_ecorr(psr, noisedict={}, enterprise=False, scale=1.0,
         gp.gpname, gp.gpcommon = name, []
 
         return gp
+    
+def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
+                                    selection=selection_backend_flags, variable=False,
+                                    fref=None, name='quadecorrGPleg'):
+    """Rank-3 ECORR GP using a Legendre-polynomial frequency basis.
+
+    For each backend, the per-TOA frequency coordinate ``x = freqs / fref - 1``
+    is linearly rescaled into ``y in [-1, 1]`` across that backend's bandwidth,
+    and the three lowest Legendre polynomials
+
+        P_0(y) = 1
+        P_1(y) = y
+        P_2(y) = (3 y^2 - 1) / 2
+
+    are used as the within-epoch frequency basis. On the interval [-1, 1] these
+    polynomials are *orthogonal* (with weight 1), so the three log10_ecorr
+    amplitudes per backend correspond to nearly-independent frequency modes
+    of the rank-3 jitter covariance and the resulting posteriors are well
+    conditioned. P_0 is the band-mean amplitude (the standard ECORR), P_1
+    captures linear chromatic decorrelation, and P_2 captures quadratic
+    curvature across the band.
+
+    If ``fref`` is None (default), the reference frequency is set per-backend
+    to the mean of ``psr.freqs`` for that backend's TOAs (this only affects the
+    mapping into [-1, 1] and keeps the basis well-conditioned for any band).
+    """
+
+    freqs = np.asarray(psr.freqs)
+
+    backend_flags = selection(psr)
+    backends = [b for b in sorted(set(backend_flags)) if b != '']
+    masks = [np.array(backend_flags == backend) for backend in backends]
+
+    log10_ecorrs_per_rank = [[], [], []]
+    U_blocks_per_rank = [[], [], []]
+
+    for backend, mask in zip(backends, masks):
+        for r in range(3):
+            log10_ecorrs_per_rank[r].append(f'{psr.name}_{backend}_log10_ecorr_q{r}')
+
+        # per-backend reference frequency (controls the centring of x)
+        fref_b = float(np.mean(freqs[mask])) if fref is None else float(fref)
+        x = freqs / fref_b - 1.0  # centred around fref_b
+
+        # rescale x linearly to y in [-1, 1] across this backend's TOAs so that
+        # the Legendre polynomials are evaluated on their natural support.
+        x_backend = x[mask]
+        x_min, x_max = float(x_backend.min()), float(x_backend.max())
+        half_range = 0.5 * (x_max - x_min)
+        if half_range == 0.0:
+            # degenerate: only one observing frequency in this backend.
+            # Fall back to the centred coordinate; P_1 and P_2 will be ~0,
+            # and only the P_0 (constant) amplitude will be meaningful.
+            y = np.zeros_like(freqs)
+        else:
+            y = (x - 0.5 * (x_max + x_min)) / half_range  # in [-1, 1] for this backend
+
+        # Legendre polynomials P_0, P_1, P_2 on y
+        P0 = np.ones_like(y)
+        P1 = y
+        P2 = 0.5 * (3.0 * y**2 - 1.0)
+
+        legendre_modes = [P0, P1, P2]
+
+        # quantize TOAs that belong to this backend
+        bins = quantize(psr.toas * mask)
+
+        if enterprise:
+            uniques, counts = np.unique(quantize(psr.toas * mask), return_counts=True)
+            U0 = np.vstack([bins == i for i, cnt in zip(uniques[1:], counts[1:]) if cnt > 1]).T
+        else:
+            U0 = np.vstack([bins == i for i in range(1, bins.max() + 1)]).T
+
+        U0 = U0.astype(np.float64)
+        # multiplying the indicator columns by each Legendre mode gives
+        # the per-rank basis blocks
+        for r in range(3):
+            U_blocks_per_rank[r].append(U0 * legendre_modes[r][:, None])
+
+    # full basis: [ rank0 columns | rank1 columns | rank2 columns ]
+    U_per_rank = [np.hstack(blocks) for blocks in U_blocks_per_rank]
+    Umatall = np.hstack(U_per_rank)
+
+    # build per-parameter masks selecting the corresponding columns of Umatall
+    pmasks, params = [], []
+    cnt = 0
+    for r in range(3):
+        for U_block, log10_ecorr in zip(U_blocks_per_rank[r], log10_ecorrs_per_rank[r]):
+            n = U_block.shape[1]
+            z = np.zeros(Umatall.shape[1], dtype=np.float64)
+            z[cnt:cnt + n] = 1.0
+            pmasks.append(z)
+            params.append(log10_ecorr)
+            cnt += n
+
+    logscale = np.log10(scale)
+
+    if all(par in noisedict for par in params):
+        phi = sum(10.0**(2 * (logscale + noisedict[log10_ecorr])) * pmask
+                  for (log10_ecorr, pmask) in zip(params, pmasks))
+
+        if variable:
+            def getphi(p):
+                return phi
+            getphi.params = []
+
+            gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), Umatall)
+            gp.index = {f'{psr.name}_{name}_coefficients({Umatall.shape[1]})': slice(0, Umatall.shape[1])}
+            gp.name, gp.pos = psr.name, psr.pos
+            gp.gpname, gp.gpcommon = name, []
+
+            return gp
+        else:
+            return matrix.ConstantGP(matrix.NoiseMatrix1D_novar(phi), Umatall)
+    else:
+        pmasks = [matrix.jnparray(pmask) for pmask in pmasks]
+        def getphi(p):
+            return sum(10.0**(2 * (logscale + p[log10_ecorr])) * pmask
+                       for (log10_ecorr, pmask) in zip(params, pmasks))
+        getphi.params = params
+
+        gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), Umatall)
+        gp.index = {f'{psr.name}_{name}_coefficients({Umatall.shape[1]})': slice(0, Umatall.shape[1])}
+        gp.name, gp.pos = psr.name, psr.pos
+        gp.gpname, gp.gpcommon = name, []
+
+        return gp
 
 # timing model
 def makegp_improper(psr, fmat, constant=1.0e40, name='improperGP', variable=False):
@@ -412,7 +539,7 @@ def makegp_timing(psr, constant=1.0e40, variance=None, svd=False, scale=1.0, var
     return [tm_delay, gp_marg]
 
 # Analytically-marginalised SVD chromatic polynomial GP.
-def makegp_chrom_poly_svd(psr, fref=1400.0, sigma_c=1e-5, name='chrom_gp'):
+def makegp_chrom_poly_svd(psr, fref=1400.0, sigma_c=1e40, name='chrom_gp'):
     t0_sec  = float(np.mean(psr.toas))
     toas_yr = (psr.toas - t0_sec) / const.yr
     M = np.vstack([np.ones_like(toas_yr), toas_yr, toas_yr**2]).T
