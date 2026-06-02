@@ -539,40 +539,54 @@ def makegp_timing(psr, constant=1.0e40, variance=None, svd=False, scale=1.0, var
     return [tm_delay, gp_marg]
 
 # Analytically-marginalised SVD chromatic polynomial GP.
-def makegp_chrom_poly_svd(psr, fref=1400.0, sigma_c=1e40, name='chrom_gp'):
+def makegp_chrom_poly_svd(psr, fref=1400.0, sigma_c=1e-4, name='chrom_gp'):
+    """SVD-orthogonalised chromatic polynomial GP, marginalised analytically.
+
+    Basis: ``U * (fref/freq)**alpha``, where ``U`` is the SVD-orthonormalised
+    [1, t, t**2] temporal design matrix. The timing-model column subspace is
+    projected out of the basis at runtime to remove the degeneracy with the
+    standard timing model GP. We assume a Gaussian prior (``sigma_c = 1e-4``) 
+    on the coefficients.
+
+    Shares ``alpha`` with a companion chromatic Fourier (or FFTint) GP via
+    the parameter name ``{psr}_{name}_alpha``.
+    """
     t0_sec  = float(np.mean(psr.toas))
     toas_yr = (psr.toas - t0_sec) / const.yr
-    M = np.vstack([np.ones_like(toas_yr), toas_yr, toas_yr**2]).T
-    U, S, Vt = np.linalg.svd(M, full_matrices=False)
+
+    # SVD-orthonormalised polynomial temporal basis
+    M_poly = np.vstack([np.ones_like(toas_yr), toas_yr, toas_yr**2]).T
+    U, S, Vt = np.linalg.svd(M_poly, full_matrices=False)
+
+    # Orthonormal basis spanning the timing-model column space.
+    # Anything in this subspace is already marginalised by makegp_timing,
+    # so we project it out of the chromatic polynomial basis.
+    Mmat = np.asarray(psr.Mmat, dtype=np.float64)
+    M_norm = Mmat / np.sqrt(np.sum(Mmat**2, axis=0))
+    Q_tm, _ = np.linalg.qr(M_norm)
 
     U_j     = matrix.jnparray(U)
-    fnorm_j = matrix.jnparray(fref / psr.freqs)
-
-    # Pre-compute orthonormal basis for the timing-model column space.
-    # Anything in this subspace is already marginalised by makegp_timing.
-    M = np.asarray(psr.Mmat)
-    M_norm = M / np.sqrt(np.sum(M**2, axis=0))   # unit-norm columns
-    Q_tm, _ = np.linalg.qr(M_norm)
     Q_tm_j  = matrix.jnparray(Q_tm)
+    fnorm_j = matrix.jnparray(fref / np.asarray(psr.freqs))
 
     alpha_param = f'{psr.name}_{name}_alpha'
 
     def fmatfunc(params):
         alpha = params[alpha_param]
-        F = U_j * fnorm_j[:, None]**alpha           # chromatic polynomial basis
-        F = F - Q_tm_j @ (Q_tm_j.T @ F)             # remove timing-model subspace
-        col_norms = jnp.sqrt(jnp.sum(F * F, axis=0))
-        return F / col_norms[None, :]
+        F = U_j * fnorm_j[:, None] ** alpha
+        F = F - Q_tm_j @ (Q_tm_j.T @ F)  # project out the timing-model subspace
+        return F                                 
     fmatfunc.params = [alpha_param]
 
-    Phi_const = matrix.jnparray((sigma_c**2) * np.ones(3))
-    def getphi(params): return Phi_const
+    Phi_const = matrix.jnparray((sigma_c ** 2) * np.ones(3))
+    def getphi(params):
+        return Phi_const
     getphi.params = []
 
     gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), fmatfunc)
     gp.index = {f'{psr.name}_{name}_coefficients(3)': slice(0, 3)}
     gp.name, gp.pos, gp.gpname, gp.gpcommon = psr.name, psr.pos, name, []
-    gp.svd = {'U': U, 'S': S, 'Vt': Vt}
+    gp.svd = {'S': S, 'Vt': Vt}
     return gp
 
 # Fourier GP

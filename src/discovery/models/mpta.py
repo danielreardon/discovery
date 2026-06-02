@@ -37,7 +37,7 @@ def update_priordict_standard_mpta():
         '(.*_)?dm_gp_gamma':        [0, 7],
         '(.*_)?chrom_gp_log10_A':   [-18, -11],
         '(.*_)?chrom_gp_gamma':     [0, 7],
-        '(.*_)?chrom_gp_alpha':     [2.5, 14],
+        '(.*_)?chrom_gp_alpha':     [3.0, 14], # start at 3 to avoid confusion with DM
         '(.*_)?sw_gp_log10_A':      [-10, -2],
         '(.*_)?sw_gp_gamma':        [0, 4],
         '(.*_)?band_gp_log10_A':    [-18, -11],
@@ -133,7 +133,8 @@ def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=No
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, name='red_noise2')] if red2 else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_dm, name='dm_gp')] if dm else [])+ \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_chrom, name='chrom_gp')] if chrom else [])+ \
-            ([signals.makegp_chrom_poly_svd(psr, name="chrom_gp")] if (chrom and chrom_poly) else []) + \
+            # ([deterministic.chromatic_polynomial(psr, name="chrom_gp")] if (chrom and chrom_poly) else []) + \ # Sample deterministic chromatic polynomial model instead of marginalising over chromatic polynomial GP
+            ([signals.makegp_chrom_poly_svd(psr, name='chrom_gp')] if (chrom and chrom_poly) else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=solar.fourierbasis_solar_dm, name='sw_gp')] if sw else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_band_range, name='band_gp')] if band else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_band, name='band_low_gp')] if band_low else []) + \
@@ -150,12 +151,12 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
             ([signals.makegp_fftcov(psr, signals.powerlaw, components=psr_knots, name='red_noise2')] if red2 else []) + \
             ([signals.makegp_fftcov_dm(psr, signals.powerlaw, components=psr_knots, name='dm_gp')] if dm else [])+ \
             ([signals.makegp_fftcov_chrom(psr, signals.powerlaw, components=psr_knots, name='chrom_gp')] if chrom else [])+ \
-            ([signals.makegp_chrom_poly_svd(psr, name="chrom_gp")] if (chrom and chrom_poly) else []) + \
+            #([deterministic.chromatic_polynomial(psr, name="chrom_gp")] if (chrom and chrom_poly) else []) + \ # Sample deterministic chromatic polynomial model instead of marginalising over chromatic polynomial GP
+            ([signals.makegp_chrom_poly_svd(psr, name='chrom_gp')] if (chrom and chrom_poly) else []) + \
             ([signals.makegp_fftcov_solar(psr, signals.powerlaw, components=psr_knots, name='sw_gp')] if sw else []) + \
             ([signals.makegp_fftcov_band_range(psr, signals.powerlaw, components=psr_knots, name='band_gp')] if band else []) + \
             ([signals.makegp_fftcov_band(psr, signals.powerlaw, components=psr_knots, name='band_low_gp')] if band_low else []) + \
             ([signals.makegp_fftcov_band_range_alpha(psr, signals.powerlaw, components=psr_knots, name='bandalpha_gp')] if band_alpha else []))
-
 
 
 def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={}, 

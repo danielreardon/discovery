@@ -252,59 +252,54 @@ def shapiro_cosi(psr, binphase):
 
     return delay
 
+def chromatic_polynomial(psr, fref=1400.0, name='chrom_gp'):
+    """SVD-orthogonalised chromatic polynomial as a sampled deterministic delay.
 
-def chromatic_polynomial(psr, dmepoch=59744.0, fref=1400.0):
-    """Deterministic linear + quadratic chromatic delay, referenced to DMEPOCH."""
-    t0_sec = float(dmepoch) * const.day
-    toas_yr = matrix.jnparray((psr.toas - t0_sec) / const.yr)
-    fnorm   = matrix.jnparray(fref / psr.freqs)
+    Models a (constant + linear + quadratic)-in-time chromatic delay
+    referenced to the mean TOA, scaled by ``(fref / freq)**alpha``.
+    The three SVD-orthonormalised coefficients (c0, c1, c2) are sampled
+    directly with uniform priors set in the priordict.
 
-    def delay(CM0, CM1, CM2, alpha):
-        return (CM0 + CM1 * toas_yr + CM2 * toas_yr**2) * fnorm**alpha
-    
-    return delay
+    The chromatic index ``alpha`` is shared with the companion Fourier (or
+    FFTint) chromatic GP via the parameter name ``{psr}_{name}_alpha``, so
+    one consistent chromatic index governs both the short-period Fourier
+    modes and the long-period polynomial drift.
 
+    Because the polynomial columns are SVD-orthonormalised over the TOAs,
+    a uniform prior ``[-A, A]`` on each c_k bounds that mode's rms
+    contribution to the delay (in seconds at ``fref``) to A.
 
-def chromatic_polynomial_svd(psr, dmepoch=None, fref=1400.0):
-    """SVD-orthogonalised deterministic chromatic polynomial delay.
-
-    Fits a (constant + linear + quadratic)-in-time chromatic delay
-    referenced to ``dmepoch``. The temporal design matrix [1, t, t**2]
-    is SVD-orthogonalised at setup so the three sampled coefficients
-    (c0, c1, c2) are dimensionless, decorrelated, and on a common scale.
-
-    A prior box ``[-A, A]`` on each c_k bounds that mode's RMS contribution
-    to the delay (in seconds) at ``fref``, since the columns of U are
-    orthonormal over the TOAs.
-
-    Conversion back to physical (CM0, CM1, CM2) coefficients is
-    available via the ``.svd`` attribute on the returned closure:
-        CM = (c / S) @ Vt           # shape (..., 3)
+    Sampled parameters
+    ------------------
+    {psr}_{name}_c0, {psr}_{name}_c1, {psr}_{name}_c2  : polynomial amplitudes
+    {psr}_{name}_alpha                                  : chromatic index
+                                                          (shared with chrom GP)
     """
-    if dmepoch is None:
-        dmepoch = np.mean(psr.toas) / const.day
+    t0_sec  = float(np.mean(psr.toas))
+    toas_yr = (psr.toas - t0_sec) / const.yr
+    M = np.vstack([np.ones_like(toas_yr), toas_yr, toas_yr**2]).T
+    U, S, Vt = np.linalg.svd(M, full_matrices=False)
 
-    t0_sec  = float(dmepoch) * const.day
-    toas_yr = (psr.toas - t0_sec) / const.yr           # numpy, setup-time
-    fnorm   = fref / psr.freqs                          # numpy, setup-time
-
-    # Build temporal design matrix and SVD it once (numpy)
-    M = np.vstack([np.ones_like(toas_yr), toas_yr, toas_yr**2]).T   # (Ntoa, 3)
-    U, S, Vt = np.linalg.svd(M, full_matrices=False)                # U: (Ntoa, 3)
-
-    # Move basis to JAX-backed arrays
     U0 = matrix.jnparray(U[:, 0])
     U1 = matrix.jnparray(U[:, 1])
     U2 = matrix.jnparray(U[:, 2])
-    fnorm_j = matrix.jnparray(fnorm)
+    fnorm_j = matrix.jnparray(fref / np.asarray(psr.freqs))
 
-    def delay(c0, c1, c2, alpha):
+    c0_p    = f'{psr.name}_{name}_c0'
+    c1_p    = f'{psr.name}_{name}_c1'
+    c2_p    = f'{psr.name}_{name}_c2'
+    alpha_p = f'{psr.name}_{name}_alpha'
+
+    def delay(params):
+        c0 = params[c0_p]
+        c1 = params[c1_p]
+        c2 = params[c2_p]
+        alpha = params[alpha_p]
         temporal = c0 * U0 + c1 * U1 + c2 * U2
-        return temporal * fnorm_j**alpha
+        return temporal * fnorm_j ** alpha
 
-    # Stash SVD pieces for post-hoc conversion to physical CM0/CM1/CM2
+    delay.params = [c0_p, c1_p, c2_p, alpha_p]
     delay.svd = {'S': S, 'Vt': Vt}
-
     return delay
 
 
