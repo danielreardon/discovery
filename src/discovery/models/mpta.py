@@ -40,12 +40,14 @@ def update_priordict_standard_mpta():
         '(.*_)?chrom_gp_alpha':     [3.0, 14], # start at 3 to avoid confusion with DM
         '(.*_)?sw_gp_log10_A':      [-10, -2],
         '(.*_)?sw_gp_gamma':        [0, 4],
-        # SE kernel
-        '(.*_)?sw_gp_log10_sigma':  [-10, -4],   # seconds (log10)
-        '(.*_)?sw_gp_log10_ell':    [  1,  4],   # days   (log10)
-        # QP kernel (only needed if you switch to quasi_periodic)
-        '(.*_)?sw_gp_log10_Gamma':  [ -3,  2],
-        '(.*_)?sw_gp_log10_p':      [ -2,  1],   # years  (log10)
+        # SE kernel for time-domain SW GP
+        # sigma : rms electron density variability (cm^-3)
+        # ell   : correlation timescale (days)
+        '(.*_)?sw_gp_log10_sigma':  [ -2,  1.3],   # 0.01 - 20 cm^-3
+        '(.*_)?sw_gp_log10_ell':    [  1,  4],   # 10 days - ~30 yr
+        # QP kernel adds:
+        '(.*_)?sw_gp_log10_Gamma':  [ -3,  2],   # dimensionless
+        '(.*_)?sw_gp_log10_p':      [ -2,  1.3],   # years (0.01 - 20 yr)
         '(.*_)?band_gp_log10_A':    [-18, -11],
         '(.*_)?band_gp_gamma':      [0, 7],
         '(.*_)?band_low_gp_gamma':      [0, 7],
@@ -90,9 +92,9 @@ def update_priordict_standard_mpta():
         r'(.*_)?chrom_step_smooth': [10, 200], 
         r'(.*_)?timingmodel_coefficients\(\d+\)': [-20.0, 20.0],
         r'(.*_)?alpha_scaling\(\d+\)': [0.0, 100.0],
-        r'(.*_)?h3': [0.0, 10**-5],
-        r'(.*_)?stig': [0.0, 1.0],
-        r'(.*_)?cosi': [0.0, 1.0],
+        r'(.*_)?h3': [1e-10, 1e-5],
+        r'(.*_)?stig': [1e-6, 1.0 - 1e-6], # clip to avoid singularities
+        r'(.*_)?cosi': [1e-6, 1.0 - 1e-6], # clip to avoid singularities
         r'(.*_)?orbital_dm_amp': [0.0, 1e-3],        # pc cm^-3
         r'(.*_)?orbital_dm_phi0': [-1.0, 1.0],           # radians
         r'(.*_)?orbital_dm_sigma_phi': [0.0, 0.5],      # radians
@@ -107,6 +109,7 @@ def update_priordict_standard_mpta():
         r"(.*_)?chrom_gp_c1": [-1e-4, 1e-4],
         r"(.*_)?chrom_gp_c2": [-1e-4, 1e-4],
     })
+
     return
 
 update_priordict_standard_mpta() # Ensure priordict_standard is updated on import, but also update when a model is created to catch any changes during likelihood/prior initialisation
@@ -139,7 +142,7 @@ def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=No
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, name='red_noise2')] if red2 else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_dm, name='dm_gp')] if dm else [])+ \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_chrom, name='chrom_gp')] if chrom else [])+ \
-            # ([deterministic.chromatic_polynomial(psr, name="chrom_gp")] if (chrom and chrom_poly) else []) + \ # Sample deterministic chromatic polynomial model instead of marginalising over chromatic polynomial GP
+            #([deterministic.chromatic_polynomial(psr, name="chrom_gp")] if (chrom and chrom_poly) else []) + \
             ([signals.makegp_chrom_poly_svd(psr, name='chrom_gp')] if (chrom and chrom_poly) else []) + \
             ([solar.makegp_timedomain_solar_dm(psr, covariance=signals.squared_exponential, dt=max_cadence_days*86400.0, name='sw_gp')] if sw else []) + \
             #([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=solar.fourierbasis_solar_dm, name='sw_gp')] if sw else []) + \
@@ -158,7 +161,7 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
             ([signals.makegp_fftcov(psr, signals.powerlaw, components=psr_knots, name='red_noise2')] if red2 else []) + \
             ([signals.makegp_fftcov_dm(psr, signals.powerlaw, components=psr_knots, name='dm_gp')] if dm else [])+ \
             ([signals.makegp_fftcov_chrom(psr, signals.powerlaw, components=psr_knots, name='chrom_gp')] if chrom else [])+ \
-            #([deterministic.chromatic_polynomial(psr, name="chrom_gp")] if (chrom and chrom_poly) else []) + \ # Sample deterministic chromatic polynomial model instead of marginalising over chromatic polynomial GP
+            #([deterministic.chromatic_polynomial(psr, name="chrom_gp")] if (chrom and chrom_poly) else []) + \
             ([signals.makegp_chrom_poly_svd(psr, name='chrom_gp')] if (chrom and chrom_poly) else []) + \
             ([solar.makegp_timedomain_solar_dm(psr, covariance=signals.squared_exponential, dt=max_cadence_days*86400.0, name='sw_gp')] if sw else []) + \
             #([signals.makegp_fftcov_solar(psr, signals.powerlaw, components=psr_knots, name='sw_gp')] if sw else []) + \

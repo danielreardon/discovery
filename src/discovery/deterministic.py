@@ -227,18 +227,21 @@ def chromatic_step(psr, fref=1400.0):
     return delay
 
 
-def orthometric_shapiro(psr, binphase):
+def orthometric_shapiro(psr, binphase, eps_stig=1e-6, eps_log=1e-10):
     """Orthometric Shapiro delay model from Freire & Wex (2010)."""
     toas, binphase = matrix.jnparray(psr.toas / const.day), matrix.jnparray(binphase)
     if not np.shape(binphase) == np.shape(toas):
         raise ValueError("Input binphase must have the same shape as toas")
 
     def delay(h3, stig):
-        return -(2.0 * h3 / stig**3) * jnp.log(1 + stig**2 - 2 * stig * jnp.sin(binphase))
+        stig_clipped = jnp.clip(stig, eps_stig, 1.0 - eps_stig)
+        log_arg = 1 + stig_clipped**2 - 2 * stig_clipped * jnp.sin(binphase)
+        log_arg = jnp.maximum(log_arg, eps_log)
+        return -(2.0 * h3 / stig_clipped**3) * jnp.log(log_arg)
 
     return delay
 
-def shapiro_cosi(psr, binphase):
+def shapiro_cosi(psr, binphase, eps_cosi=1e-6, eps_log=1e-10):
     """Orthometric Shapiro delay model from Freire & Wex (2010), 
     modified for a uniform cos(i) prior."""
     toas, binphase = matrix.jnparray(psr.toas / const.day), matrix.jnparray(binphase)
@@ -246,13 +249,16 @@ def shapiro_cosi(psr, binphase):
         raise ValueError("Input binphase must have the same shape as toas")
 
     def delay(h3, cosi):
-        sin_i = jnp.sqrt(1.0 - cosi**2)
-        stig  = sin_i / (1.0 + cosi)
-        return -(2.0 * h3 / stig**3) * jnp.log(1 + stig**2 - 2 * stig * jnp.sin(binphase))
+        cosi_clipped = jnp.clip(cosi, -1.0 + eps_cosi, 1.0 - eps_cosi)
+        sin_i = jnp.sqrt(1.0 - cosi_clipped**2)
+        stig  = sin_i / (1.0 + cosi_clipped)
+        log_arg = 1 + stig**2 - 2 * stig * jnp.sin(binphase)
+        log_arg = jnp.maximum(log_arg, eps_log)
+        return -(2.0 * h3 / stig**3) * jnp.log(log_arg)
 
     return delay
 
-def chromatic_polynomial(psr, fref=1400.0, name='chrom_gp'):
+def chromatic_polynomial(psr, fref=None, name='chrom_gp'):
     """SVD-orthogonalised chromatic polynomial as a sampled deterministic delay.
 
     Models a (constant + linear + quadratic)-in-time chromatic delay
@@ -277,12 +283,18 @@ def chromatic_polynomial(psr, fref=1400.0, name='chrom_gp'):
     """
     t0_sec  = float(np.mean(psr.toas))
     toas_yr = (psr.toas - t0_sec) / const.yr
-    M = np.vstack([np.ones_like(toas_yr), toas_yr, toas_yr**2]).T
-    U, S, Vt = np.linalg.svd(M, full_matrices=False)
+    if fref is None:
+        fref = float(np.exp(np.mean(np.log(np.asarray(psr.freqs)))))
 
-    U0 = matrix.jnparray(U[:, 0])
-    U1 = matrix.jnparray(U[:, 1])
-    U2 = matrix.jnparray(U[:, 2])
+    M = np.vstack([np.ones_like(toas_yr), toas_yr, toas_yr**2]).T
+    U, _, _ = np.linalg.svd(M, full_matrices=False)
+
+    Mmat = np.asarray(psr.Mmat, dtype=np.float64)
+    M_norm = Mmat / np.sqrt(np.sum(Mmat**2, axis=0))
+    Q_tm, _ = np.linalg.qr(M_norm)
+
+    U_j     = matrix.jnparray(U)
+    Q_tm_j  = matrix.jnparray(Q_tm)
     fnorm_j = matrix.jnparray(fref / np.asarray(psr.freqs))
 
     c0_p    = f'{psr.name}_{name}_c0'
@@ -291,15 +303,14 @@ def chromatic_polynomial(psr, fref=1400.0, name='chrom_gp'):
     alpha_p = f'{psr.name}_{name}_alpha'
 
     def delay(params):
-        c0 = params[c0_p]
-        c1 = params[c1_p]
-        c2 = params[c2_p]
         alpha = params[alpha_p]
-        temporal = c0 * U0 + c1 * U1 + c2 * U2
-        return temporal * fnorm_j ** alpha
+        F = U_j * fnorm_j[:, None] ** alpha
+        F = F - Q_tm_j @ (Q_tm_j.T @ F)        # project out timing-model subspace
+        F, _ = jnp.linalg.qr(F)                # orthonormalise -> |F^T F| = 1 for all alpha
+        c = jnp.array([params[c0_p], params[c1_p], params[c2_p]])
+        return F @ c
 
     delay.params = [c0_p, c1_p, c2_p, alpha_p]
-    delay.svd = {'S': S, 'Vt': Vt}
     return delay
 
 

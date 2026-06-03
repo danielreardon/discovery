@@ -538,13 +538,13 @@ def makegp_timing(psr, constant=1.0e40, variance=None, svd=False, scale=1.0, var
     return [tm_delay, gp_marg]
 
 # Analytically-marginalised SVD chromatic polynomial GP.
-def makegp_chrom_poly_svd(psr, fref=1400.0, sigma_c=1e-4, name='chrom_gp'):
+def makegp_chrom_poly_svd(psr, fref=None, sigma_c=1e-3, name='chrom_gp'):
     """SVD-orthogonalised chromatic polynomial GP, marginalised analytically.
 
     Basis: ``U * (fref/freq)**alpha``, where ``U`` is the SVD-orthonormalised
     [1, t, t**2] temporal design matrix. The timing-model column subspace is
     projected out of the basis at runtime to remove the degeneracy with the
-    standard timing model GP. We assume a Gaussian prior (``sigma_c = 1e-4``) 
+    standard timing model GP. We assume a Gaussian prior (``sigma_c = 1e-3``) 
     on the coefficients.
 
     Shares ``alpha`` with a companion chromatic Fourier (or FFTint) GP via
@@ -552,6 +552,10 @@ def makegp_chrom_poly_svd(psr, fref=1400.0, sigma_c=1e-4, name='chrom_gp'):
     """
     t0_sec  = float(np.mean(psr.toas))
     toas_yr = (psr.toas - t0_sec) / const.yr
+
+    if fref is None:
+        # Geometric mean of observing frequencies
+        fref = float(np.exp(np.mean(np.log(np.asarray(psr.freqs)))))
 
     # SVD-orthonormalised polynomial temporal basis
     M_poly = np.vstack([np.ones_like(toas_yr), toas_yr, toas_yr**2]).T
@@ -573,8 +577,9 @@ def makegp_chrom_poly_svd(psr, fref=1400.0, sigma_c=1e-4, name='chrom_gp'):
     def fmatfunc(params):
         alpha = params[alpha_param]
         F = U_j * fnorm_j[:, None] ** alpha
-        F = F - Q_tm_j @ (Q_tm_j.T @ F)  # project out the timing-model subspace
-        return F                                 
+        F = F - Q_tm_j @ (Q_tm_j.T @ F)          # project out timing-model subspace
+        F, _ = jnp.linalg.qr(F)                  # orthonormalise the surviving basis
+        return F
     fmatfunc.params = [alpha_param]
 
     Phi_const = matrix.jnparray((sigma_c ** 2) * np.ones(3))
