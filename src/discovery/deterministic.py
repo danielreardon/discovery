@@ -1,3 +1,4 @@
+from cmath import tau
 import functools
 
 import numpy as np
@@ -169,8 +170,11 @@ def chromatic_exponential(psr, fref=1400.0):
     toas, fnorm = matrix.jnparray(psr.toas / const.day), matrix.jnparray(fref / psr.freqs)
 
     def delay(t0, log10_Amp, log10_tau, sign_param, alpha):
-        return jnp.sign(sign_param) * 10**log10_Amp * jnp.exp(- (toas - t0) / 10**log10_tau) * fnorm**alpha * jnp.heaviside(toas - t0, 1.0)
-
+        dt = toas - t0
+        tau = 10**log10_tau
+        amp = 10**log10_Amp
+        return jnp.sign(sign_param) * amp * fnorm**alpha * jnp.where(dt >= 0, jnp.exp(-dt / tau), 0.0 )
+    
     return delay
 
 

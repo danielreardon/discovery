@@ -1,6 +1,5 @@
 import re
 import inspect
-import types
 import typing
 from collections.abc import Iterable
 
@@ -8,12 +7,12 @@ import numpy as np
 import scipy.interpolate as si
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from . import matrix
 from . import const
 
 # residuals
-
 def residuals(psr):
     return psr.residuals
 
@@ -249,103 +248,6 @@ def makegp_ecorr(psr, noisedict={}, enterprise=False, scale=1.0, selection=selec
 
         gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), Umatall)
         gp.index = {f'{psr.name}_{name}_coefficients({Umatall.shape[1]})': slice(0,Umatall.shape[1])} # better for cosine
-        gp.name, gp.pos = psr.name, psr.pos
-        gp.gpname, gp.gpcommon = name, []
-
-        return gp
-
-def makegp_quadratic_ecorr(psr, noisedict={}, enterprise=False, scale=1.0,
-                           selection=selection_backend_flags, variable=False,
-                           fref=None, name='quadecorrGP'):
-    """Rank-3 ECORR GP: each epoch carries three coefficients (constant, linear,
-    quadratic in normalized observing frequency), allowing the jitter-like noise
-    to decorrelate across frequency within an epoch. Three log10_ecorr parameters
-    are introduced per backend, one for each rank.
-
-    If ``fref`` is None (default), the reference frequency for the quadratic
-    basis is set per-backend to the mean of ``psr.freqs`` restricted to that
-    backend's TOAs. This keeps the {1, x, x^2} basis near-orthogonal regardless
-    of the absolute observing frequencies used.
-    """
-
-    freqs = np.asarray(psr.freqs)
-
-    backend_flags = selection(psr)
-    backends = [b for b in sorted(set(backend_flags)) if b != '']
-    masks = [np.array(backend_flags == backend) for backend in backends]
-
-    log10_ecorrs_per_rank = [[], [], []]
-    U_blocks_per_rank = [[], [], []]
-
-    for backend, mask in zip(backends, masks):
-        for r in range(3):
-            log10_ecorrs_per_rank[r].append(f'{psr.name}_{backend}_log10_ecorr_q{r}')
-
-        # per-backend reference frequency
-        fref_b = float(np.mean(freqs[mask])) if fref is None else float(fref)
-        x = freqs / fref_b - 1.0  # centered around fref_b
-
-        # quantize TOAs that belong to this backend
-        bins = quantize(psr.toas * mask)
-
-        if enterprise:
-            uniques, counts = np.unique(quantize(psr.toas * mask), return_counts=True)
-            U0 = np.vstack([bins == i for i, cnt in zip(uniques[1:], counts[1:]) if cnt > 1]).T
-        else:
-            U0 = np.vstack([bins == i for i in range(1, bins.max() + 1)]).T
-
-        U0 = U0.astype(np.float64)
-        U1 = U0 * x[:, None]
-        U2 = U0 * (x[:, None] ** 2)
-
-        U_blocks_per_rank[0].append(U0)
-        U_blocks_per_rank[1].append(U1)
-        U_blocks_per_rank[2].append(U2)
-
-    # full basis: [ rank0 columns | rank1 columns | rank2 columns ]
-    U_per_rank = [np.hstack(blocks) for blocks in U_blocks_per_rank]
-    Umatall = np.hstack(U_per_rank)
-
-    # build per-parameter masks selecting the corresponding columns of Umatall
-    pmasks, params = [], []
-    cnt = 0
-    for r in range(3):
-        for U_block, log10_ecorr in zip(U_blocks_per_rank[r], log10_ecorrs_per_rank[r]):
-            n = U_block.shape[1]
-            z = np.zeros(Umatall.shape[1], dtype=np.float64)
-            z[cnt:cnt + n] = 1.0
-            pmasks.append(z)
-            params.append(log10_ecorr)
-            cnt += n
-
-    logscale = np.log10(scale)
-
-    if all(par in noisedict for par in params):
-        phi = sum(10.0**(2 * (logscale + noisedict[log10_ecorr])) * pmask
-                  for (log10_ecorr, pmask) in zip(params, pmasks))
-
-        if variable:
-            def getphi(p):
-                return phi
-            getphi.params = []
-
-            gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), Umatall)
-            gp.index = {f'{psr.name}_{name}_coefficients({Umatall.shape[1]})': slice(0, Umatall.shape[1])}
-            gp.name, gp.pos = psr.name, psr.pos
-            gp.gpname, gp.gpcommon = name, []
-
-            return gp
-        else:
-            return matrix.ConstantGP(matrix.NoiseMatrix1D_novar(phi), Umatall)
-    else:
-        pmasks = [matrix.jnparray(pmask) for pmask in pmasks]
-        def getphi(p):
-            return sum(10.0**(2 * (logscale + p[log10_ecorr])) * pmask
-                       for (log10_ecorr, pmask) in zip(params, pmasks))
-        getphi.params = params
-
-        gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), Umatall)
-        gp.index = {f'{psr.name}_{name}_coefficients({Umatall.shape[1]})': slice(0, Umatall.shape[1])}
         gp.name, gp.pos = psr.name, psr.pos
         gp.gpname, gp.gpcommon = name, []
 
@@ -1284,58 +1186,6 @@ def brokenpowerlaw(f, df, log10_A, gamma, log10_fb):
 def freespectrum(f, df, log10_rho: typing.Sequence):
     return jnp.repeat(10.0**(2.0 * log10_rho), 2)
 
-#time-domain covariance functions
-# Time-domain kernels matching NANOGrav 12.5yr CNM paper (Hazboun+ 2025).
-#
-# Both kernels operate on tau given in SECONDS (matching psr.toas units),
-# while the kernel hyperparameters are in physically natural log10 units:
-#   log10_sigma  -- log10 of amplitude in seconds
-#   log10_ell    -- log10 of correlation timescale in DAYS
-#   log10_Gamma  -- log10 of periodicity weight (dimensionless, QP only)
-#   log10_p      -- log10 of period in YEARS (QP only)
-# These match the priors in Table A1 of the paper.
-def squared_exponential(tau, log10_sigma, log10_ell):
-    """Squared-exponential kernel (Eq. 4 of Hazboun+ 2025).
-
-    k_SE(tau) = sigma^2 * exp(-tau^2 / (2*ell^2))
-              + (sigma/500)^2 * delta(tau)
-
-    The (sigma/500)^2 diagonal regulariser stabilises the inversion of phi
-    for large ell, exactly as in the paper.
-    """
-    sigma  = 10.0 ** log10_sigma
-    ell_s  = (10.0 ** log10_ell) * 86400.0   # days -> seconds
-
-    smooth = (sigma ** 2) * jnp.exp(-0.5 * (tau / ell_s) ** 2)
-
-    # Kronecker delta on tau == 0 (tau is |t_k - t_l| so only diagonal hits 0).
-    diag   = (sigma / 500.0) ** 2 * (tau == 0.0)
-
-    return smooth + diag
-
-
-def quasi_periodic(tau, log10_sigma, log10_ell, log10_Gamma, log10_p):
-    """Quasi-periodic kernel (Eq. 6 of Hazboun+ 2025).
-
-    k_QP(tau) = (sigma/500)^2 * delta(tau)
-              + sigma^2 * exp(-tau^2 / (2*ell^2))
-                       * exp(-Gamma * sin^2(pi*tau/p))
-
-    Reduces to k_SE in the limit Gamma -> 0.
-    """
-    sigma  = 10.0 ** log10_sigma
-    ell_s  = (10.0 ** log10_ell) * 86400.0   # days -> seconds
-    Gamma  = 10.0 ** log10_Gamma
-    p_s    = (10.0 ** log10_p) * const.yr     # years -> seconds
-
-    se_part  = jnp.exp(-0.5 * (tau / ell_s) ** 2)
-    per_part = jnp.exp(-Gamma * jnp.sin(jnp.pi * tau / p_s) ** 2)
-
-    smooth = (sigma ** 2) * se_part * per_part
-    diag   = (sigma / 500.0) ** 2 * (tau == 0.0)
-
-    return smooth + diag
-
 
 # combined red_noise + crn
 
@@ -1492,3 +1342,218 @@ def makegp_fftcov_orbital_dm(psr, prior, components, order=1,
                           components, T=T_phase,
                           fourierbasis=make_phaseinterpbasis_orbital_dm(fref=fref, order=order),
                           common=common, name=name)
+
+
+"""Time-domain models and kernels implemented below. Under testing"""
+
+#time-domain covariance functions
+# Time-domain kernels matching NANOGrav 12.5yr CNM paper (Hazboun+ 2025).
+#
+# Both kernels operate on tau given in SECONDS (matching psr.toas units),
+# while the kernel hyperparameters are in physically natural log10 units:
+#   log10_sigma  -- log10 of amplitude in seconds
+#   log10_ell    -- log10 of correlation timescale in DAYS
+#   log10_Gamma  -- log10 of periodicity weight (dimensionless, QP only)
+#   log10_p      -- log10 of period in YEARS (QP only)
+# These match the priors in Table A1 of the paper.
+def squared_exponential(tau, log10_sigma, log10_ell):
+    """Squared-exponential kernel (Eq. 4 of Hazboun+ 2025).
+
+    k_SE(tau) = sigma^2 * exp(-tau^2 / (2*ell^2))
+              + (sigma/500)^2 * delta(tau)
+
+    The (sigma/500)^2 diagonal regulariser stabilises the inversion of phi
+    for large ell, exactly as in the paper.
+    """
+    sigma  = 10.0 ** log10_sigma
+    ell_s  = (10.0 ** log10_ell) * 86400.0   # days -> seconds
+
+    smooth = (sigma ** 2) * jnp.exp(-0.5 * (tau / ell_s) ** 2)
+
+    # Kronecker delta on tau == 0 (tau is |t_k - t_l| so only diagonal hits 0).
+    diag   = (sigma / 500.0) ** 2 * (tau == 0.0)
+
+    return smooth + diag
+
+
+def quasi_periodic(tau, log10_sigma, log10_ell, log10_Gamma, log10_p):
+    """Quasi-periodic kernel (Eq. 6 of Hazboun+ 2025).
+
+    k_QP(tau) = (sigma/500)^2 * delta(tau)
+              + sigma^2 * exp(-tau^2 / (2*ell^2))
+                       * exp(-Gamma * sin^2(pi*tau/p))
+
+    Reduces to k_SE in the limit Gamma -> 0.
+    """
+    sigma  = 10.0 ** log10_sigma
+    ell_s  = (10.0 ** log10_ell) * 86400.0   # days -> seconds
+    Gamma  = 10.0 ** log10_Gamma
+    p_s    = (10.0 ** log10_p) * const.yr     # years -> seconds
+
+    se_part  = jnp.exp(-0.5 * (tau / ell_s) ** 2)
+    per_part = jnp.exp(-Gamma * jnp.sin(jnp.pi * tau / p_s) ** 2)
+
+    smooth = (sigma ** 2) * se_part * per_part
+    diag   = (sigma / 500.0) ** 2 * (tau == 0.0)
+
+    return smooth + diag
+
+# Generic time-domain GP  (achromatic / DM / chromatic; NO freq covariance)
+def makegp_timedomain(psr, covariance, dt=14 * 86400.0, fref=1400.0,
+                      chromatic_index=0, common=[], name='timedomain_gp'):
+    """Time-domain GP with linear-interpolation temporal basis.
+
+    The kernel is purely temporal: ``k = covariance(tau_t, ...)``. Frequency
+    enters only as a multiplicative basis weight, *not* as a kernel coordinate.
+
+    chromatic_index : 0   -> achromatic (red-noise-like in time)
+                      2   -> DM        (basis weighted by K_DM / nu^2)
+                      >0  -> chromatic (basis weighted by (fref/nu)^alpha)
+    """
+    argspec = inspect.getfullargspec(covariance)
+    argmap = [(arg if arg in common
+               else f'{name}_{arg}' if f'{name}_{arg}' in common
+               else f'{psr.name}_{name}_{arg}')
+              for arg in argspec.args if arg not in ('tau', 'tau_t')]
+
+    if chromatic_index == 0:
+        weight = np.ones_like(psr.freqs)
+    elif chromatic_index == 2:
+        weight = 4.148808e3 / (psr.freqs ** 2)
+    else:
+        weight = (fref / np.asarray(psr.freqs)) ** chromatic_index
+
+    bins = quantize(psr.toas, dt)
+    Umat = np.vstack([bins == i for i in range(bins.max() + 1)]).T.astype('d')
+    Umat = Umat * weight[:, None]
+    toas = psr.toas @ Umat / np.maximum(Umat.sum(axis=0), 1e-30)
+
+    tau = jnp.abs(toas[:, None] - toas[None, :])
+
+    def getphi(params):
+        return covariance(tau, *[params[arg] for arg in argmap])
+    getphi.params = argmap
+
+    gp = matrix.VariableGP(matrix.NoiseMatrix2D_var(getphi), Umat)
+    n = Umat.shape[1]
+    gp.index = {f'{psr.name}_{name}_coefficients({n})': slice(0, n)}
+    gp.name, gp.pos, gp.gpname, gp.gpcommon = psr.name, psr.pos, name, common
+    return gp
+
+
+# Finite-scintle-effect kernel (time x frequency)
+def kernel_finite_scintle(tau_t, tau_nu,
+                          log10_sigma, log10_t_d, log10_nu_d,
+                          t_max=86400.0):
+    """Diffractive / finite-scintle-effect kernel on (tau_t, tau_nu).
+
+    k = sigma^2 * exp(-(tau_t / t_d)^(5/3)) * exp(-|tau_nu| / nu_d)
+
+    Multiplied by a hard window ``tau_t < t_max`` so that cross-epoch
+    correlation is identically zero (a single ionised cloud refreshes between
+    observing days; FSE does not persist beyond ~1 day).
+
+    sigma  : rms delay amplitude (seconds)
+    t_d    : diffractive timescale (seconds; typically minutes)
+    nu_d   : decorrelation bandwidth (MHz; typically <10 MHz at L-band)
+    t_max  : hard cross-epoch cutoff (seconds; default 1 day)
+    """
+    sigma = 10.0 ** log10_sigma
+    t_d   = 10.0 ** log10_t_d
+    nu_d  = 10.0 ** log10_nu_d
+
+    # 5/3 exponent: tiny epsilon prevents 0**(5/3) gradient pathology
+    time_part = jnp.exp(-((tau_t + 1e-30) / t_d) ** (5.0 / 3.0))
+    freq_part = jnp.exp(-jnp.abs(tau_nu) / nu_d)
+    window    = (tau_t < t_max).astype(tau_t.dtype)
+
+    diag = (sigma / 500.0) ** 2 * (tau_t == 0.0) * (tau_nu == 0.0)
+    return sigma ** 2 * time_part * freq_part * window + diag
+
+
+# Chromatic time-domain GP with joint (time, freq) bins
+def kernel_qp_time_se_freq(tau_t, tau_nu,
+                           log10_sigma, log10_ell_t, log10_p,
+                           log10_Gamma, log10_ell_nu):
+    """Default kernel for refractive chromatic GP: QP in time, SE in freq.
+
+    Time:   squared-exponential * sin^2-periodic
+            (months-scale correlation, ~1 yr period)
+    Freq:   squared-exponential
+            (slow ISM decorrelation across the band)
+    """
+    sigma   = 10.0 ** log10_sigma
+    ell_t   = (10.0 ** log10_ell_t) * 86400.0     # days  -> seconds
+    p_t     = (10.0 ** log10_p)     * const.yr    # years -> seconds
+    Gamma   = 10.0 ** log10_Gamma
+    ell_nu  = 10.0 ** log10_ell_nu                # MHz
+
+    se_t  = jnp.exp(-0.5 * (tau_t  / ell_t) ** 2)
+    per_t = jnp.exp(-Gamma * jnp.sin(jnp.pi * tau_t / p_t) ** 2)
+    se_nu = jnp.exp(-0.5 * (tau_nu / ell_nu) ** 2)
+
+    diag = (sigma / 500.0) ** 2 * (tau_t == 0.0) * (tau_nu == 0.0)
+    return sigma ** 2 * se_t * per_t * se_nu + diag
+
+
+def makegp_timedomain_chromatic(psr, covariance=kernel_qp_time_se_freq,
+                                dt=14 * 86400.0, dnu=200.0, fref=1400.0,
+                                chromatic_index=4, common=[],
+                                name='chrom_timedomain_gp'):
+    """Chromatic time-domain GP with *joint* (time, frequency) bins.
+
+    Bins TOAs by (time, frequency) and evaluates a 2D kernel
+    ``covariance(tau_t, tau_nu, ...)``. Default kernel is QP-in-time x SE-in-freq
+    (refractive scintillation; months-to-year temporal scale, slow chromatic
+    decorrelation across the band).
+
+    Pass ``covariance=kernel_finite_scintle`` and small ``dt`` (e.g. 3600) to
+    use the same builder for the diffractive / FSE component.
+
+    dt   : time-bin width (seconds)
+    dnu  : frequency-bin width (MHz)
+    """
+    argspec = inspect.getfullargspec(covariance)
+    skip = {'tau_t', 'tau_nu', 't_max'}
+    argmap = [(arg if arg in common
+               else f'{name}_{arg}' if f'{name}_{arg}' in common
+               else f'{psr.name}_{name}_{arg}')
+              for arg in argspec.args
+              if arg not in skip and argspec.defaults is None
+              or arg not in skip]
+    # (drop kw-only arguments with defaults from argmap; keep only sampled ones)
+    argmap = [a for a in argmap if a not in skip]
+
+    weight = (fref / np.asarray(psr.freqs)) ** chromatic_index
+
+    # Joint (time, freq) binning
+    bins_t  = quantize(psr.toas, dt)
+    bins_nu = ((np.asarray(psr.freqs) - np.min(psr.freqs)) / dnu).astype(int)
+    n_nu    = bins_nu.max() + 1
+    joint   = bins_t * n_nu + bins_nu
+
+    # Drop empty bins (sparse coverage in (epoch, sub-band) is the norm)
+    used    = np.unique(joint)
+    remap   = {b: i for i, b in enumerate(used)}
+    joint_r = np.array([remap[b] for b in joint])
+    n_bins  = len(used)
+
+    Umat = np.zeros((len(psr.toas), n_bins))
+    Umat[np.arange(len(psr.toas)), joint_r] = weight
+
+    norms    = np.maximum(np.abs(Umat).sum(axis=0), 1e-30)
+    toa_bin  = (psr.toas  @ np.abs(Umat)) / norms
+    freq_bin = (psr.freqs @ np.abs(Umat)) / norms
+
+    tau_t_j  = jnp.abs(toa_bin[:, None]  - toa_bin[None, :])
+    tau_nu_j = jnp.abs(freq_bin[:, None] - freq_bin[None, :])
+
+    def getphi(params):
+        return covariance(tau_t_j, tau_nu_j,
+                          *[params[arg] for arg in argmap])
+    getphi.params = argmap
+
+    gp = matrix.VariableGP(matrix.NoiseMatrix2D_var(getphi), Umat)
+    gp.index = {f'{psr.name}_{name}_coefficients({n_bins})': slice(0, n_bins)}
+    gp.name, gp.pos, gp.gpname, gp.gpcommon = psr.name, psr.pos, name, common
+    return gp

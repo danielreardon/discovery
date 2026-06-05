@@ -242,15 +242,18 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     
     return m
 
-def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn"):
-    # Accepts a list of pulsars and their corresponding chain dataframes and constructs an ArrayLikelihood
-    def has_param(df, param_string="red_noise"):
-        return any(f"{param_string}" in col for col in list(df.columns))
-
+def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn", chrom_poly=True):
+    # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
+    def has_param(df, param_string):
+        return any(param_string in col for col in df.columns)
+ 
+    if chrom_poly:
+        print("Note: chrom_poly=True (chromatic polynomial is marginalised by default). Set chrom_poly=False to disable.")
+ 
     Tspan = signals.getspan(psrs)
     common_components = int(Tspan / (max_cadence_days * 86400))
     common_knots = 2 * common_components + 1
-
+ 
     psls = []
     for psr, df in zip(psrs, chain_dfs):
         if not any(psr.name in col for col in df.columns):
@@ -258,22 +261,27 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
         # Get max-likelihood parameters for this pulsar
         ml_idx = df['logl'].idxmax()
         noisedict = {col: df.loc[ml_idx, col] for col in df.columns if col.startswith(psr.name)}
-
+ 
+        # Detect quadratic ecorr: present when any ecorr parameter ends in _q0
+        quadratic = any(col.endswith('_q0') for col in df.columns if 'ecorr' in col)
+ 
         if not fftInt:
             curn = signals.makegp_fourier(psr, signals.powerlaw, common_components, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
         else:
             curn = signals.makegp_fftcov(psr, signals.powerlaw, common_knots, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
         extra_gps = curn if isinstance(curn, list) else [curn]
-
-        # background = False, as we are including a common red noise process
-        m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
-                                red=has_param(df, "red_noise"), dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), sw=has_param(df, "sw_gp"),
+ 
+        # background=False, as we are including a common red noise process
+        m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict, 
+                                quadratic=quadratic, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
+                                red=has_param(df, "red_noise"), red2=has_param(df, "red_noise2"),
+                                dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_poly=chrom_poly, sw=has_param(df, "sw_gp"),
                                 band=has_param(df, "band_gp"), band_low=has_param(df, "band_low_gp"), band_alpha=has_param(df, "bandalpha_gp"),
                                 chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
                                 extra_gps=extra_gps)
-
+ 
         print("Including pulsar", psr.name, "with model parameters:\n", m.logL.params)
         psls.append(m)
-
+ 
     return likelihood.GlobalLikelihood(psls)
     # return likelihood.ArrayLikelihood(psls)
