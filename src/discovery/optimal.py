@@ -391,6 +391,39 @@ class OS:
         return get_os
 
     @functools.cached_property
+    def mcos(self):
+        # multi-component OS: jointly fit several ORFs (e.g. HD + dipole) to the
+        # pairwise rho/sigma with a single generalized-least-squares solve, so the
+        # returned amplitudes and their covariance account for the correlation
+        # between components (unlike calling `os` once per ORF).
+        os_rhosigma = self.os_rhosigma    # get_mcos will close on os_rhosigma
+        gwpar, angles = self.gwpar, matrix.jnparray(self.angles)
+
+        def get_mcos(params, orfs=(hd_orfa,)):
+            rhos, sigmas = os_rhosigma(params)
+
+            gwnorm = 10**(2.0 * params[gwpar])
+            rhos, sigmas = gwnorm * rhos, gwnorm * sigmas
+
+            # design matrix M_{pk} = orf_k(angle_p); weights w_p = 1/sigma_p^2
+            M = matrix.jnp.stack([orf(angles) for orf in orfs], axis=1)
+            w = 1.0 / sigmas**2
+
+            MtW = M.T * w[matrix.jnp.newaxis, :]
+            fisher = MtW @ M                              # (ncomp, ncomp)
+            cov = matrix.jnp.linalg.inv(fisher)           # parameter covariance
+            os = cov @ (MtW @ rhos)                       # amplitude estimates A_k^2
+            os_sigma = matrix.jnp.sqrt(matrix.jnp.diag(cov))
+            snr = os / os_sigma
+
+            return {'os': os, 'os_sigma': os_sigma, 'cov': cov, 'snr': snr,
+                    'log10_A': params[gwpar]}
+
+        get_mcos.params = os_rhosigma.params
+
+        return get_mcos
+
+    @functools.cached_property
     def scramble(self):
         os_rhosigma = self.os_rhosigma    # getos will close on os_rhosigma
         gwpar, pairs = self.gwpar, self.pairs
