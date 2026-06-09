@@ -478,11 +478,11 @@ def SM_2d_fused(Y, N, F, P):
 # indexed, carefully handwritten
 
 def make_uind(U):
-    Uind = np.zeros((U.shape[1], jnp.max(jnp.sum(U, axis=0)) + 1), 'i')
+    Uind = np.zeros((U.shape[1], int(np.max(np.sum(U, axis=0))) + 1), 'i')
 
     for i in range(U.shape[1]):
         ind = np.where(U[:,i])[0]
-        Uind[i,0:len(ind)] = ind + 1
+        Uind[i, 0:len(ind)] = ind + 1
 
     return Uind
 
