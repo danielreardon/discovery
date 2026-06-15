@@ -130,6 +130,8 @@ def run_nuts_with_checkpoints(
 
     Side Effects
     ------------
+    - Runs the warmup/adaptation phase once and checkpoints the post-warmup state before the
+      first sampling chunk, so an interruption during sampling never has to repeat warmup.
     - Runs the MCMC sampler for the number of iterations required to reach the total sample number.
     - Saves samples data to feather files after each iteration.
     - Writes the NumPyro sampler state to a pickle file after each iteration.
@@ -142,30 +144,42 @@ def run_nuts_with_checkpoints(
     >>> ds_numpyro.run_nuts_with_checkpoints(npsampler, 10, jax.random.key(42))
 
     """
-    # convert to pathlib object
-    # make directory if it doesn't exist
-    if not isinstance(outdir, Path):
-        outdir = Path(outdir)
-        outdir.mkdir(exist_ok=True, parents=True)
+    # convert to pathlib object and make the output directory if needed
+    outdir = Path(outdir)
+    outdir.mkdir(exist_ok=True, parents=True)
 
     samples_file = outdir / "numpyro-samples.feather"
     checkpoint_file = outdir / "numpyro-checkpoint.pickle"
 
-    if checkpoint_file.is_file() and samples_file.is_file() and resume:
-        df = pd.read_feather(samples_file)
-        num_samples_saved = df.shape[0]
-
+    if resume and checkpoint_file.is_file():
+        # A checkpoint exists, so warmup has already completed (its state is saved before the
+        # first sampling chunk). Restore that state and skip warmup. The samples file may not
+        # exist yet if the run was interrupted between warmup and the first chunk.
         with checkpoint_file.open("rb") as f:
-            checkpoint = pickle.load(f)
+            sampler.post_warmup_state = pickle.load(f)
+
+        if samples_file.is_file():
+            df = pd.read_feather(samples_file)
+            num_samples_saved = df.shape[0]
+        else:
+            df = None
+            num_samples_saved = 0
 
         total_sample_num = sampler.num_samples - num_samples_saved
-
-        sampler.post_warmup_state = checkpoint
 
     else:
         df = None
         num_samples_saved = 0
         total_sample_num = sampler.num_samples
+
+        # Run the warmup/adaptation phase once and checkpoint the post-warmup state
+        # immediately, before any sampling. Warmup itself cannot be resumed mid-way (its
+        # step-size and mass-matrix adaptation schedule must run contiguously), but saving
+        # here means an interruption during the first sampling chunk never repeats warmup.
+        sampler.warmup(rng_key)
+        with checkpoint_file.open("wb") as f:
+            pickle.dump(sampler.post_warmup_state, f)
+        rng_key, _ = jax.random.split(rng_key)
 
     num_checkpoints = int(jnp.ceil(total_sample_num / num_samples_per_checkpoint))
     remainder_samples = int(total_sample_num % num_samples_per_checkpoint)

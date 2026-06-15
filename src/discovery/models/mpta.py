@@ -50,19 +50,15 @@ def update_priordict_standard_mpta():
         '(.*_)?sw_gp_log10_p':      [ -2,  1.3],   # years (0.01 - 20 yr)
         '(.*_)?band_gp_log10_A':    [-18, -11],
         '(.*_)?band_gp_gamma':      [0, 7],
-        # The (fcenter, log10_bw) band GP priors are NOT set here: they are bounded
-        # per-pulsar from psr.freqs by _set_band_priors() at model-build time. A generic
-        # regex fallback would shadow those per-pulsar entries (getprior_uniform returns
-        # the first matching pattern), so it is deliberately omitted.
-        # legacy (flow, fhigh) band parametrisation, used by the deprecated *_band_range functions
-        '(.*_)?band_gp_flow':       [856, 1712], # MeerKAT L-band
-        '(.*_)?band_gp_fhigh':      [856, 1712], # MeerKAT L-band
         '(.*_)?bandalpha_gp_log10_A':    [-18, -11],
         '(.*_)?bandalpha_gp_gamma':      [0, 7],
         '(.*_)?bandalpha_gp_alpha':      [0, 10],
-        '(.*_)?bandalpha_gp_fcutoff':    [856, 1712], # MeerKAT L-band
-        '(.*_)?bandalpha_gp_fhigh':    [856, 1712], # MeerKAT L-band
-        '(.*_)?bandalpha_gp_flow':    [856, 1712], # MeerKAT L-band
+        # The band GP centre/bandwidth (fcenter, log10_bw) priors are NOT set here:
+        # they are bounded per-pulsar from psr.freqs by _set_band_priors() at model-build
+        # time. A generic regex fallback would shadow those per-pulsar entries
+        # (getprior_uniform returns the first matching pattern), so it is omitted. The old
+        # (flow, fhigh, fcutoff) edge parametrisation is gone -- band/band_alpha now use the
+        # robust fcenter+log10_bw band_width models.
         # common noise parameters
         'curn_log10_A':             [-18, -11],
         'curn_gamma':               [0, 7],
@@ -191,7 +187,7 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
 
 
 def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={},
-                        ecorr=True, quadratic=False, ecorr_poly_order=2, ecorr_log_freqs=True, global_ecorr=False, # ecorr options. ecorr_poly_order=N selects an order-N Legendre ECORR (overrides quadratic, which is order 2 with linear frequencies)
+                        ecorr=True, quadratic=False, ecorr_poly_order=None, ecorr_log_freqs=True, global_ecorr=False, # ecorr options. ecorr_poly_order=N selects an order-N Legendre ECORR (overrides quadratic, which is order 2 with linear frequencies)
                         background=True, bkgrnd_log10_A=None, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, # Base model: gwb, red, dm, chromatic, solar wind
                         band=False, band_alpha=False, # Additional GP models
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False, # Deterministic chromatic models
