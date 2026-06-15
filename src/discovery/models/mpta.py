@@ -170,8 +170,8 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
             ([signals.makegp_fftcov_band_range_alpha(psr, signals.powerlaw, components=psr_knots, name='bandalpha_gp')] if band_alpha else []))
 
 
-def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={}, 
-                        ecorr=True, quadratic=False, global_ecorr=False, # ecorr options
+def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={},
+                        ecorr=True, quadratic=False, ecorr_poly_order=2, ecorr_log_freqs=True, global_ecorr=False, # ecorr options. ecorr_poly_order=N selects an order-N Legendre ECORR (overrides quadratic, which is order 2 with linear frequencies)
                         background=True, bkgrnd_log10_A=None, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, # Base model: gwb, red, dm, chromatic, solar wind
                         band=False, band_low=False, band_alpha=False, # Additional GP models
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False, # Deterministic chromatic models
@@ -188,7 +188,9 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     model_components += tm
     model_components += [measurement_noise]
     if ecorr:
-        if quadratic:
+        if ecorr_poly_order is not None:
+            model_components += [signals.makegp_ecorr_legendre(psr, noisedict=noisedict, order=ecorr_poly_order, log_freqs=ecorr_log_freqs)]
+        elif quadratic:
             model_components += [signals.makegp_quadratic_ecorr_legendre(psr, noisedict=noisedict)]
         else:
             model_components += [signals.makegp_ecorr(psr, noisedict=noisedict)]
@@ -242,8 +244,11 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     
     return m
 
-def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn", chrom_poly=True):
+def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn", chrom_poly=True, ecorr_log_freqs=True):
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
+    # The frequency coordinate of a Legendre ECORR basis cannot be inferred from chain columns:
+    # set ecorr_log_freqs=False to reconstruct chains run with the legacy linear-frequency
+    # (makegp_quadratic_ecorr_legendre) basis
     def has_param(df, param_string):
         return any(param_string in col for col in df.columns)
  
@@ -262,8 +267,11 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
         ml_idx = df['logl'].idxmax()
         noisedict = {col: df.loc[ml_idx, col] for col in df.columns if col.startswith(psr.name)}
  
-        # Detect quadratic ecorr: present when any ecorr parameter ends in _q0
-        quadratic = any(col.endswith('_q0') for col in df.columns if 'ecorr' in col)
+        # Detect Legendre ecorr and its order from parameters ending in _q{r}
+        # (order 2 reproduces the legacy quadratic ecorr exactly)
+        qidxs = [int(col.rsplit('_q', 1)[-1]) for col in df.columns
+                 if 'ecorr' in col and col.rsplit('_q', 1)[-1].isdigit()]
+        ecorr_poly_order = max(qidxs) if qidxs else None
  
         if not fftInt:
             curn = signals.makegp_fourier(psr, signals.powerlaw, common_components, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
@@ -273,7 +281,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
  
         # background=False, as we are including a common red noise process
         m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict, 
-                                quadratic=quadratic, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
+                                ecorr_poly_order=ecorr_poly_order, ecorr_log_freqs=ecorr_log_freqs, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
                                 red=has_param(df, "red_noise"), red2=has_param(df, "red_noise2"),
                                 dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_poly=chrom_poly, sw=has_param(df, "sw_gp"),
                                 band=has_param(df, "band_gp"), band_low=has_param(df, "band_low_gp"), band_alpha=has_param(df, "bandalpha_gp"),

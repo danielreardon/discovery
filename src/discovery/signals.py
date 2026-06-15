@@ -1,6 +1,7 @@
 import re
 import inspect
 import typing
+import warnings
 from collections.abc import Iterable
 
 import numpy as np
@@ -21,6 +22,16 @@ def residuals(psr):
 
 # no backends
 def makenoise_measurement_simple(psr, noisedict={}, add_equad=True, tnequad=False):
+    """Single-EFAC (optionally single-EQUAD) white-noise model for a pulsar.
+
+    Builds a diagonal measurement-noise matrix using one ``efac`` for the whole
+    pulsar. When ``add_equad`` is True an EQUAD term is included: ``tnequad=True``
+    uses the TempoNest convention (EQUAD added outside the EFAC scaling), while the
+    default (``tnequad=False``) uses the tempo2/``t2equad`` convention (EQUAD added
+    in quadrature with the TOA errors, inside the EFAC scaling). Set
+    ``add_equad=False`` for an EFAC-only model. If all required parameters are present
+    in ``noisedict`` a constant matrix is returned, otherwise a variable one.
+    """
     efac = f'{psr.name}_efac'
     if tnequad and add_equad:
         log10_tnequad = f'{psr.name}_log10_tnequad'
@@ -36,7 +47,7 @@ def makenoise_measurement_simple(psr, noisedict={}, add_equad=True, tnequad=Fals
             noise = noisedict[efac]**2 * psr.toaerrs**2 + (10.0**(2.0 * noisedict[log10_tnequad]))
         elif add_equad:
             noise = noisedict[efac]**2 * (psr.toaerrs**2 + 10.0**(2.0 * noisedict[log10_t2equad]))
-        else: 
+        else:
             noise = noisedict[efac]**2 * psr.toaerrs**2
         return matrix.NoiseMatrix1D_novar(noise)
     else:
@@ -253,31 +264,42 @@ def makegp_ecorr(psr, noisedict={}, enterprise=False, scale=1.0, selection=selec
 
         return gp
     
-def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
-                                    selection=selection_backend_flags, variable=False,
-                                    fref=None, name='quadecorrGPleg'):
-    """Rank-3 ECORR GP using a Legendre-polynomial frequency basis.
+def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
+                          selection=selection_backend_flags, variable=False,
+                          order=2, fref=None, log_freqs=True, name='ecorrGPleg'):
+    """ECORR GP using a Legendre-polynomial with order=``order`` frequency basis.
 
-    For each backend, the per-TOA frequency coordinate ``x = freqs / fref - 1``
-    is linearly rescaled into ``y in [-1, 1]`` across that backend's bandwidth,
-    and the three lowest Legendre polynomials
-
-        P_0(y) = 1
-        P_1(y) = y
-        P_2(y) = (3 y^2 - 1) / 2
-
-    are used as the within-epoch frequency basis. On the interval [-1, 1] these
-    polynomials are *orthogonal* (with weight 1), so the three log10_ecorr
-    amplitudes per backend correspond to nearly-independent frequency modes
-    of the rank-3 jitter covariance and the resulting posteriors are well
-    conditioned. P_0 is the band-mean amplitude (the standard ECORR), P_1
-    captures linear chromatic decorrelation, and P_2 captures quadratic
-    curvature across the band.
+    For each backend, the per-TOA log-frequency coordinate
+    ``x = log(freqs / fref)`` (or the linear coordinate ``x = freqs / fref - 1``
+    if ``log_freqs=False``) is linearly rescaled into ``y in [-1, 1]`` across
+    that backend's bandwidth. Legendre polynomials P_0(y) through P_order(y) are 
+    used as the frequency basis and order specifies the highest polynomial 
+    degree included. On the interval [-1, 1] these polynomials are *orthogonal* 
+    (with weight 1), so the ``order``+1 log10_ecorr amplitudes per backend 
+    (parameters ``..._log10_ecorr_q0`` ... ``_q{order}``) correspond to
+    nearly-independent frequency modes of the jitter covariance and the
+    resulting posteriors are well conditioned. P_0 is the band-mean
+    amplitude (order=0 is the standard ECORR up to parameter naming), P_1
+    captures linear chromatic decorrelation, P_2 quadratic curvature across
+    the band, and so on. Varying ``order`` allows the number of significant
+    jitter eigenmodes (cf. the SVD analysis of Kulkarni et al.) to be part
+    of per-pulsar model selection.
 
     If ``fref`` is None (default), the reference frequency is set per-backend
     to the mean of ``psr.freqs`` for that backend's TOAs (this only affects the
     mapping into [-1, 1] and keeps the basis well-conditioned for any band).
+
+    The default log-frequency coordinate matches the observed stationarity of
+    jitter decorrelation in log(fa/fb) (Kulkarni et al.), and fits the implied
+    jitter covariance better than the linear coordinate at every bandwidth
+    (mildly at MeerKAT L-band, substantially for e.g. UWL).
+    ``log_freqs=False`` reproduces the legacy linear-frequency basis of
+    :func:`makegp_quadratic_ecorr_legendre`. The two settings change the
+    basis, so their chains are not interchangeable.
     """
+
+    if not isinstance(order, int) or order < 0:
+        raise ValueError('makegp_ecorr_legendre: order must be an integer >= 0')
 
     freqs = np.asarray(psr.freqs)
 
@@ -285,16 +307,16 @@ def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1
     backends = [b for b in sorted(set(backend_flags)) if b != '']
     masks = [np.array(backend_flags == backend) for backend in backends]
 
-    log10_ecorrs_per_rank = [[], [], []]
-    U_blocks_per_rank = [[], [], []]
+    log10_ecorrs_per_order = [[] for _ in range(order+1)]
+    U_blocks_per_order = [[] for _ in range(order+1)]
 
     for backend, mask in zip(backends, masks):
-        for r in range(3):
-            log10_ecorrs_per_rank[r].append(f'{psr.name}_{backend}_log10_ecorr_q{r}')
+        for o in range(order + 1):
+            log10_ecorrs_per_order[o].append(f'{psr.name}_{backend}_log10_ecorr_q{o}')
 
         # per-backend reference frequency (controls the centring of x)
         fref_b = float(np.mean(freqs[mask])) if fref is None else float(fref)
-        x = freqs / fref_b - 1.0  # centred around fref_b
+        x = np.log(freqs / fref_b) if log_freqs else freqs / fref_b - 1.0
 
         # rescale x linearly to y in [-1, 1] across this backend's TOAs so that
         # the Legendre polynomials are evaluated on their natural support.
@@ -303,18 +325,14 @@ def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1
         half_range = 0.5 * (x_max - x_min)
         if half_range == 0.0:
             # degenerate: only one observing frequency in this backend.
-            # Fall back to the centred coordinate; P_1 and P_2 will be ~0,
-            # and only the P_0 (constant) amplitude will be meaningful.
+            # Fall back to the centred coordinate, where only the P_0
+            # (constant) amplitude carries a meaningful basis.
             y = np.zeros_like(freqs)
         else:
             y = (x - 0.5 * (x_max + x_min)) / half_range  # in [-1, 1] for this backend
 
-        # Legendre polynomials P_0, P_1, P_2 on y
-        P0 = np.ones_like(y)
-        P1 = y
-        P2 = 0.5 * (3.0 * y**2 - 1.0)
-
-        legendre_modes = [P0, P1, P2]
+        # columns of legvander are P_0(y) ... P_{order}(y)
+        legendre_modes = np.polynomial.legendre.legvander(y, order)
 
         # quantize TOAs that belong to this backend
         bins = quantize(psr.toas * mask)
@@ -327,19 +345,19 @@ def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1
 
         U0 = U0.astype(np.float64)
         # multiplying the indicator columns by each Legendre mode gives
-        # the per-rank basis blocks
-        for r in range(3):
-            U_blocks_per_rank[r].append(U0 * legendre_modes[r][:, None])
+        # the per-order basis blocks
+        for o in range(order + 1):
+            U_blocks_per_order[o].append(U0 * legendre_modes[:, o][:, None])
 
-    # full basis: [ rank0 columns | rank1 columns | rank2 columns ]
-    U_per_rank = [np.hstack(blocks) for blocks in U_blocks_per_rank]
-    Umatall = np.hstack(U_per_rank)
+    # full basis: [ order0 columns | order1 columns | ... ]
+    U_per_order = [np.hstack(blocks) for blocks in U_blocks_per_order]
+    Umatall = np.hstack(U_per_order)
 
     # build per-parameter masks selecting the corresponding columns of Umatall
     pmasks, params = [], []
     cnt = 0
-    for r in range(3):
-        for U_block, log10_ecorr in zip(U_blocks_per_rank[r], log10_ecorrs_per_rank[r]):
+    for o in range(order + 1):
+        for U_block, log10_ecorr in zip(U_blocks_per_order[o], log10_ecorrs_per_order[o]):
             n = U_block.shape[1]
             z = np.zeros(Umatall.shape[1], dtype=np.float64)
             z[cnt:cnt + n] = 1.0
@@ -379,6 +397,19 @@ def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1
         gp.gpname, gp.gpcommon = name, []
 
         return gp
+
+def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
+                                    selection=selection_backend_flags, variable=False,
+                                    fref=None, name='quadecorrGPleg'):
+    """Second-order ECORR GP using a Legendre-polynomial frequency basis.
+
+    Thin wrapper around :func:`makegp_ecorr_legendre` with ``order=2``,
+    preserved for backward compatibility; parameter names and basis are
+    unchanged (``..._log10_ecorr_q0/_q1/_q2`` per backend).
+    """
+    return makegp_ecorr_legendre(psr, noisedict=noisedict, enterprise=enterprise, scale=scale,
+                                 selection=selection, variable=variable,
+                                 order=2, fref=fref, log_freqs=False, name=name)
 
 # timing model
 def makegp_improper(psr, fmat, constant=1.0e40, name='improperGP', variable=False):
@@ -525,6 +556,13 @@ def fourierbasis(psr, components, T=None):
     return np.repeat(f, 2), np.repeat(df, 2), fmat
 
 def fourierbasis_dm(psr, components, T=None, fref=1400.0):
+    """Fourier design matrix for a DM (dispersion measure) Gaussian process.
+
+    Identical to :func:`fourierbasis`, but each row is scaled by the cold-plasma
+    dispersion factor ``(fref / psr.freqs) ** 2``, i.e. a fixed chromatic index
+    alpha = 2. Use :func:`fourierbasis_chrom` when the chromatic index is a free
+    parameter, in which case the process is general chromatic noise rather than DM.
+    """
     f, df, fmat = fourierbasis(psr, components, T)
 
     Dm = (fref / psr.freqs)**2
@@ -532,6 +570,14 @@ def fourierbasis_dm(psr, components, T=None, fref=1400.0):
     return f, df, fmat * Dm[:, None]
 
 def fourierbasis_chrom(psr, components, T=None, fref=1400.0):
+    """Fourier design matrix for a chromatic Gaussian process with variable index.
+
+    Returns a callable design-matrix factory ``fmatfunc(alpha)`` that scales the
+    achromatic :func:`fourierbasis` columns by ``(fref / psr.freqs) ** alpha``,
+    where the chromatic index ``alpha`` is a free parameter. Because alpha is not
+    fixed to 2 the resulting process is general chromatic noise, not DM; use
+    :func:`fourierbasis_dm` for the alpha = 2 (DM) case.
+    """
     f, df, fmat = fourierbasis(psr, components, T)
 
     fmat, fnorm = matrix.jnparray(fmat), matrix.jnparray(fref / psr.freqs)
@@ -584,7 +630,15 @@ def fourierbasis_band_range_alpha(psr, components, T=None, fref=1400.0):
 
     return f, df, fmatfunc
 
-def make_fourierbasis_dm(alpha=2.0, tndm=False): #  DM fourier basis shouldn't have alpha
+def make_fourierbasis_dm(alpha=2.0, tndm=False):
+    """Build a DM Fourier-basis function with a fixed chromatic index ``alpha``.
+
+    Returns a ``basis(psr, components, T, fref)`` callable whose columns are the
+    achromatic :func:`fourierbasis` scaled by ``(fref / psr.freqs) ** alpha``. With
+    ``tndm=True`` the tempo2/TempoNest DM normalisation is also applied. A genuine
+    DM basis should keep ``alpha = 2``; for a variable chromatic index use
+    :func:`fourierbasis_chrom`.
+    """
     def basis(psr, components, T=None, fref=1400.0):
         f, df, fmat = fourierbasis(psr, components, T)
 
@@ -598,6 +652,28 @@ def make_fourierbasis_dm(alpha=2.0, tndm=False): #  DM fourier basis shouldn't h
     return basis
 
 def make_fourierbasis_chrom(alpha=4.0, tndm=False):
+    """Build a chromatic Fourier-basis function with a fixed chromatic index ``alpha``.
+
+    Thin wrapper around :func:`make_fourierbasis_dm` with a default ``alpha = 4`` (a
+    common scattering-like index). The returned basis scales the achromatic
+    :func:`fourierbasis` columns by ``(fref / psr.freqs) ** alpha``. Use this for a
+    fixed-index chromatic process; for DM use :func:`make_fourierbasis_dm` (alpha = 2).
+    """
+    return make_fourierbasis_dm(alpha=alpha, tndm=tndm)
+
+def dmfourierbasis(psr, components, T=None, fref=1400.0):
+    warnings.warn("dmfourierbasis is deprecated; use fourierbasis_dm instead.",
+                  DeprecationWarning, stacklevel=2)
+    return fourierbasis_dm(psr, components, T=T, fref=fref)
+
+def dmfourierbasis_alpha(psr, components, T=None, fref=1400.0):
+    warnings.warn("dmfourierbasis_alpha is deprecated; use fourierbasis_chrom instead.",
+                  DeprecationWarning, stacklevel=2)
+    return fourierbasis_chrom(psr, components, T=T, fref=fref)
+
+def make_dmfourierbasis(alpha=2.0, tndm=False):
+    warnings.warn("make_dmfourierbasis is deprecated; use make_fourierbasis_dm instead.",
+                  DeprecationWarning, stacklevel=2)
     return make_fourierbasis_dm(alpha=alpha, tndm=tndm)
 
 def makegp_fourier(psr, prior, components, T=None, mean=None, fourierbasis=fourierbasis, common=[], exclude=['f', 'df'], name='fourierGP'):
@@ -966,6 +1042,13 @@ def make_timeinterpbasis(start_time=None, order=1):
     return timeinterpbasis
 
 def make_timeinterpbasis_chromatic(start_time=None, order=1, fref=1400.0):
+    """Build a chromatic time-interpolation basis with a variable chromatic index.
+
+    Time-domain analogue of :func:`fourierbasis_chrom` used by the FFT-covariance
+    GPs. The returned basis yields a callable ``Bmat_func(alpha)`` that scales the
+    achromatic :func:`make_timeinterpbasis` basis by ``(fref / psr.freqs) ** alpha``,
+    with ``alpha`` a free parameter. Used by :func:`makegp_fftcov_chrom`.
+    """
     timeinterpbasis_achrom = make_timeinterpbasis(start_time=start_time, order=order)
 
     def timeinterpbasis_chrom(psr, nmodes, T):
@@ -1032,6 +1115,13 @@ def make_timeinterpbasis_band_range_alpha(start_time=None, order=1, fref=1400.0)
     return timeinterpbasis_band_range_alpha
 
 def make_timeinterpbasis_dm(start_time=None, order=1, fref=1400.0):
+    """Build a DM time-interpolation basis (fixed chromatic index alpha = 2).
+
+    Time-domain analogue of :func:`make_fourierbasis_dm` used by the FFT-covariance
+    GPs: it scales the achromatic :func:`make_timeinterpbasis` basis by the
+    cold-plasma dispersion factor ``(fref / psr.freqs) ** 2``. Used by
+    :func:`makegp_fftcov_dm`.
+    """
     timeinterpbasis_achrom = make_timeinterpbasis(start_time=start_time, order=order)
 
     def timeinterpbasis_dm(psr, nmodes, T):
@@ -1040,6 +1130,24 @@ def make_timeinterpbasis_dm(start_time=None, order=1, fref=1400.0):
         return t_coarse, dt_coarse, scale[:, None] * Bmat
 
     return timeinterpbasis_dm
+
+def make_dmtimeinterpbasis(alpha=2.0, tndm=False, start_time=None, order=1):
+    warnings.warn("make_dmtimeinterpbasis is deprecated; use make_timeinterpbasis_dm "
+                  "(alpha=2 DM) or make_timeinterpbasis_chromatic (variable alpha) instead.",
+                  DeprecationWarning, stacklevel=2)
+    basis = make_timeinterpbasis(start_time, order)
+
+    def dmbasis(psr, components, T=None, fref=1400.0):
+        t_coarse, dt_coarse, Bmat = basis(psr, components, T)
+
+        if tndm:
+            Dm = (fref / psr.freqs) ** alpha * np.sqrt(12.0) * np.pi / 1400.0 / 1400.0 / 2.41e-4
+        else:
+            Dm = (fref / psr.freqs) ** alpha
+
+        return t_coarse, dt_coarse, Bmat * Dm[:, None]
+
+    return dmbasis
 
 def make_timeinterpbasis_solar(start_time=None, order=1):
     timeinterpbasis_achrom = make_timeinterpbasis(start_time=start_time, order=order)
@@ -1094,12 +1202,29 @@ def makegp_fftcov(psr, prior, components, T=None, t0=None, order=1, oversample=3
                           fourierbasis=(make_timeinterpbasis(start_time=t0, order=order) if fourierbasis is None else fourierbasis),
                           common=common, name=name)
 
-def makegp_fftcov_dm(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='fftcovGP_dm', fref=1400.0):
+def makegp_fftcov_dm(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='dm_gp', fref=1400.0):
+    """FFT-covariance (time-domain) GP for DM noise (fixed chromatic index alpha = 2).
+
+    DM counterpart of :func:`makegp_fftcov`: the achromatic time-interpolation basis
+    is replaced by :func:`make_timeinterpbasis_dm`, scaling each row by the cold-plasma
+    dispersion factor ``(fref / psr.freqs) ** 2``. ``prior`` is a power-spectral-density
+    function (e.g. :func:`powerlaw`) that is converted to a time-domain covariance via
+    :func:`psd2cov`. For a free chromatic index use :func:`makegp_fftcov_chrom`.
+    """
     T = getspan(psr) if T is None else T
     return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
                           components, T=T, fourierbasis=make_timeinterpbasis_dm(start_time=t0, order=order, fref=fref), common=common, name=name)
 
-def makegp_fftcov_chrom(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='fftcovGP_chrom', fref=1400.0):
+def makegp_fftcov_chrom(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='chrom_gp', fref=1400.0):
+    """FFT-covariance (time-domain) GP for chromatic noise with a variable index.
+
+    Chromatic counterpart of :func:`makegp_fftcov`: the achromatic time-interpolation
+    basis is replaced by :func:`make_timeinterpbasis_chromatic`, scaling each row by
+    ``(fref / psr.freqs) ** alpha`` with the chromatic index ``alpha`` a free parameter.
+    ``prior`` is a power-spectral-density function (e.g. :func:`powerlaw`) converted to a
+    time-domain covariance via :func:`psd2cov`. For the alpha = 2 (DM) case use
+    :func:`makegp_fftcov_dm`.
+    """
     T = getspan(psr) if T is None else T
     return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
                           components, T=T, fourierbasis=make_timeinterpbasis_chromatic(start_time=t0, order=order, fref=fref), common=common, name=name)
