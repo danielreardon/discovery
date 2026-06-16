@@ -1,5 +1,6 @@
 import inspect
 import pickle
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +27,10 @@ def makemodel_transformed(mylogl, transform=prior.makelogtransform_uniform, prio
         numpyro.deterministic('log_likelihood', logl)
         numpyro.factor('logl', logx(pars))
     numpyro_model.to_df = lambda chain: logx.to_df(chain['pars'])
+    # expose the transform and dimensionality so samplers can map physical starting values
+    # into the unconstrained 'pars' vector (used by run_nuts_multistart)
+    numpyro_model.transform = logx
+    numpyro_model.parlen = parlen
 
     return numpyro_model
 
@@ -103,6 +108,7 @@ def run_nuts_with_checkpoints(
     rng_key,
     outdir="chains",
     resume=False,
+    init_params=None,
 ):
     """Run NumPyro MCMC and save checkpoints.
 
@@ -122,6 +128,9 @@ def run_nuts_with_checkpoints(
         The directory for output files.
     resume : bool
         Whether to look for a state to resume from.
+    init_params : dict, optional
+        Initial parameter values for the chain, passed to ``sampler.warmup``. Used by
+        :func:`run_nuts_multistart` to start chains in different basins. Ignored on resume.
 
     Returns
     -------
@@ -176,7 +185,7 @@ def run_nuts_with_checkpoints(
         # immediately, before any sampling. Warmup itself cannot be resumed mid-way (its
         # step-size and mass-matrix adaptation schedule must run contiguously), but saving
         # here means an interruption during the first sampling chunk never repeats warmup.
-        sampler.warmup(rng_key)
+        sampler.warmup(rng_key, init_params=init_params)
         with checkpoint_file.open("wb") as f:
             pickle.dump(sampler.post_warmup_state, f)
         rng_key, _ = jax.random.split(rng_key)
@@ -207,3 +216,197 @@ def run_nuts_with_checkpoints(
         sampler.post_warmup_state = sampler.last_state
 
         rng_key, _ = jax.random.split(rng_key)
+
+
+def _laplace_logz(df):
+    """Approximate Laplace log-evidence of a single-mode chain (uniform prior).
+
+    ``logZ ~ max(logL) + 0.5 * ( d*log(2*pi) + log|Cov| )``, omitting the common uniform-prior
+    log-density so values are comparable across modes of the same model up to a shared constant.
+    This is a Gaussian approximation and is biased for strongly curved/degenerate modes -- it is
+    only used to flag when two modes have comparable posterior mass, not to reweight.
+    """
+    if 'logl' not in df.columns:
+        return float('nan')
+    if len(df) < 2:
+        return float(df['logl'].max())
+    param_cols = [c for c in df.columns if c != 'logl']
+    X = np.asarray(df[param_cols].to_numpy(), dtype=float)
+    X = X[:, X.std(axis=0) > 0]  # drop fixed columns
+    if X.shape[1] == 0:
+        return float(df['logl'].max())
+    cov = np.atleast_2d(np.cov(X, rowvar=False))
+    d = cov.shape[0]
+    sign, logdet = np.linalg.slogdet(cov)
+    if sign <= 0 or not np.isfinite(logdet):
+        # singular full covariance (e.g. d > n or perfect correlations): fall back to diagonal
+        logdet = float(np.sum(np.log(np.clip(np.diag(cov), 1e-300, None))))
+    return float(df['logl'].max() + 0.5 * (d * np.log(2.0 * np.pi) + logdet))
+
+
+def run_nuts_multistart(
+    sampler,
+    model,
+    init_grid,
+    num_samples_per_checkpoint,
+    rng_key,
+    outdir="chains",
+    resume=False,
+    comparable_logz_threshold=5.0,
+    mode_atol_sigma=4.0,
+):
+    """Run NUTS from several initialisations to escape a multimodal posterior.
+
+    A single NUTS chain is a local sampler: it stays in whichever basin it starts in and
+    cannot cross the low-probability valleys between well-separated modes (e.g. the band-noise
+    alpha/gamma/log10_A modes). This runs one checkpointed NUTS chain per entry in ``init_grid``
+    -- each entry overriding chosen physical parameters at its starting point -- and returns the
+    chain from the start that reached the highest maximum log-likelihood (the best mode found).
+
+    Chains are run **sequentially**, each fully checkpointed in ``outdir/start{i}``, so peak
+    memory stays that of a single chain (important for large PTA models). If you have the memory
+    and prefer parallel chains, run a vectorised ``num_chains>1`` sampler instead.
+
+    Parameters
+    ----------
+    sampler : numpyro.infer.MCMC
+        Sampler from :func:`makesampler_nuts` (num_chains=1).
+    model : callable
+        The model from :func:`makemodel_transformed`; carries ``.transform`` and ``.parlen``,
+        used to map physical starting values into the sampler's unconstrained ``pars`` vector.
+    init_grid : list of dict
+        One dict per chain, mapping a physical parameter name to its starting value. Names must
+        be in ``model.transform.params`` and values must lie within their prior ranges.
+        Parameters not listed start at their prior midpoint.
+    num_samples_per_checkpoint : int
+        Samples per checkpoint within each start (see :func:`run_nuts_with_checkpoints`).
+    rng_key : jax.random.PRNGKey
+        Base RNG key; each start uses ``jax.random.fold_in(rng_key, i)``.
+    outdir : str | Path
+        Parent directory; start ``i`` is checkpointed in ``outdir/start{i}``.
+    resume : bool
+        Passed through to each start, so interrupted starts resume from their checkpoints.
+    comparable_logz_threshold : float
+        If the two highest-mass distinct modes have Laplace ``logZ`` within this many nats, a
+        warning is emitted: the single returned mode is then NOT representative of the posterior
+        and a multimodal sampler should be used instead.
+    mode_atol_sigma : float
+        Starts whose MAP points agree to within this many within-chain standard deviations on
+        every parameter are treated as the same mode (greedy clustering).
+
+    Returns
+    -------
+    best_df : pandas.DataFrame
+        Posterior chain from the start with the highest maximum log-likelihood.
+    summary : list of dict
+        Per-start records ``{'start', 'init', 'max_logl', 'laplace_logz', 'mode', 'samples_file'}``
+        ranked best-first.
+
+    Notes
+    -----
+    A per-mode Laplace ``logZ`` (Gaussian approximation, uniform prior) is estimated only to
+    detect when modes have comparable posterior mass. When they do, returning the single best
+    mode is statistically wrong (the modes should appear in proportion to their mass); reach for
+    nested sampling (jaxns, the ``-ns`` option) or a normalizing-flow sampler (``discovery.flow``)
+    instead. No reweighting across modes is performed here.
+    """
+    transform = model.transform
+    valid = set(transform.params)
+    # ys = 0 maps to the prior midpoint for every parameter (with correct shapes for vector params)
+    base_phys = transform.to_dict(jnp.zeros(model.parlen))
+    original_num_samples = sampler.num_samples
+
+    outdir = Path(outdir)
+    outdir.mkdir(exist_ok=True, parents=True)
+
+    summary = []
+    for i, overrides in enumerate(init_grid):
+        phys = dict(base_phys)
+        for name, val in overrides.items():
+            if name not in valid:
+                hint = [p for p in transform.params if 'band' in p] or list(transform.params)[:6]
+                raise KeyError(f"run_nuts_multistart: '{name}' is not a model parameter. "
+                               f"Examples of valid names: {hint}")
+            phys[name] = val
+
+        ys = transform.to_vec(phys)
+        if not bool(jnp.all(jnp.isfinite(ys))):
+            raise ValueError(f"run_nuts_multistart: start {i} maps to non-finite init values; "
+                             f"check that overrides lie strictly within their priors: {overrides}")
+        init_params = {'pars': ys}
+
+        # reset per-start state: checkpointing mutates num_samples, and we want fresh warmup
+        sampler.num_samples = original_num_samples
+        sampler.post_warmup_state = None
+
+        start_dir = outdir / f"start{i}"
+        key_i = jax.random.fold_in(rng_key, i)
+
+        print(f"[multistart] start {i}/{len(init_grid) - 1}  init = {overrides}")
+        run_nuts_with_checkpoints(sampler, num_samples_per_checkpoint, key_i,
+                                  outdir=start_dir, resume=resume, init_params=init_params)
+
+        samples_file = start_dir / "numpyro-samples.feather"
+        df = pd.read_feather(samples_file).reset_index(drop=True)
+        max_logl = float(df['logl'].max()) if 'logl' in df.columns else float('nan')
+        print(f"[multistart] start {i} max logl = {max_logl:.2f}")
+        summary.append({'start': i, 'init': overrides, 'max_logl': max_logl,
+                        'samples_file': str(samples_file), '_df': df})
+
+    # --- per-start Laplace log-evidence (relative across modes; Gaussian approximation) ---
+    for r in summary:
+        r['laplace_logz'] = _laplace_logz(r['_df'])
+
+    # --- cluster starts into distinct modes by MAP proximity (in within-chain-sigma units) ---
+    param_cols = [c for c in summary[0]['_df'].columns if c != 'logl']
+    scales = np.array([max(float(np.median([r['_df'][c].std() for r in summary])), 1e-12)
+                       for c in param_cols])
+    maps = [r['_df'][param_cols].to_numpy(dtype=float)[r['_df']['logl'].to_numpy().argmax()]
+            for r in summary]
+    mode_reps = []  # representative MAP per distinct mode
+    for i, m in enumerate(maps):
+        mode = next((k for k, rep in enumerate(mode_reps)
+                     if np.max(np.abs(m - rep) / scales) < mode_atol_sigma), None)
+        if mode is None:
+            mode = len(mode_reps)
+            mode_reps.append(m)
+        summary[i]['mode'] = mode
+
+    # --- per-mode evidence = Laplace logZ of that mode's highest-likelihood member ---
+    modes = {}
+    for r in summary:
+        k = r['mode']
+        if k not in modes or r['max_logl'] > modes[k]['max_logl']:
+            modes[k] = {'mode': k, 'max_logl': r['max_logl'], 'laplace_logz': r['laplace_logz']}
+    ranked = sorted(modes.values(), key=lambda d: d['laplace_logz'], reverse=True)
+
+    print(f"[multistart] found {len(modes)} distinct mode(s):")
+    for d in ranked:
+        print(f"    mode {d['mode']}: laplace_logZ = {d['laplace_logz']:.2f}, "
+              f"max logl = {d['max_logl']:.2f}")
+
+    if len(ranked) >= 2:
+        gap = ranked[0]['laplace_logz'] - ranked[1]['laplace_logz']
+        if gap < comparable_logz_threshold:
+            msg = (f"run_nuts_multistart: the top two modes have COMPARABLE posterior mass "
+                   f"(Laplace dlogZ = {gap:.2f} < {comparable_logz_threshold}). The single best "
+                   f"mode returned here is NOT representative of the full posterior; the modes "
+                   f"should appear in proportion to their mass. Use a sampler that handles "
+                   f"multimodality correctly -- nested sampling (jaxns, the -ns option) or a "
+                   f"normalizing-flow sampler (discovery.flow) -- for this model.")
+            print("\n*** WARNING: " + msg + "\n")
+            warnings.warn(msg, RuntimeWarning, stacklevel=2)
+        else:
+            print(f"[multistart] best mode is clearly separated (Laplace dlogZ = {gap:.2f} >= "
+                  f"{comparable_logz_threshold}); returning it is appropriate.")
+
+    # best returned chain = start with the highest maximum log-likelihood
+    summary.sort(key=lambda r: (r['max_logl'] if np.isfinite(r['max_logl']) else -np.inf), reverse=True)
+    best = summary[0]
+    print(f"[multistart] best start = {best['start']} (mode {best['mode']}, "
+          f"max logl = {best['max_logl']:.2f}); init = {best['init']}")
+
+    best_df = best['_df']
+    for r in summary:
+        r.pop('_df', None)  # don't return heavy frames in the summary
+    return best_df, summary
