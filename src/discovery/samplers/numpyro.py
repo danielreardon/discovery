@@ -365,10 +365,10 @@ def run_nuts_multistart(
 
     summary = []
     for i, overrides in enumerate(init_grid):
-        print(f"[multistart] {stage} start {i}/{len(init_grid) - 1}  init = {overrides}")
+        print(f"[multistart] {stage} start {i+1}/{len(init_grid)}  init = {overrides}")
         df, samples_file = _run_start(i, target, chunk, resume)
         max_logl = float(df['logl'].max()) if 'logl' in df.columns else float('nan')
-        print(f"[multistart] {stage} start {i} max logl = {max_logl:.2f}")
+        print(f"[multistart] {stage} start {i+1}/{len(init_grid)} max logl = {max_logl:.2f}")
         summary.append({'start': i, 'init': overrides, 'max_logl': max_logl,
                         'samples_file': str(samples_file), '_df': df})
 
