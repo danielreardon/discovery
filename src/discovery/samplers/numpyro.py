@@ -254,18 +254,29 @@ def run_nuts_multistart(
     resume=False,
     comparable_logz_threshold=5.0,
     mode_atol_sigma=4.0,
+    scout_samples=100,
 ):
     """Run NUTS from several initialisations to escape a multimodal posterior.
 
     A single NUTS chain is a local sampler: it stays in whichever basin it starts in and
     cannot cross the low-probability valleys between well-separated modes (e.g. the band-noise
-    alpha/gamma/log10_A modes). This runs one checkpointed NUTS chain per entry in ``init_grid``
-    -- each entry overriding chosen physical parameters at its starting point -- and returns the
-    chain from the start that reached the highest maximum log-likelihood (the best mode found).
+    alpha/gamma/log10_A modes). This starts one checkpointed NUTS chain per entry in
+    ``init_grid`` -- each overriding chosen physical parameters at its starting point.
 
-    Chains are run **sequentially**, each fully checkpointed in ``outdir/start{i}``, so peak
-    memory stays that of a single chain (important for large PTA models). If you have the memory
-    and prefer parallel chains, run a vectorised ``num_chains>1`` sampler instead.
+    By default it runs in two stages to avoid paying for the full sampling phase in every basin:
+    a cheap **scout** stage runs warmup plus ``scout_samples`` samples for every start and scores
+    each basin by its maximum log-likelihood; then only the **best** start is promoted to a full
+    chain, *reusing its already-completed warmup* (it resumes from the scout checkpoint). Set
+    ``scout_samples=None`` to disable scouting and run a full chain for every start instead.
+
+    Scoring by the end-of-warmup/scout log-likelihood ranks basins by depth (peak), which agrees
+    with ranking by posterior mass only when the modes are well separated -- exactly the regime
+    where keeping the single best mode is valid. The per-mode Laplace ``logZ`` check below warns
+    when that assumption breaks.
+
+    Chains are run **sequentially**, each checkpointed in ``outdir/start{i}``, so peak memory
+    stays that of a single chain (important for large PTA models). If you have the memory and
+    prefer parallel chains, run a vectorised ``num_chains>1`` sampler instead.
 
     Parameters
     ----------
@@ -279,7 +290,7 @@ def run_nuts_multistart(
         be in ``model.transform.params`` and values must lie within their prior ranges.
         Parameters not listed start at their prior midpoint.
     num_samples_per_checkpoint : int
-        Samples per checkpoint within each start (see :func:`run_nuts_with_checkpoints`).
+        Samples per checkpoint within the full chain (see :func:`run_nuts_with_checkpoints`).
     rng_key : jax.random.PRNGKey
         Base RNG key; each start uses ``jax.random.fold_in(rng_key, i)``.
     outdir : str | Path
@@ -293,14 +304,17 @@ def run_nuts_multistart(
     mode_atol_sigma : float
         Starts whose MAP points agree to within this many within-chain standard deviations on
         every parameter are treated as the same mode (greedy clustering).
+    scout_samples : int or None
+        Samples drawn (after warmup) when scouting each basin before promoting the best start to
+        a full chain. ``None`` disables scouting and runs a full chain for every start.
 
     Returns
     -------
     best_df : pandas.DataFrame
-        Posterior chain from the start with the highest maximum log-likelihood.
+        Full posterior chain from the start with the highest maximum log-likelihood.
     summary : list of dict
         Per-start records ``{'start', 'init', 'max_logl', 'laplace_logz', 'mode', 'samples_file'}``
-        ranked best-first.
+        ranked best-first. With scouting, all but the best are scout-length chains.
 
     Notes
     -----
@@ -319,7 +333,8 @@ def run_nuts_multistart(
     outdir = Path(outdir)
     outdir.mkdir(exist_ok=True, parents=True)
 
-    summary = []
+    # map each start's physical overrides into the unconstrained 'pars' init vector
+    inits = []
     for i, overrides in enumerate(init_grid):
         phys = dict(base_phys)
         for name, val in overrides.items():
@@ -328,28 +343,32 @@ def run_nuts_multistart(
                 raise KeyError(f"run_nuts_multistart: '{name}' is not a model parameter. "
                                f"Examples of valid names: {hint}")
             phys[name] = val
-
         ys = transform.to_vec(phys)
         if not bool(jnp.all(jnp.isfinite(ys))):
             raise ValueError(f"run_nuts_multistart: start {i} maps to non-finite init values; "
                              f"check that overrides lie strictly within their priors: {overrides}")
-        init_params = {'pars': ys}
+        inits.append({'pars': ys})
 
-        # reset per-start state: checkpointing mutates num_samples, and we want fresh warmup
-        sampler.num_samples = original_num_samples
-        sampler.post_warmup_state = None
-
+    def _run_start(i, target, per_checkpoint, do_resume):
+        sampler.num_samples = target          # checkpointing mutates this; set per call
+        sampler.post_warmup_state = None       # fresh warmup (overwritten on resume)
         start_dir = outdir / f"start{i}"
-        key_i = jax.random.fold_in(rng_key, i)
-
-        print(f"[multistart] start {i}/{len(init_grid) - 1}  init = {overrides}")
-        run_nuts_with_checkpoints(sampler, num_samples_per_checkpoint, key_i,
-                                  outdir=start_dir, resume=resume, init_params=init_params)
-
+        run_nuts_with_checkpoints(sampler, per_checkpoint, jax.random.fold_in(rng_key, i),
+                                  outdir=start_dir, resume=do_resume, init_params=inits[i])
         samples_file = start_dir / "numpyro-samples.feather"
-        df = pd.read_feather(samples_file).reset_index(drop=True)
+        return pd.read_feather(samples_file).reset_index(drop=True), samples_file
+
+    scouting = scout_samples is not None
+    stage = "scout" if scouting else "full"
+    target = scout_samples if scouting else original_num_samples
+    chunk = scout_samples if scouting else num_samples_per_checkpoint
+
+    summary = []
+    for i, overrides in enumerate(init_grid):
+        print(f"[multistart] {stage} start {i}/{len(init_grid) - 1}  init = {overrides}")
+        df, samples_file = _run_start(i, target, chunk, resume)
         max_logl = float(df['logl'].max()) if 'logl' in df.columns else float('nan')
-        print(f"[multistart] start {i} max logl = {max_logl:.2f}")
+        print(f"[multistart] {stage} start {i} max logl = {max_logl:.2f}")
         summary.append({'start': i, 'init': overrides, 'max_logl': max_logl,
                         'samples_file': str(samples_file), '_df': df})
 
@@ -400,9 +419,21 @@ def run_nuts_multistart(
             print(f"[multistart] best mode is clearly separated (Laplace dlogZ = {gap:.2f} >= "
                   f"{comparable_logz_threshold}); returning it is appropriate.")
 
-    # best returned chain = start with the highest maximum log-likelihood
+    # best start = highest maximum log-likelihood (basin depth)
     summary.sort(key=lambda r: (r['max_logl'] if np.isfinite(r['max_logl']) else -np.inf), reverse=True)
     best = summary[0]
+
+    # when scouting, promote only the winner to a full chain, reusing its warmup (resume from
+    # the scout checkpoint). The losing starts keep their scout-length chains.
+    if scouting:
+        print(f"[multistart] promoting best scout start {best['start']} (mode {best['mode']}) "
+              f"to a full chain of {original_num_samples} samples...")
+        df, samples_file = _run_start(best['start'], original_num_samples,
+                                      num_samples_per_checkpoint, do_resume=True)
+        best['_df'] = df
+        best['samples_file'] = str(samples_file)
+        best['max_logl'] = float(df['logl'].max()) if 'logl' in df.columns else best['max_logl']
+
     print(f"[multistart] best start = {best['start']} (mode {best['mode']}, "
           f"max logl = {best['max_logl']:.2f}); init = {best['init']}")
 
