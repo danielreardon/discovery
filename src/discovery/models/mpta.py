@@ -187,7 +187,7 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
 
 
 def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={},
-                        ecorr=True, quadratic=False, ecorr_poly_order=None, ecorr_correlated=False, global_ecorr=False, # ecorr options. ecorr_poly_order=N selects an order-N Legendre ECORR (log-frequency basis); ecorr_correlated=True uses the full-M (correlated-mode) variant that can also model a frequency-asymmetric jitter amplitude
+                        ecorr=True, quadratic=False, ecorr_nmodes=None, ecorr_correlated=False, global_ecorr=False, # ecorr options. ecorr_nmodes=N selects an N-mode Legendre ECORR (log-frequency basis; nmodes=1 is standard ECORR); ecorr_correlated=True uses the full-M (correlated-mode) variant that can also model a frequency-asymmetric jitter amplitude
                         background=True, bkgrnd_log10_A=None, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, # Base model: gwb, red, dm, chromatic, solar wind
                         band=False, band_alpha=False, # Additional GP models
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False, # Deterministic chromatic models
@@ -204,11 +204,11 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     model_components += tm
     model_components += [measurement_noise]
     if ecorr:
-        if ecorr_poly_order is not None:
+        if ecorr_nmodes is not None:
             if ecorr_correlated:
-                model_components += [signals.makegp_ecorr_legendre_correlated(psr, noisedict=noisedict, order=ecorr_poly_order)]
+                model_components += [signals.makegp_ecorr_legendre_correlated(psr, noisedict=noisedict, nmodes=ecorr_nmodes)]
             else:
-                model_components += [signals.makegp_ecorr_legendre(psr, noisedict=noisedict, order=ecorr_poly_order)]
+                model_components += [signals.makegp_ecorr_legendre(psr, noisedict=noisedict, nmodes=ecorr_nmodes)]
         elif quadratic:
             model_components += [signals.makegp_quadratic_ecorr_legendre(psr, noisedict=noisedict)]
         else:
@@ -283,15 +283,16 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
         ml_idx = df['logl'].idxmax()
         noisedict = {col: df.loc[ml_idx, col] for col in df.columns if col.startswith(psr.name)}
  
-        # Detect Legendre ecorr and its order from parameters ending in _q{r}
-        # (order 2 reproduces the legacy quadratic ecorr exactly). The correlated
-        # variant's ..._ecorr_corr_q{a}q{b} params do not end in a bare digit, so
-        # they are ignored here and instead flagged by ecorr_correlated below.
-        qidxs = [int(col.rsplit('_q', 1)[-1]) for col in df.columns
-                 if 'ecorr' in col and col.rsplit('_q', 1)[-1].isdigit()]
-        ecorr_poly_order = max(qidxs) if qidxs else None
+        # Detect a multi-mode Legendre ecorr from the higher-mode amplitudes
+        # ..._log10_ecorr_k{m} (mode 0 is the unsuffixed ..._log10_ecorr, identical
+        # to standard ECORR). nmodes = highest k index + 1; if no _k params are
+        # present it is either standard ECORR or nmodes=1 Legendre (the same model),
+        # so ecorr_nmodes stays None and the standard makegp_ecorr branch is used.
+        kidxs = [int(col.rsplit('_k', 1)[-1]) for col in df.columns
+                 if 'log10_ecorr_k' in col and col.rsplit('_k', 1)[-1].isdigit()]
+        ecorr_nmodes = max(kidxs) + 1 if kidxs else None
         # Detect the full-M (correlated-mode) variant from its correlation params
-        ecorr_correlated = has_param(df, "ecorr_corr_q")
+        ecorr_correlated = has_param(df, "ecorr_corr_k")
  
         if not fftInt:
             curn = signals.makegp_fourier(psr, signals.powerlaw, common_components, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
@@ -301,7 +302,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
  
         # background=False, as we are including a common red noise process
         m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict, 
-                                ecorr_poly_order=ecorr_poly_order, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
+                                ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
                                 red=has_param(df, "red_noise"), red2=has_param(df, "red_noise2"),
                                 dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_poly=chrom_poly, sw=has_param(df, "sw_gp"),
                                 band=has_param(df, "band_gp"), band_alpha=has_param(df, "bandalpha_gp"),

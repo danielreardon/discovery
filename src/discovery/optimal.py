@@ -503,6 +503,171 @@ class OS:
 
         return get_shift
 
+    # ------------------------------------------------------------------------
+    # Robust (NP / NPMV) detection statistics
+    #
+    # van Haasteren, Allen & Romano (2025), "Optimal robust detection statistics
+    # for pulsar timing arrays" (arXiv:2509.06489).
+    #
+    # The literature-standard "optimal cross-correlation statistic" implemented
+    # above (`os`) is the deflection-optimal, cross-correlation-only statistic
+    # DFCC.  This paper introduces the Neyman-Pearson-Minimum-Variance (NPMV)
+    # statistic, which is as close as possible (minimum variance under H0) to the
+    # NP-optimal statistic while still using only cross-correlations, and which
+    # therefore remains robust against pulsar-noise mismodeling.
+    #
+    # All filters are built in the same reduced, whitened "x" basis used by `Q`,
+    # in which the CURN null hypothesis H0 has unit covariance (x ~ N(0, I)).  In
+    # that basis the per-pulsar (auto-correlation) blocks of the whitened DF filter
+    # vanish for a CURN H0, and the paper's relations (eqs. 18, 20, 21) become
+    #
+    #     A      = I + Qtilde_DF                          (= N^{-1/2} C N^{-1/2}, eq. 19)
+    #     Qtilde_DF   = A - I                              (eq. 18)
+    #     Qtilde_DFCC = Qtilde_DF - Diag Qtilde_DF = Qtilde_DF   (CURN, eq. 8)
+    #     Qtilde_NP   = I - A^{-1} = Qtilde_DF (I + Qtilde_DF)^{-1}   (eq. 20)
+    #     Qtilde_NPMV = Qtilde_NP - Diag Qtilde_NP          (eq. 21)
+    #
+    # where `Diag` zeroes the per-pulsar (block-diagonal) blocks, i.e. removes the
+    # autocorrelations.  The statistic is then D(kind) = x^T Qtilde_kind x with
+    # x ~ N(0, I) under H0, so the generalized-chi^2 CDF / p-value follow directly
+    # from the filter eigenvalues via `eig2cdf` (Sec. 6).
+    #
+    # Notes / assumptions:
+    #   * Built for the common 1D (diagonal) GW prior Phi, matching `Q`.
+    #   * The assumed signal hypothesis H_S enters through Phi(params) (the GW
+    #     spectrum incl. amplitude), exactly as it does for `Q`/`sample`.
+    #   * Forming Qtilde_NP requires one dense (cnt x cnt) inverse, cnt = npsr*ngw.
+    # ------------------------------------------------------------------------
+
+    @functools.cached_property
+    def robust_filters(self):
+        """Whitened DF / DFCC / NP / NPMV filters, the whitened data, and the
+        whitened signal covariance A, as a function of params.
+
+        Returns get_filters(params, orf=hd_orfa) -> dict with keys
+            'df', 'dfcc', 'np', 'npmv' : (cnt, cnt) whitened quadratic-form filters
+            'A'                        : (cnt, cnt) whitened signal covariance N^{-1/2} C N^{-1/2}
+            'x'                        : (cnt,) whitened data, x ~ N(0, I) under H0
+            'inds', 'cnt'              : per-pulsar block slices and total dimension
+        """
+        kernelsolves = [psl.N.make_kernelsolve(psl.y, gw.F) for (psl, gw) in zip(self.psls, self.gws)]
+        getN = self.gws[0].Phi.getN
+        pairs, angles = self.pairs, matrix.jnparray(self.angles)
+
+        ngw = self.gws[0].F.shape[1]
+        cnt = len(self.psls) * ngw
+        inds = [slice(i * ngw, (i + 1) * ngw) for i in range(len(self.psls))]
+        zblock = matrix.jnp.zeros((ngw, ngw))
+
+        def get_filters(params, orf=hd_orfa):
+            Phi = getN(params)
+            if Phi.ndim != 1:
+                raise NotImplementedError("Robust filters are implemented for a 1D (diagonal) GW prior Phi.")
+            sPhi = matrix.jnp.sqrt(Phi)
+
+            ks = [k(params) for k in kernelsolves]
+            kvs = [k[0] for k in ks]                       # kv_i = T_i^T K_i^{-1} y_i
+            Ss  = [0.5 * (k[1] + k[1].T) for k in ks]      # S_i  = T_i^T K_i^{-1} T_i (symmetrized)
+
+            # B_i = diag(sPhi) @ chol(S_i): B_i B_i^T = diag(sPhi) S_i diag(sPhi) = D_i,
+            # the per-pulsar covariance of d_i = sPhi * kv_i under H0.
+            As = [matrix.jnp.linalg.cholesky(S + (1e-10 * matrix.jnp.trace(S) / S.shape[0]) * matrix.jnp.eye(S.shape[0]))
+                  for S in Ss]
+            Bs = [sPhi[:, None] * A for A in As]
+
+            orfs = orf(angles)
+
+            # whitened DF filter: zero block-diagonal, off-diagonal block (i,j) = orf_ij B_i^T B_j
+            Qdf = matrix.jnp.zeros((cnt, cnt))
+            for w, (i, j) in zip(orfs, pairs):
+                Bij = w * (Bs[i].T @ Bs[j])
+                Qdf = Qdf.at[inds[i], inds[j]].add(Bij)
+                Qdf = Qdf.at[inds[j], inds[i]].add(Bij.T)
+
+            eye = matrix.jnp.eye(cnt)
+            A_full = eye + Qdf                             # = N^{-1/2} C N^{-1/2}
+            Qnp = eye - matrix.jnp.linalg.inv(A_full)      # I - A^{-1}
+
+            # Diag operator: zero the per-pulsar (block-diagonal) blocks
+            def strip_diag(M):
+                for ii in inds:
+                    M = M.at[ii, ii].set(zblock)
+                return M
+
+            Qdfcc = strip_diag(Qdf)                        # == Qdf for CURN, kept explicit
+            Qnpmv = strip_diag(Qnp)
+
+            # whiten data into x basis: B_i x_i = sPhi * kv_i  =>  x_i = B_i^{-1} (sPhi * kv_i)
+            x = matrix.jnp.zeros((cnt,))
+            for ii, B, kv in zip(inds, Bs, kvs):
+                xi = matrix.jsp.linalg.solve_triangular(B, sPhi * kv, lower=True)
+                x = x.at[ii].set(xi)
+
+            return {'df': Qdf, 'dfcc': Qdfcc, 'np': Qnp, 'npmv': Qnpmv,
+                    'A': A_full, 'x': x, 'inds': inds, 'cnt': cnt}
+
+        get_filters.params = sorted(set.union(*[set(k.params) for k in kernelsolves], getN.params))
+
+        return get_filters
+
+    @functools.cached_property
+    def robust(self):
+        """Observed robust statistics and their generalized-chi^2 H0 p-values.
+
+        Returns get_robust(params, orf=hd_orfa, kinds=('dfcc', 'np', 'npmv'),
+                           cutoff=1e-6, limit=100, epsabs=1e-6)
+        -> dict keyed by statistic name, each value a dict with
+            'D'    : observed statistic value, D = x^T Q x
+            'p'    : H0 p-value, Prob(D > D_obs | H0)
+            'eigs' : eigenvalues of the (whitened) filter
+        """
+        get_filters = self.robust_filters
+
+        def get_robust(params, orf=hd_orfa, kinds=('dfcc', 'np', 'npmv'),
+                       cutoff=1e-6, limit=100, epsabs=1e-6):
+            f = get_filters(params, orf)
+            x = f['x']
+
+            out = {}
+            for kind in kinds:
+                Qk = 0.5 * (f[kind] + f[kind].T)
+                D = float(x @ (Qk @ x))
+                eigs = matrix.jnp.linalg.eigh(Qk)[0]
+                cdf = eig2cdf(matrix.jnparray([D]), eigs, cutoff=cutoff, limit=limit, epsabs=epsabs)[0]
+                out[kind] = {'D': D, 'p': float(1.0 - cdf), 'eigs': eigs}
+
+            return out
+
+        get_robust.params = get_filters.params
+
+        return get_robust
+
+    def robust_cdf(self, params, osxs, kind='npmv', orf=hd_orfa, hypothesis='H0',
+                   cutoff=1e-6, limit=100, epsabs=1e-6):
+        """Generalized-chi^2 CDF of a robust statistic at thresholds `osxs`.
+
+        With hypothesis='H0' the data are whitened (x ~ N(0, I)) so this gives the
+        false-alarm side, P(D < tau | H0); the FAP is 1 - CDF.  With
+        hypothesis='HS' the data covariance is the whitened signal covariance A,
+        giving the detection side, P(D < tau | H_S); the detection probability is
+        1 - CDF.  Together these reproduce the ROC curves of Figs. 2-3.
+        """
+        f = self.robust_filters(params, orf)
+        Q = 0.5 * (f[kind] + f[kind].T)
+
+        if hypothesis == 'H0':
+            E = Q                                          # x ~ N(0, I)
+        elif hypothesis in ('HS', 'H_S', 'signal'):
+            w, V = matrix.jnp.linalg.eigh(f['A'])          # A = V diag(w) V^T, A^{1/2} = V diag(sqrt w) V^T
+            Ahalf = (V * matrix.jnp.sqrt(matrix.jnp.clip(w, 0.0))) @ V.T
+            E = Ahalf @ Q @ Ahalf                          # eig(C^{1/2} Q C^{1/2}), C = A
+        else:
+            raise ValueError("hypothesis must be 'H0' or 'HS'")
+
+        eigs = matrix.jnp.linalg.eigh(0.5 * (E + E.T))[0]
+
+        return eig2cdf(osxs, eigs, cutoff=cutoff, limit=limit, epsabs=epsabs)
+
     def gx2cdf(self, params, osxs, cutoff=1e-6, limit=100, epsabs=1e-6):
         Qmat = self.Q(params)
         eigx = matrix.jnp.linalg.eigh(Qmat)[0]

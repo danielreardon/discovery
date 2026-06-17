@@ -17,9 +17,8 @@ priordict_standard = {
     "(.*_)?efac": [0.9, 1.1],
     "(.*_)?t2equad": [-8.5, -5],
     "(.*_)?tnequad": [-8.5, -5],
-    '(.*_)?log10_ecorr_q.*': [-10, -5],
-    "(.*_)?log10_ecorr": [-10, -5],
-    r"(.*_)?ecorr_corr_q[0-9]+q[0-9]+": [-10, 10],  # row-normalised Cholesky coords of the Legendre mode correlation matrix (makegp_ecorr_legendre_correlated); symmetric so both signs of inter-mode correlation are allowed
+    "(.*_)?log10_ecorr": [-10, -5],  # also matches the Legendre mode amplitudes ..._log10_ecorr_k{m}
+    r"(.*_)?ecorr_corr_k[0-9]+k[0-9]+": [-1, 1],  # (partial) correlations of the Legendre mode covariance (makegp_ecorr_legendre_correlated); C-vine parametrisation, valid PSD for any values in (-1, 1)
     "(.*_)?rednoise_log10_A.*": [-20, -11],
     "(.*_)?rednoise_gamma.*": [0, 7],
     "(.*_)?rednoise_log10_fb": [-9, -6],

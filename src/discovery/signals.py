@@ -266,36 +266,41 @@ def makegp_ecorr(psr, noisedict={}, enterprise=False, scale=1.0, selection=selec
     
 def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
                           selection=selection_backend_flags, variable=False,
-                          order=2, fref=None, name='ecorrGPleg'):
-    """ECORR GP using a Legendre-polynomial with order=``order`` frequency basis.
+                          nmodes=3, fref=None, name='ecorrGPleg'):
+    """ECORR GP with a Legendre-polynomial frequency basis (``nmodes`` modes).
 
-    For each backend, the per-TOA log-frequency coordinate
-    ``x = log(freqs / fref)`` is linearly rescaled into ``y in [-1, 1]`` across
-    that backend's bandwidth. Legendre polynomials P_0(y) through P_order(y) are
-    used as the frequency basis and order specifies the highest polynomial
-    degree included. On the interval [-1, 1] these polynomials are *orthogonal*
-    (with weight 1), so the ``order``+1 log10_ecorr amplitudes per backend
-    (parameters ``..._log10_ecorr_q0`` ... ``_q{order}``) correspond to
-    nearly-independent frequency modes of the jitter covariance and the
-    resulting posteriors are well conditioned. P_0 is the band-mean
-    amplitude (order=0 is the standard ECORR up to parameter naming), P_1
-    captures linear chromatic decorrelation, P_2 quadratic curvature across
-    the band, and so on. Varying ``order`` allows the number of significant
-    jitter eigenmodes (cf. the SVD analysis of Kulkarni et al.) to be part
-    of per-pulsar model selection.
+    Within each backend, TOA frequencies are mapped to a normalised log-frequency
+    coordinate ``y in [-1, 1]`` (``y = (log f - mid) / half``, with ``mid`` and
+    ``half`` set by the backend's band edges), and the first ``nmodes`` Legendre
+    polynomials P_0(y), ..., P_{nmodes-1}(y) form the within-epoch frequency basis.
+    Because these polynomials are orthogonal on [-1, 1], the ``nmodes`` per-backend
+    amplitudes (``..._log10_ecorr`` for mode 0, then ``..._log10_ecorr_k1`` ...
+    ``_k{nmodes-1}``) act as nearly-independent jitter modes and the posteriors
+    stay well conditioned:
 
-    If ``fref`` is None (default), the reference frequency is set per-backend
-    to the mean of ``psr.freqs`` for that backend's TOAs (this only affects the
-    mapping into [-1, 1] and keeps the basis well-conditioned for any band).
+        nmodes=1  ->  standard ECORR (band-mean amplitude only; the mode-0
+                      parameter name ``..._log10_ecorr`` is identical to that of
+                      :func:`makegp_ecorr`, so noisedicts are interchangeable)
+        nmodes=2  ->  + linear chromatic decorrelation across the band
+        nmodes=3  ->  + quadratic curvature
+        nmodes=N  ->  Legendre modes up to degree N-1
 
-    The log-frequency coordinate matches the observed stationarity of jitter
-    decorrelation in log(fa/fb) (Kulkarni et al.), and fits the implied jitter
-    covariance better than a linear-frequency coordinate at every bandwidth
-    (mildly at MeerKAT L-band, substantially for e.g. UWL).
+    Varying ``nmodes`` lets the number of significant jitter modes (cf. the SVD
+    analysis of Kulkarni et al.) be part of per-pulsar model selection.
+
+    The mode amplitudes are independent (diagonal prior), so the reconstructed
+    jitter variance is symmetric about band centre. For a frequency-asymmetric
+    amplitude (e.g. the low-frequency excess in J0437), use the correlated-mode
+    variant :func:`makegp_ecorr_legendre_correlated`.
+
+    If ``fref`` is None (default) it is set per-backend to the mean ``psr.freqs``;
+    it only centres ``x`` and cancels out of ``y``, so it merely keeps the basis
+    well conditioned. The log-frequency coordinate matches the observed
+    stationarity of jitter decorrelation in log(fa/fb) (Kulkarni et al.).
     """
 
-    if not isinstance(order, int) or order < 0:
-        raise ValueError('makegp_ecorr_legendre: order must be an integer >= 0')
+    if not isinstance(nmodes, int) or nmodes < 1:
+        raise ValueError('makegp_ecorr_legendre: nmodes must be an integer >= 1')
 
     freqs = np.asarray(psr.freqs)
 
@@ -303,32 +308,32 @@ def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
     backends = [b for b in sorted(set(backend_flags)) if b != '']
     masks = [np.array(backend_flags == backend) for backend in backends]
 
-    log10_ecorrs_per_order = [[] for _ in range(order+1)]
-    U_blocks_per_order = [[] for _ in range(order+1)]
+    log10_ecorrs_per_mode = [[] for _ in range(nmodes)]
+    U_blocks_per_mode = [[] for _ in range(nmodes)]
 
     for backend, mask in zip(backends, masks):
-        for o in range(order + 1):
-            log10_ecorrs_per_order[o].append(f'{psr.name}_{backend}_log10_ecorr_q{o}')
+        for m in range(nmodes):
+            suffix = '' if m == 0 else f'_k{m}'
+            log10_ecorrs_per_mode[m].append(f'{psr.name}_{backend}_log10_ecorr{suffix}')
 
-        # per-backend reference frequency (controls the centring of x)
+        # per-backend reference frequency (only centres x; cancels out of y)
         fref_b = float(np.mean(freqs[mask])) if fref is None else float(fref)
         x = np.log(freqs / fref_b)
 
-        # rescale x linearly to y in [-1, 1] across this backend's TOAs so that
-        # the Legendre polynomials are evaluated on their natural support.
+        # rescale to y in [-1, 1] across this backend's band so the Legendre
+        # polynomials are evaluated on their natural support
         x_backend = x[mask]
         x_min, x_max = float(x_backend.min()), float(x_backend.max())
         half_range = 0.5 * (x_max - x_min)
         if half_range == 0.0:
-            # degenerate: only one observing frequency in this backend.
-            # Fall back to the centred coordinate, where only the P_0
-            # (constant) amplitude carries a meaningful basis.
+            # only one observing frequency in this backend: fall back to the
+            # centred coordinate, where only P_0 (the constant mode) is meaningful
             y = np.zeros_like(freqs)
         else:
-            y = (x - 0.5 * (x_max + x_min)) / half_range  # in [-1, 1] for this backend
+            y = (x - 0.5 * (x_max + x_min)) / half_range
 
-        # columns of legvander are P_0(y) ... P_{order}(y)
-        legendre_modes = np.polynomial.legendre.legvander(y, order)
+        # columns of legvander are P_0(y) ... P_{nmodes-1}(y)
+        legendre_modes = np.polynomial.legendre.legvander(y, nmodes - 1)
 
         # quantize TOAs that belong to this backend
         bins = quantize(psr.toas * mask)
@@ -340,20 +345,19 @@ def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
             U0 = np.vstack([bins == i for i in range(1, bins.max() + 1)]).T
 
         U0 = U0.astype(np.float64)
-        # multiplying the indicator columns by each Legendre mode gives
-        # the per-order basis blocks
-        for o in range(order + 1):
-            U_blocks_per_order[o].append(U0 * legendre_modes[:, o][:, None])
+        # multiply the per-epoch indicator columns by each Legendre mode
+        for m in range(nmodes):
+            U_blocks_per_mode[m].append(U0 * legendre_modes[:, m][:, None])
 
-    # full basis: [ order0 columns | order1 columns | ... ]
-    U_per_order = [np.hstack(blocks) for blocks in U_blocks_per_order]
-    Umatall = np.hstack(U_per_order)
+    # full basis, grouped by mode: [ mode0 columns | mode1 columns | ... ]
+    U_per_mode = [np.hstack(blocks) for blocks in U_blocks_per_mode]
+    Umatall = np.hstack(U_per_mode)
 
     # build per-parameter masks selecting the corresponding columns of Umatall
     pmasks, params = [], []
     cnt = 0
-    for o in range(order + 1):
-        for U_block, log10_ecorr in zip(U_blocks_per_order[o], log10_ecorrs_per_order[o]):
+    for m in range(nmodes):
+        for U_block, log10_ecorr in zip(U_blocks_per_mode[m], log10_ecorrs_per_mode[m]):
             n = U_block.shape[1]
             z = np.zeros(Umatall.shape[1], dtype=np.float64)
             z[cnt:cnt + n] = 1.0
@@ -397,27 +401,27 @@ def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
 def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
                                     selection=selection_backend_flags, variable=False,
                                     fref=None, name='quadecorrGPleg'):
-    """Second-order ECORR GP using a Legendre-polynomial frequency basis.
+    """Three-mode ECORR GP using a Legendre-polynomial frequency basis.
 
-    Thin wrapper around :func:`makegp_ecorr_legendre` with ``order=2``,
-    preserved for backward compatibility (parameters ``..._log10_ecorr_q0/_q1/_q2``
-    per backend).
+    Thin wrapper around :func:`makegp_ecorr_legendre` with ``nmodes=3`` (Legendre
+    degrees 0-2), preserved for backward compatibility (parameters
+    ``..._log10_ecorr``, ``_k1``, ``_k2`` per backend).
     """
     return makegp_ecorr_legendre(psr, noisedict=noisedict, enterprise=enterprise, scale=scale,
                                  selection=selection, variable=variable,
-                                 order=2, fref=fref, name=name)
+                                 nmodes=3, fref=fref, name=name)
 
 
 def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=1.0,
                                      selection=selection_backend_flags, variable=False,
-                                     order=2, fref=None,
+                                     nmodes=3, fref=None,
                                      name='correcorrGPleg'):
     """ECORR GP with a *correlated* Legendre frequency basis (full mode covariance).
 
     Identical within-epoch basis to :func:`makegp_ecorr_legendre`, but the
-    ``order+1`` Legendre mode amplitudes share a full positive-definite
-    covariance matrix ``M`` per backend rather than being independent. Writing
-    the within-epoch frequency covariance as
+    ``nmodes`` Legendre mode amplitudes share a full positive-definite covariance
+    matrix ``M`` per backend rather than being independent. Writing the
+    within-epoch frequency covariance as
 
         K(y_i, y_j) = sum_{a,b} M_ab P_a(y_i) P_b(y_j),
 
@@ -426,30 +430,32 @@ def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=
     *tilts* the variance across the band, so this model CAN represent jitter
     whose amplitude is higher at one end of the band -- e.g. the low-frequency
     excess seen in the J0437 jitter covariance -- which the diagonal
-    :func:`makegp_ecorr_legendre` cannot (there K(y, y) = sum_o a_o^2 P_o(y)^2
+    :func:`makegp_ecorr_legendre` cannot (there K(y, y) = sum_m a_m^2 P_m(y)^2
     is even in y and hence symmetric about band centre for any parameters).
 
-    M is parametrised as ``M = D R D`` with
-    ``D = diag(10^log10_ecorr_q0, ..., 10^log10_ecorr_q{order})`` (times
-    ``scale``), so the per-mode amplitudes ``..._log10_ecorr_q{o}`` keep exactly
-    the same meaning and prior as in the diagonal model (R has unit diagonal, so
-    ``10^log10_ecorr_q{o}`` is the marginal std of mode o), and R is a
-    unit-diagonal correlation matrix built from the unconstrained parameters
-    ``..._ecorr_corr_q{a}q{b}`` (a > b) via a row-normalised Cholesky
-    construction that guarantees R -- hence M -- is positive semi-definite for
-    any parameter values. Setting every correlation parameter to zero gives
-    R = I and recovers :func:`makegp_ecorr_legendre` exactly, so the two models
-    are nested for model comparison.
+    M is parametrised as ``M = D R D`` with ``D`` the diagonal of per-mode
+    amplitudes (times ``scale``), so the amplitudes (``..._log10_ecorr`` for mode
+    0, ``..._log10_ecorr_k{m}`` above) keep exactly the same meaning and prior as
+    in the diagonal model (R has unit diagonal, so each amplitude is the marginal
+    std of its mode), and R is a unit-diagonal correlation matrix built from the
+    parameters ``..._ecorr_corr_k{a}k{b}`` (a > b), each in (-1, 1), via the
+    partial-correlation (C-vine) Cholesky construction: ``ecorr_corr_k{a}k0`` is
+    the correlation of mode a with mode 0, and ``ecorr_corr_k{a}k{b}`` (b > 0) is
+    the partial correlation of modes a and b given modes 0..b-1. Any combination
+    of values in (-1, 1) yields a valid positive-semidefinite R (hence M), so the
+    parameters can be given a flat [-1, 1] prior. Setting every correlation
+    parameter to zero gives R = I and recovers :func:`makegp_ecorr_legendre`
+    exactly, so the two models are nested for model comparison.
 
-    This costs ``(order+1)(order+2)/2`` parameters per backend (6 at order 2)
-    versus ``order+1`` for the diagonal model. The prior covariance Phi is block
-    diagonal (one ``(order+1) x (order+1)`` block per epoch) but is currently
-    assembled and inverted densely via NoiseMatrix2D, so it is best reserved for
-    the bright, high-S/N pulsars where the extra parameters can be constrained.
+    This costs ``nmodes(nmodes+1)/2`` parameters per backend (6 at nmodes=3)
+    versus ``nmodes`` for the diagonal model. The prior covariance Phi is block
+    diagonal (one ``nmodes x nmodes`` block per epoch) but is currently assembled
+    and inverted densely via NoiseMatrix2D, so it is best reserved for the bright,
+    high-S/N pulsars where the extra parameters can be constrained.
     """
 
-    if not isinstance(order, int) or order < 0:
-        raise ValueError('makegp_ecorr_legendre_correlated: order must be an integer >= 0')
+    if not isinstance(nmodes, int) or nmodes < 1:
+        raise ValueError('makegp_ecorr_legendre_correlated: nmodes must be an integer >= 1')
 
     freqs = np.asarray(psr.freqs)
 
@@ -457,11 +463,11 @@ def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=
     backends = [b for b in sorted(set(backend_flags)) if b != '']
     masks = [np.array(backend_flags == backend) for backend in backends]
 
-    k = order + 1
+    k = nmodes  # dimension of the per-epoch mode covariance M
 
     U_backend = []               # per-backend basis blocks (columns epoch-major, mode-minor)
     nepochs_per_backend = []
-    amp_params_per_backend = []   # [q0..q{order}] amplitude param names per backend
+    amp_params_per_backend = []   # [log10_ecorr, _k1 .. _k{nmodes-1}] amplitude param names per backend
     corr_params_per_backend = []  # {(a, b): name} off-diagonal correlation params per backend
 
     for backend, mask in zip(backends, masks):
@@ -478,8 +484,8 @@ def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=
         else:
             y = (x - 0.5 * (x_max + x_min)) / half_range
 
-        # columns of legvander are P_0(y) ... P_{order}(y)
-        P = np.polynomial.legendre.legvander(y, order)
+        # columns of legvander are P_0(y) ... P_{nmodes-1}(y)
+        P = np.polynomial.legendre.legvander(y, nmodes - 1)
 
         bins = quantize(psr.toas * mask)
         if enterprise:
@@ -502,8 +508,9 @@ def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=
         U_backend.append(cols)
         nepochs_per_backend.append(nep)
 
-        amp_params_per_backend.append([f'{psr.name}_{backend}_log10_ecorr_q{o}' for o in range(k)])
-        corr_params_per_backend.append({(a, b): f'{psr.name}_{backend}_ecorr_corr_q{a}q{b}'
+        amp_params_per_backend.append([f'{psr.name}_{backend}_log10_ecorr' + ('' if m == 0 else f'_k{m}')
+                                       for m in range(k)])
+        corr_params_per_backend.append({(a, b): f'{psr.name}_{backend}_ecorr_corr_k{a}k{b}'
                                         for a in range(1, k) for b in range(a)})
 
     Umatall = np.hstack(U_backend)
@@ -521,16 +528,22 @@ def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=
         mblocks = []
         for amps, corr, nep in zip(amp_params_per_backend, corr_params_per_backend, nepochs_per_backend):
             d = jnp_.stack([10.0 ** (logscale + p[a]) for a in amps])  # (k,) marginal std per mode
-            # lower-triangular B (unit diagonal); rows normalised to unit norm
-            # so that R = Bn Bn^T is a valid (PSD, unit-diagonal) correlation matrix
-            rows = []
-            for o in range(k):
-                entries = [p[corr[(o, c)]] if c < o else (1.0 if c == o else 0.0)
-                           for c in range(k)]
-                rows.append(jnp_.stack([jnp_.asarray(v, dtype=jnp_.float64) for v in entries]))
-            B = jnp_.stack(rows)                                   # (k, k)
-            Bn = B / jnp_.linalg.norm(B, axis=1, keepdims=True)
-            R = Bn @ Bn.T
+            # partial-correlation (C-vine) Cholesky factor L of the mode
+            # correlation matrix R = L L^T. The parameters p[corr[(i, j)]] in
+            # (-1, 1) are correlations (j == 0) / partial correlations (j > 0),
+            # so R -- and hence M -- is PSD with unit diagonal for any values.
+            L_rows = []
+            for i in range(k):
+                row = [0.0] * k
+                acc = 0.0  # sum of squares of the entries already placed in this row
+                for j in range(i):
+                    Lij = p[corr[(i, j)]] * jnp_.sqrt(jnp_.clip(1.0 - acc, 1e-12, None))
+                    row[j] = Lij
+                    acc = acc + Lij ** 2
+                row[i] = jnp_.sqrt(jnp_.clip(1.0 - acc, 1e-12, None))  # unit row norm
+                L_rows.append(jnp_.stack([jnp_.asarray(v, dtype=jnp_.float64) for v in row]))
+            L = jnp_.stack(L_rows)                                 # (k, k) lower-triangular
+            R = L @ L.T
             M = (d[:, None] * d[None, :]) * R                      # (k, k) PSD covariance
             mblocks.append(jnp_.kron(jnp_.eye(nep), M))
         return matrix.jsp.linalg.block_diag(*mblocks)

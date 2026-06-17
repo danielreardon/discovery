@@ -102,6 +102,26 @@ def makesampler_nuts(numpyro_model, num_warmup=512, num_samples=1024, num_chains
     return sampler
 
 
+def print_summary(chain, prob=0.9, exclude=('logl', 'logZ', 'logZ_err', 'ess', 'weight', 'logposterior')):
+    """Print per-parameter split-R-hat and effective sample size for a posterior chain.
+
+    Runs numpyro's diagnostics on the full ``chain`` DataFrame (named physical parameters). This is
+    used instead of ``MCMC.print_summary`` because after checkpointed or multistart runs the MCMC
+    object only retains the final chunk (and reports the raw ``pars`` vector, not the physical
+    names). A single chain is split into two halves to give the split-R-hat convergence diagnostic;
+    ``n_eff`` is the effective sample size accounting for autocorrelation.
+    """
+    import numpyro.diagnostics as diag
+    cols = [c for c in chain.columns if c not in exclude]
+    n = len(chain)
+    h = n // 2
+    if h < 2 or not cols:
+        print("print_summary: chain too short (or no parameters) for diagnostics.")
+        return
+    samples = {c: np.asarray(chain[c].to_numpy()[:2 * h], dtype=float).reshape(2, h) for c in cols}
+    diag.print_summary(samples, prob=prob, group_by_chain=True)
+
+
 def run_nuts_with_checkpoints(
     sampler,
     num_samples_per_checkpoint,
@@ -426,7 +446,7 @@ def run_nuts_multistart(
     # when scouting, promote only the winner to a full chain, reusing its warmup (resume from
     # the scout checkpoint). The losing starts keep their scout-length chains.
     if scouting:
-        print(f"[multistart] promoting best scout start {best['start']} (mode {best['mode']}) "
+        print(f"[multistart] promoting best scout start {best['start']+1} (mode {best['mode']}) "
               f"to a full chain of {original_num_samples} samples...")
         df, samples_file = _run_start(best['start'], original_num_samples,
                                       num_samples_per_checkpoint, do_resume=True)

@@ -9,7 +9,7 @@ from .. import prior
 
 def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val=3.0,
                      num_samples=1024, multibatch=1, learning_rate=1e-2, steps=1001, anneal_steps=500,
-                     beta0=0.5, annealing_schedule=None,
+                     beta0=0.1, annealing_schedule=None, base_loc=None,
                      num_posterior=1024, logl_batch=None, show_progress=True):
     """Variational normalizing-flow sampler with the makesampler_nuts/_nested interface.
 
@@ -55,6 +55,10 @@ def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val
         at the cost of more exploration time. Ignored if ``annealing_schedule`` is given.
     annealing_schedule : callable, optional
         Custom ``beta(iteration)`` schedule; overrides ``beta0``/``anneal_steps``.
+    base_loc : array, optional
+        Mean of the flow's (Gaussian) base distribution in the unconstrained ``ys`` space, used to
+        seed training toward a region. Defaults to a zero-mean StandardNormal base. Set by
+        :func:`run_flow_multistart`; see there.
     num_posterior : int
         Number of samples drawn from the trained flow for the returned chain / evidence estimate.
     logl_batch : int or None
@@ -66,7 +70,7 @@ def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val
         Show the training progress bar.
     """
     from flowjax.flows import triangular_spline_flow
-    from flowjax.distributions import StandardNormal
+    from flowjax.distributions import StandardNormal, Normal
     from ..flow import VariationalFit, value_and_grad_ElboLoss
 
     logx = prior.makelogtransform_uniform(mylogl, priordict=priordict)
@@ -94,7 +98,12 @@ def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val
             # typed or a legacy PRNGKey by reseeding into a typed key deterministically.
             key = jax.random.key(int(jax.random.bits(key, shape=(), dtype=jnp.uint32)))
             flow_key, train_key = jax.random.split(key)
-            flow = triangular_spline_flow(flow_key, base_dist=StandardNormal((len(logx.params),)),
+            if base_loc is None:
+                base = StandardNormal((len(logx.params),))
+            else:
+                bl = jnp.asarray(base_loc, dtype=float)
+                base = Normal(loc=bl, scale=jnp.ones_like(bl))   # seed the start toward a region
+            flow = triangular_spline_flow(flow_key, base_dist=base,
                                           cond_dim=None, flow_layers=flow_layers, knots=knots,
                                           tanh_max_val=tanh_max_val, invert=False, init=None)
             schedule = annealing_schedule
@@ -177,3 +186,84 @@ def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val
                 plt.close()
 
     return FlowSampler()
+
+
+def run_flow_multistart(mylogl, init_grid, rng_key, priordict={}, evidence_n=None, **flow_kwargs):
+    """Train several normalizing flows from dispersed starts and keep the highest-evidence one.
+
+    The ELBO is reverse-KL (mode-seeking), so a single flow can settle in a sub-dominant mode and
+    miss the dominant one (which then shows up as a much lower max log-likelihood and evidence).
+    This is the flow analogue of :func:`discovery.samplers.numpyro.run_nuts_multistart`: it trains
+    one flow per entry in ``init_grid`` -- each seeded toward a different region by shifting the
+    flow's base mean (entries may be ``None`` for a plain prior-centred restart) -- estimates each
+    flow's evidence by importance sampling, and returns the flow with the highest ``logZ``. Because
+    a dominant mode's evidence is far larger, ``logZ`` selects it unambiguously.
+
+    Note that base-seeding only *diversifies* the starting region (the untrained spline does not
+    preserve the base mean exactly), so it improves coverage rather than guaranteeing a flow lands
+    exactly on a given mode; the ``logZ`` ranking is what makes the selection robust.
+
+    Parameters
+    ----------
+    mylogl : callable
+        Discovery log-likelihood (e.g. ``model.logL``) with a ``.params`` attribute.
+    init_grid : list of (dict or None)
+        One entry per restart. A dict maps physical parameter names to starting values (others
+        default to the prior midpoint); ``None`` starts from the standard prior-centred base.
+    rng_key : jax.random.PRNGKey
+        Base key; restart ``i`` uses ``jax.random.fold_in(rng_key, i)``.
+    priordict : dict
+        Prior overrides merged onto ``prior.priordict_standard``.
+    evidence_n : int or None
+        Samples for each restart's evidence estimate (defaults to the flow's ``num_posterior``).
+    **flow_kwargs :
+        Forwarded to :func:`makesampler_flow` (flow_layers, knots, num_samples, multibatch, steps,
+        beta0, ...).
+
+    Returns
+    -------
+    best_sampler : FlowSampler
+        The trained flow sampler with the highest ``logZ``.
+    best_chain : pandas.DataFrame
+        Its posterior samples (with ``logl`` and ``logZ``/``logZ_err``/``ess`` columns).
+    summary : list of dict
+        Per-restart records ``{'start', 'init', 'logZ', 'logZ_err', 'ess'}`` ranked best-first.
+    """
+    logx = prior.makelogtransform_uniform(mylogl, priordict=priordict)
+    valid = set(logx.params)
+    parlen = sum(int(p[p.index('(') + 1:p.index(')')]) if '(' in p else 1 for p in logx.params)
+    base_phys = logx.to_dict(jnp.zeros(parlen))   # prior midpoints
+
+    summary = []
+    for i, overrides in enumerate(init_grid):
+        if overrides is None:
+            base_loc, label = None, 'prior-centred'
+        else:
+            phys = dict(base_phys)
+            for name, val in overrides.items():
+                if name not in valid:
+                    raise KeyError(f"run_flow_multistart: '{name}' is not a model parameter.")
+                phys[name] = val
+            base_loc, label = np.asarray(logx.to_vec(phys)), overrides
+
+        print(f"[flow-multistart] restart {i}/{len(init_grid) - 1}  seed = {label}")
+        s = makesampler_flow(mylogl, priordict=priordict, base_loc=base_loc, **flow_kwargs)
+        s.run(jax.random.fold_in(rng_key, i))
+        ev = s.estimate_evidence(n=evidence_n)
+        print(f"[flow-multistart] restart {i}: logZ = {ev['logZ']:.2f} +/- {ev['logZ_err']:.2f}  "
+              f"ess = {ev['ess']:.0f}/{ev['n']}")
+        summary.append({'start': i, 'init': overrides, 'logZ': ev['logZ'],
+                        'logZ_err': ev['logZ_err'], 'ess': ev['ess'], '_sampler': s})
+
+    summary.sort(key=lambda r: r['logZ'], reverse=True)
+    best = summary[0]
+    print(f"[flow-multistart] best restart = {best['start']} (logZ = {best['logZ']:.2f}); "
+          f"seed = {best['init']}")
+
+    best_sampler = best['_sampler']
+    best_chain = best_sampler.to_df()
+    ev = best_sampler.estimate_evidence(n=evidence_n)
+    best_chain['logZ'], best_chain['logZ_err'], best_chain['ess'] = ev['logZ'], ev['logZ_err'], ev['ess']
+    for r in summary:
+        r.pop('_sampler', None)
+    return best_sampler, best_chain, summary
