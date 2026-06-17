@@ -10,7 +10,7 @@ from .. import prior
 def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val=3.0,
                      num_samples=1024, multibatch=1, learning_rate=1e-2, steps=1001, anneal_steps=500,
                      beta0=0.5, annealing_schedule=None,
-                     num_posterior=1024, logl_batch=256, show_progress=True):
+                     num_posterior=1024, logl_batch=None, show_progress=True):
     """Variational normalizing-flow sampler with the makesampler_nuts/_nested interface.
 
     Fits a triangular-spline normalizing flow to the (uniform-prior transformed) posterior by
@@ -57,8 +57,11 @@ def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val
         Custom ``beta(iteration)`` schedule; overrides ``beta0``/``anneal_steps``.
     num_posterior : int
         Number of samples drawn from the trained flow for the returned chain / evidence estimate.
-    logl_batch : int
-        Batch size used when evaluating the model log-likelihood / target on drawn samples.
+    logl_batch : int or None
+        Batch size when evaluating the model log-likelihood / target on drawn samples in
+        ``to_df``/``estimate_evidence``. Defaults to ``num_samples`` (a forward-only eval at that
+        size is guaranteed to fit, since training did forward+backward at it); lower it further if
+        the post-processing still runs tight on memory.
     show_progress : bool
         Show the training progress bar.
     """
@@ -68,6 +71,12 @@ def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val
 
     logx = prior.makelogtransform_uniform(mylogl, priordict=priordict)
     loss = value_and_grad_ElboLoss(logx, num_samples=num_samples)
+
+    # Evaluate post-hoc log-likelihoods in batches no larger than the training batch: a
+    # forward-only eval at num_samples is guaranteed to fit since training (forward+backward at
+    # the same size) did. Larger batches can OOM at the very end (in to_df / estimate_evidence).
+    if logl_batch is None:
+        logl_batch = num_samples
 
     def _batched(fn, samples):
         f = jax.jit(jax.vmap(fn))
@@ -98,13 +107,15 @@ def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val
             self.train_key, self.trained_flow = trainer.run(train_key, steps=steps)
             self.losses = trainer.losses
 
-        def to_df(self):
+        def to_df(self, with_logl=True):
             if self.trained_flow is None:
                 raise RuntimeError("Run the flow sampler before accessing samples.")
             samples = self.trained_flow.sample(self.train_key, sample_shape=(num_posterior,))
             df = self.logx.to_df(samples).drop(columns=['logl'], errors='ignore')
-            # model log-likelihood per sample (batched to bound memory), for write_ml_json/plots
-            df['logl'] = _batched(self.logx.logL, samples)
+            if with_logl:
+                # model log-likelihood per sample (batched; the memory-heavy step). Use
+                # with_logl=False to get the cheap parameter samples without this evaluation.
+                df['logl'] = _batched(self.logx.logL, samples)
             return df
 
         def estimate_evidence(self, n=None, key=None):

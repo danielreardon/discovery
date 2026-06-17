@@ -24,8 +24,8 @@ def update_priordict_standard_mpta():
         # White noise parameters
         '(.*_)?efac':               [0.5, 2],
         '(.*_)?log10_tnequad':      [-10, -5],
-        '(.*_)?log10_ecorr':        [-10, -5],
         '(.*_)?log10_ecorr_q.*':    [-10, -5],
+        '(.*_)?log10_ecorr':        [-10, -5],
         # Per-pulsar GW background parameters
         '(.*_)?bkgrnd_log10_A':     [-18, -11],
         # GP parameters
