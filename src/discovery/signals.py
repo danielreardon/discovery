@@ -398,20 +398,6 @@ def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
 
         return gp
 
-def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
-                                    selection=selection_backend_flags, variable=False,
-                                    fref=None, name='quadecorrGPleg'):
-    """Three-mode ECORR GP using a Legendre-polynomial frequency basis.
-
-    Thin wrapper around :func:`makegp_ecorr_legendre` with ``nmodes=3`` (Legendre
-    degrees 0-2), preserved for backward compatibility (parameters
-    ``..._log10_ecorr``, ``_k1``, ``_k2`` per backend).
-    """
-    return makegp_ecorr_legendre(psr, noisedict=noisedict, enterprise=enterprise, scale=scale,
-                                 selection=selection, variable=variable,
-                                 nmodes=3, fref=fref, name=name)
-
-
 def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=1.0,
                                      selection=selection_backend_flags, variable=False,
                                      nmodes=3, fref=None,
