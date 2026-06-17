@@ -266,16 +266,15 @@ def makegp_ecorr(psr, noisedict={}, enterprise=False, scale=1.0, selection=selec
     
 def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
                           selection=selection_backend_flags, variable=False,
-                          order=2, fref=None, log_freqs=True, name='ecorrGPleg'):
+                          order=2, fref=None, name='ecorrGPleg'):
     """ECORR GP using a Legendre-polynomial with order=``order`` frequency basis.
 
     For each backend, the per-TOA log-frequency coordinate
-    ``x = log(freqs / fref)`` (or the linear coordinate ``x = freqs / fref - 1``
-    if ``log_freqs=False``) is linearly rescaled into ``y in [-1, 1]`` across
-    that backend's bandwidth. Legendre polynomials P_0(y) through P_order(y) are 
-    used as the frequency basis and order specifies the highest polynomial 
-    degree included. On the interval [-1, 1] these polynomials are *orthogonal* 
-    (with weight 1), so the ``order``+1 log10_ecorr amplitudes per backend 
+    ``x = log(freqs / fref)`` is linearly rescaled into ``y in [-1, 1]`` across
+    that backend's bandwidth. Legendre polynomials P_0(y) through P_order(y) are
+    used as the frequency basis and order specifies the highest polynomial
+    degree included. On the interval [-1, 1] these polynomials are *orthogonal*
+    (with weight 1), so the ``order``+1 log10_ecorr amplitudes per backend
     (parameters ``..._log10_ecorr_q0`` ... ``_q{order}``) correspond to
     nearly-independent frequency modes of the jitter covariance and the
     resulting posteriors are well conditioned. P_0 is the band-mean
@@ -289,13 +288,10 @@ def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
     to the mean of ``psr.freqs`` for that backend's TOAs (this only affects the
     mapping into [-1, 1] and keeps the basis well-conditioned for any band).
 
-    The default log-frequency coordinate matches the observed stationarity of
-    jitter decorrelation in log(fa/fb) (Kulkarni et al.), and fits the implied
-    jitter covariance better than the linear coordinate at every bandwidth
+    The log-frequency coordinate matches the observed stationarity of jitter
+    decorrelation in log(fa/fb) (Kulkarni et al.), and fits the implied jitter
+    covariance better than a linear-frequency coordinate at every bandwidth
     (mildly at MeerKAT L-band, substantially for e.g. UWL).
-    ``log_freqs=False`` reproduces the legacy linear-frequency basis of
-    :func:`makegp_quadratic_ecorr_legendre`. The two settings change the
-    basis, so their chains are not interchangeable.
     """
 
     if not isinstance(order, int) or order < 0:
@@ -316,7 +312,7 @@ def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
 
         # per-backend reference frequency (controls the centring of x)
         fref_b = float(np.mean(freqs[mask])) if fref is None else float(fref)
-        x = np.log(freqs / fref_b) if log_freqs else freqs / fref_b - 1.0
+        x = np.log(freqs / fref_b)
 
         # rescale x linearly to y in [-1, 1] across this backend's TOAs so that
         # the Legendre polynomials are evaluated on their natural support.
@@ -404,17 +400,17 @@ def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1
     """Second-order ECORR GP using a Legendre-polynomial frequency basis.
 
     Thin wrapper around :func:`makegp_ecorr_legendre` with ``order=2``,
-    preserved for backward compatibility; parameter names and basis are
-    unchanged (``..._log10_ecorr_q0/_q1/_q2`` per backend).
+    preserved for backward compatibility (parameters ``..._log10_ecorr_q0/_q1/_q2``
+    per backend).
     """
     return makegp_ecorr_legendre(psr, noisedict=noisedict, enterprise=enterprise, scale=scale,
                                  selection=selection, variable=variable,
-                                 order=2, fref=fref, log_freqs=False, name=name)
+                                 order=2, fref=fref, name=name)
 
 
 def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=1.0,
                                      selection=selection_backend_flags, variable=False,
-                                     order=2, fref=None, log_freqs=True,
+                                     order=2, fref=None,
                                      name='correcorrGPleg'):
     """ECORR GP with a *correlated* Legendre frequency basis (full mode covariance).
 
@@ -471,7 +467,7 @@ def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=
     for backend, mask in zip(backends, masks):
         # per-backend reference frequency (controls the centring of x)
         fref_b = float(np.mean(freqs[mask])) if fref is None else float(fref)
-        x = np.log(freqs / fref_b) if log_freqs else freqs / fref_b - 1.0
+        x = np.log(freqs / fref_b)
 
         # rescale x linearly to y in [-1, 1] across this backend's TOAs
         x_backend = x[mask]
