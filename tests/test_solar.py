@@ -194,15 +194,15 @@ class TestMakeSolardm:
         assert result[2] > result[0]  # Lower frequency has larger delay
 
 
-class TestFourierbasisSolarDm:
-    """Tests for fourierbasis_solar_dm function."""
+class TestFourierbasisSolar:
+    """Tests for fourierbasis_solar function."""
 
-    def test_fourierbasis_solar_dm_output_shapes(self):
-        """Test that fourierbasis_solar_dm returns three values with correct shapes."""
+    def test_fourierbasis_solar_output_shapes(self):
+        """Test that fourierbasis_solar returns three values with correct shapes."""
         psr = MockPsr()
         components = 10
 
-        result = solar.fourierbasis_solar_dm(psr, components)
+        result = solar.fourierbasis_solar(psr, components)
         assert len(result) == 3
 
         f, df, fmat = result
