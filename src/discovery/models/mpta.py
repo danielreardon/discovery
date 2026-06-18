@@ -249,14 +249,7 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     if extra_gps is not None:
         model_components += extra_gps
 
-    comp_params = []
-    for comp in model_components:
-        if hasattr(comp, 'params'):
-            comp_params.extend(comp.params)
-
     m = likelihood.PulsarLikelihood(model_components)
-    m.all_params.extend(comp_params)
-    m.logL.params = sorted(set(m.all_params))
 
     if return_components:
         return m, model_components

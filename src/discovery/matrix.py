@@ -1260,7 +1260,6 @@ class WoodburyKernel_varFP(VariableKernel):
 
 class WoodburyKernel_varNP(VariableKernel):
     def __init__(self, N_var, F, P_var):
-        print("WoodburyKernel_varNP initialized")
         self.N, self.F, self.P_var = N_var, F, P_var
 
     def make_kernelproduct_vary(self, y):
