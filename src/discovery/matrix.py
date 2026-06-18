@@ -1093,53 +1093,30 @@ class WoodburyKernel_varFP(VariableKernel):
         return kernelproduct
 
     def make_kernelproduct(self, y):
-        N_solve_1d = self.N.make_solve_1d()
-        N_solve_2d = self.N.make_solve_2d()
-        P_var_inv  = self.P_var.make_inv()
-        Ffunc      = self.F
+        if callable(y):
+            return self.make_kernelproduct_vary(y)
 
-        y_is_callable = callable(y)
-        if not y_is_callable:
-            y = jnparray(y)
-            Nmy, ldN_fixed = N_solve_1d(y)
-            ytNmy_fixed = y @ Nmy
-        else:
-            ytNmy_fixed = None
-            ldN_fixed = None
+        Nmy, _  = self.N.solve_1d(y)
+        ytNmy = y @ Nmy
+
+        y, ytNmy = jnparray(y), jnparray(ytNmy)
+        F_var, N_solve_2d = self.F, self.N.make_solve_2d()
+        P_var_inv = self.P_var.make_inv()
 
         def kernelproduct(params):
-            F = Ffunc(params)
-            NmF, ldN_here = N_solve_2d(F)
+            F = F_var(params)
+            NmF, ldN = N_solve_2d(F)
             FtNmF = F.T @ NmF
-
-            if y_is_callable:
-                yp = y(params)
-                Nmy, _ = N_solve_1d(yp) if yp.ndim == 1 else N_solve_2d(yp)
-                ytNmy = yp @ Nmy
-                NmFty = NmF.T @ yp
-                ldN = ldN_here
-            else:
-                ytNmy = ytNmy_fixed
-                NmFty = NmF.T @ y
-                ldN = ldN_fixed
+            NmFty = NmF.T @ y
 
             Pinv, ldP = P_var_inv(params)
             cf = matrix_factor(Pinv + FtNmF)
-            sol = matrix_solve(cf, NmFty)
-            ytXy = NmFty.T @ sol
+            ytXy = NmFty.T @ matrix_solve(cf, NmFty)
 
-            L = cf[0]
-            logdet_S = matrix_norm * jnp.logdet(jnp.diag(L))
+            return -0.5 * (ytNmy - ytXy) - 0.5 * (ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0])))
 
-            ldP_total = 0.0 if ldP is None else jnp.sum(jnp.asarray(ldP))
-            return -0.5 * (ytNmy - ytXy) - 0.5 * (ldN + ldP_total + logdet_S)
+        kernelproduct.params = sorted(F_var.params + P_var_inv.params)
 
-        pset = set()
-        pset.update(getattr(Ffunc, 'params', []) or [])
-        pset.update(getattr(P_var_inv, 'params', []) or [])
-        if y_is_callable:
-            pset.update(getattr(y, 'params', []) or [])
-        kernelproduct.params = sorted(pset)
         return kernelproduct
 
     def make_kernelsolve(self, y, T):
