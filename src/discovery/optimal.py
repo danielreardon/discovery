@@ -47,7 +47,7 @@ class OS:
 
     @functools.cached_property
     def Q(self):
-        Nmats, Fmats, Tmats = zip(*[(psl.N.N.N, psl.N.F, psl.gw.F) for psl in self.psls])
+        Nmats, Fmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.gw.F) for psl in self.psls])
 
         LNms = [1.0 / matrix.jnp.sqrt(Nmat) for Nmat in Nmats]
         Fts = [LNm[:,None] * Fmat for LNm, Fmat in zip(LNms, Fmats)]
@@ -98,7 +98,7 @@ class OS:
 
     @functools.cached_property
     def opQ(self):
-        Nmats, Fmats, Tmats = zip(*[(psl.N.N.N, psl.N.F, psl.gw.F) for psl in self.psls])
+        Nmats, Fmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.gw.F) for psl in self.psls])
 
         LNms = [1.0 / matrix.jnp.sqrt(Nmat) for Nmat in Nmats]
         Fts = [LNm[:,None] * Fmat for LNm, Fmat in zip(LNms, Fmats)]
@@ -152,7 +152,7 @@ class OS:
 
     @functools.cached_property
     def sample(self):
-        Nmats, Fmats, Tmats = zip(*[(psl.N.N.N, psl.N.F, psl.gw.F) for psl in self.psls])
+        Nmats, Fmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.gw.F) for psl in self.psls])
 
         LNms = [1.0 / matrix.jnp.sqrt(Nmat) for Nmat in Nmats]
         Fts = [LNm[:,None] * Fmat for LNm, Fmat in zip(LNms, Fmats)]
@@ -207,7 +207,7 @@ class OS:
         Phi = self.psls[0].gw.Phi.getN(params)
         sPhi = matrix.jnp.sqrt(Phi)
 
-        Nmats, Fmats, Pmats, Tmats = zip(*[(psl.N.N.N, psl.N.F, psl.N.P_var.getN(params), psl.gw.F) for psl in self.psls])
+        Nmats, Fmats, Pmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.N.P_var.getN(params), psl.gw.F) for psl in self.psls])
 
         LNms = [1.0 / matrix.jnp.sqrt(Nmat) for Nmat in Nmats]
         Fts = [LNm[:,None] * Fmat for LNm, Fmat in zip(LNms, Fmats)]
@@ -267,7 +267,7 @@ class OS:
         Phi = self.psls[0].gw.Phi.getN(params)
         sPhi = matrix.jnp.sqrt(Phi)
 
-        Nmats, Fmats, Pmats, Tmats = zip(*[(psl.N.N.N, psl.N.F, psl.N.P_var.getN(params), psl.gw.F) for psl in self.psls])
+        Nmats, Fmats, Pmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.N.P_var.getN(params), psl.gw.F) for psl in self.psls])
 
         Ks = [matrix.WoodburyKernel_novar(matrix.NoiseMatrix1D_novar(Nmat), Fmat, matrix.NoiseMatrix1D_novar(Pmat))
               for Nmat, Fmat, Pmat in zip(Nmats, Fmats, Pmats)]
