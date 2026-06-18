@@ -132,6 +132,63 @@ class TestSMSolveParity:
         np.testing.assert_allclose(Kmy, Kmy_ref, rtol=1e-12, atol=1e-12)
         np.testing.assert_allclose(ld, ld_ref, rtol=1e-12, atol=1e-12)
 
+    # ---- 2D operand with variable N / P (previously only 2d_all_const) ----
+
+    def test_2d_var_N(self, sm_setup):
+        """2D solve operand with param-dependent N."""
+        s = sm_setup
+        N_arr = s["N"]
+
+        def getN(params):
+            return params["efac"] ** 2 * N_arr
+        getN.params = ["efac"]
+
+        graph = mh.smsolve(s["Y2"], getN, s["Uind"], s["P"])
+        f = mm.func(graph)
+        for efac in (1.0, 1.3, 0.7):
+            Kmy, ld = f(params={"efac": efac})
+            Kmy_ref, ld_ref = _ref_2d(s["Y2"], efac ** 2 * N_arr,
+                                      s["Uind"], s["P"])
+            np.testing.assert_allclose(Kmy, Kmy_ref, rtol=1e-12, atol=1e-12)
+            np.testing.assert_allclose(ld, ld_ref, rtol=1e-12, atol=1e-12)
+
+    def test_2d_var_P(self, sm_setup):
+        """2D solve operand with param-dependent P."""
+        s = sm_setup
+        P_arr = s["P"]
+
+        def getP(params):
+            return params["log10_ecorr"] * P_arr
+        getP.params = ["log10_ecorr"]
+
+        graph = mh.smsolve(s["Y2"], s["N"], s["Uind"], getP)
+        f = mm.func(graph)
+        for amp in (0.5, 1.0, 2.5):
+            Kmy, ld = f(params={"log10_ecorr": amp})
+            Kmy_ref, ld_ref = _ref_2d(s["Y2"], s["N"], s["Uind"], amp * P_arr)
+            np.testing.assert_allclose(Kmy, Kmy_ref, rtol=1e-12, atol=1e-12)
+            np.testing.assert_allclose(ld, ld_ref, rtol=1e-12, atol=1e-12)
+
+    def test_2d_var_N_and_P(self, sm_setup):
+        s = sm_setup
+        N_arr, P_arr = s["N"], s["P"]
+
+        def getN(params):
+            return params["efac"] ** 2 * N_arr
+        getN.params = ["efac"]
+
+        def getP(params):
+            return params["log10_ecorr"] * P_arr
+        getP.params = ["log10_ecorr"]
+
+        graph = mh.smsolve(s["Y2"], getN, s["Uind"], getP)
+        f = mm.func(graph)
+        Kmy, ld = f(params={"efac": 1.2, "log10_ecorr": 0.7})
+        Kmy_ref, ld_ref = _ref_2d(s["Y2"], 1.2 ** 2 * N_arr,
+                                  s["Uind"], 0.7 * P_arr)
+        np.testing.assert_allclose(Kmy, Kmy_ref, rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(ld, ld_ref, rtol=1e-12, atol=1e-12)
+
 
 class TestSMSolveFolding:
     """When N and P are both constant, all of logN, Np, log1pt, logdet

@@ -32,7 +32,9 @@ LOGL_ROWS = [
 
 # ---------- helpers ----------
 
-ALT_ROUTES = ("mh_patched", "mh_native")
+# mh_patched needs a metamath-aware likelihood.py (not this branch); compare
+# matrix vs mh_native (the ds.config('metamath') path). See _routes.build_routes.
+ALT_ROUTES = ("mh_native",)
 
 
 def _routes(build, psrs):

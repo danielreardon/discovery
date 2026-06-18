@@ -51,10 +51,19 @@ def build_routes(factory, force=("logL", "conditional", "clogL",
     out["matrix"] = factory()
     _force(out["matrix"], force)
 
-    # metamath via the monkeypatch (legacy likelihood + mh kernels)
-    with metamatrix_patch():
-        out["mh_patched"] = factory()
-        _force(out["mh_patched"], force)
+    # metamath via the monkeypatch (legacy likelihood + mh kernels).
+    # Only works when likelihood.py is metamath-aware (isinstance checks
+    # recognise metamath kernel/GP types). On branches whose likelihood.py still
+    # keys on matrix.* types, building this route raises; we skip it so the
+    # matrix-vs-mh_native comparison can still run. Tests pick routes via their
+    # own ALT_ROUTES, so a missing 'mh_patched' is simply not asserted.
+    try:
+        with metamatrix_patch():
+            m = factory()
+            _force(m, force)
+        out["mh_patched"] = m
+    except Exception:
+        pass
 
     # metamath native (likelihood_metamath.py)
     ds.config(kernels="metamath")

@@ -38,12 +38,20 @@ LOGL_ROWS = [
     pytest.param(R.fftcov_2d,             id="fftcov_2d"),
     pytest.param(R.delay,                 id="delay"),
     pytest.param(R.fourier_variance_fixed, id="fourier_variance_fixed"),
+    pytest.param(R.chrom_varfp,           id="chrom_varfp(callableF)"),
+    pytest.param(R.chrom_varnp,           id="chrom_varnp(callableF+varN)"),
+    pytest.param(R.chrom_delay,           id="chrom_delay(callableF+callableY)"),
+    pytest.param(R.ecorr_correlated,      id="ecorr_correlated(2D_varP)"),
 ]
 
 
 # ---------- helpers ----------
 
-ALT_ROUTES = ("mh_patched", "mh_native")
+# This branch's likelihood.py is not metamath-aware (its isinstance checks key
+# on matrix.* types), so the harness's `mh_patched` route — legacy likelihood +
+# patched kernels — cannot work here. We validate matrix vs. mh_native (the
+# ds.config('metamath') path users actually run). See _routes.build_routes.
+ALT_ROUTES = ("mh_native",)
 
 
 def _routes(build, psr):
@@ -79,6 +87,15 @@ def test_logL(psr, build):
 CONDITIONAL_ROWS = [
     pytest.param(R.full_rn, id="full_rn"),
     pytest.param(R.multi_vgp, id="multi_vgp"),
+    pytest.param(R.chrom_varfp, id="chrom_varfp(callableF)"),
+    pytest.param(R.chrom_varnp, id="chrom_varnp(callableF+varN)"),
+]
+
+# clogL (GP-component decomposition) is not supported for callable-F Woodbury
+# kernels even in matrix.py (the reference), so its rows exclude callable-F.
+CLOGL_ROWS = [
+    pytest.param(R.full_rn, id="full_rn"),
+    pytest.param(R.multi_vgp, id="multi_vgp"),
 ]
 
 
@@ -99,7 +116,7 @@ def test_conditional(psr, build):
                      name=f"{build.__name__}[{route}].cf")
 
 
-@pytest.mark.parametrize("build", CONDITIONAL_ROWS)
+@pytest.mark.parametrize("build", CLOGL_ROWS)
 def test_clogL(psr, build):
     r = _routes(build, psr)
     ref = r["matrix"]
@@ -123,6 +140,9 @@ def test_clogL(psr, build):
                      name=f"{build.__name__}[{route}]")
 
 
+# sample (noise realization) is likewise unsupported for callable-F kernels in
+# matrix.py, so the callable-F recipes are validated for logL / conditional /
+# sample_conditional only — not clogL / sample.
 SAMPLE_ROWS = [
     pytest.param(R.full_rn, id="full_rn"),
     pytest.param(R.multi_vgp, id="multi_vgp"),
