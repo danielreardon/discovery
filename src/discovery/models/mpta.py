@@ -195,13 +195,9 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
                         return_components=False): # Whether to return the list of model components in addition to the likelihood object (useful for adding additional components)
     # Set up per-backend white noise (efac and tnequad)
     measurement_noise = signals.makenoise_measurement(psr, tnequad=True, noisedict=noisedict)
-    # Set up timing model
-    tm = signals.makegp_timing(psr, svd=True)
-    if not isinstance(tm, list): # ensure the timing model is unpacked if returning a list
-        tm = [tm]
     # Set up model components
     model_components = [psr.residuals]
-    model_components += tm
+    model_components += [signals.makegp_timing(psr, svd=True)] # Set up timing model (analytically marginalised)
     model_components += [measurement_noise]
     if ecorr:
         if ecorr_nmodes is not None:

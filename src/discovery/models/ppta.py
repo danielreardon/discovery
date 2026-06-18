@@ -56,16 +56,16 @@ def update_priordict_standard_ppta():
     })
     return
 
-def single_pulsar_noise(psr, fftint=True, max_cadence_days=30, Tspan=None, noisedict={}, tm_variable=False, timing_inds=None, outliers=False, global_ecorr=True,
-                        background=True, red=True, red2=False, dm=True, chrom=True, sw=True, dm_sw_free=False, band=False, band_alpha=False, # GP models
+def single_pulsar_noise(psr, fftint=True, max_cadence_days=30, Tspan=None, noisedict={}, global_ecorr=True,
+                        background=True, red=True, red2=False, dm=True, chrom=True, sw=True, band=False, band_alpha=False, # GP models
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, extra_gps=None): # Deterministic chromatic models
-
     """ Different defaults for PPTA single pulsar analyses. max_cadence_days=30 and global_ecorr=True.
     See mpta.single_pulsar_noise for details of the parameters."""
+
+    model = mpta.single_pulsar_noise(psr, fftint=fftint, max_cadence_days=max_cadence_days, Tspan=Tspan, noisedict=noisedict, global_ecorr=global_ecorr,
+                        background=background, red=red, red2=red2, dm=dm, chrom=chrom, sw=sw, band=band, band_alpha=band_alpha, # GP models
+                        chrom_annual=chrom_annual, chrom_exponential=chrom_exponential, chrom_gaussian=chrom_gaussian, extra_gps=extra_gps) # Deterministic chromatic models
+
     update_priordict_standard_ppta()
 
-    # to do: add custom chromatic exponentials for relevant pulsars
-
-    return mpta.single_pulsar_noise(psr, fftint=fftint, max_cadence_days=max_cadence_days, Tspan=Tspan, noisedict=noisedict, tm_variable=tm_variable, timing_inds=timing_inds, outliers=outliers, global_ecorr=global_ecorr,
-                        background=background, red=red, red2=red2, dm=dm, chrom=chrom, sw=sw, dm_sw_free=dm_sw_free, band=band, band_alpha=band_alpha, # GP models
-                        chrom_annual=chrom_annual, chrom_exponential=chrom_exponential, chrom_gaussian=chrom_gaussian, extra_gps=extra_gps) # Deterministic chromatic models
+    return model
