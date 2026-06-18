@@ -391,7 +391,7 @@ def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
                   for (log10_ecorr, pmask) in zip(params, pmasks))
 
         if variable:
-            def getphi(p):
+            def getphi(params):
                 return phi
             getphi.params = []
 
@@ -405,10 +405,11 @@ def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
             return matrix.ConstantGP(matrix.NoiseMatrix1D_novar(phi), Umatall)
     else:
         pmasks = [matrix.jnparray(pmask) for pmask in pmasks]
-        def getphi(p):
-            return sum(10.0**(2 * (logscale + p[log10_ecorr])) * pmask
-                       for (log10_ecorr, pmask) in zip(params, pmasks))
-        getphi.params = params
+        ecorr_names = params
+        def getphi(params):
+            return sum(10.0**(2 * (logscale + params[log10_ecorr])) * pmask
+                       for (log10_ecorr, pmask) in zip(ecorr_names, pmasks))
+        getphi.params = ecorr_names
 
         gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), Umatall)
         gp.index = {f'{psr.name}_{name}_coefficients({Umatall.shape[1]})': slice(0, Umatall.shape[1])}
@@ -570,7 +571,7 @@ def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=
         phi = np.asarray(build_phi(noisedict), dtype=np.float64)
 
         if variable:
-            def getphi(p):
+            def getphi(params):
                 return phi
             getphi.params = []
 
@@ -583,8 +584,8 @@ def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=
         else:
             return matrix.ConstantGP(matrix.NoiseMatrix2D_novar(phi), Umatall)
     else:
-        def getphi(p):
-            return build_phi(p)
+        def getphi(params):
+            return build_phi(params)
         getphi.params = params
 
         gp = matrix.VariableGP(matrix.NoiseMatrix2D_var(getphi), Umatall)
