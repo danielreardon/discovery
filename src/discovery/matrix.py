@@ -322,7 +322,9 @@ def CompoundGP(gplist):
         if any(callable(gp.F) for gp in gplist):
             def F(params):
                 return jnp.hstack([gp.F(params) if callable(gp.F) else gp.F for gp in gplist])
-            F.params = sum((gp.F.params if callable(gp.F) else [] for gp in gplist), [])
+            # Deduplicate shared param names
+            F.params = sorted(set().union(*(set(gp.F.params) if callable(gp.F) else set()
+                                            for gp in gplist)))
         else:
             F = np.hstack([gp.F for gp in gplist])
 
