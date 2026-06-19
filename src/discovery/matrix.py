@@ -1090,7 +1090,7 @@ class WoodburyKernel_varFP(VariableKernel):
 
             return -0.5 * (ytNmy - ytXy) - 0.5 * (ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0])))
 
-        kernelproduct.params = sorted(F_var.params + P_var_inv.params + y_var.params)
+        kernelproduct.params = sorted(set(F_var.params + P_var_inv.params + y_var.params))
 
         return kernelproduct
 
@@ -1117,7 +1117,7 @@ class WoodburyKernel_varFP(VariableKernel):
 
             return -0.5 * (ytNmy - ytXy) - 0.5 * (ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0])))
 
-        kernelproduct.params = sorted(F_var.params + P_var_inv.params)
+        kernelproduct.params = sorted(set(F_var.params + P_var_inv.params))
 
         return kernelproduct
 
@@ -1319,7 +1319,7 @@ class WoodburyKernel_varNP(VariableKernel):
 
             return -0.5 * (ytNmy - ytXy) - 0.5 * (ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0])))
 
-        kernelproduct.params = sorted(self.N_var.params + P_var_inv.params + Ffunc.params + y_var.params)
+        kernelproduct.params = sorted(set(self.N_var.params + P_var_inv.params + Ffunc.params + y_var.params))
 
         return kernelproduct
 
@@ -1358,7 +1358,7 @@ class WoodburyKernel_varNP(VariableKernel):
 
             return -0.5 * (ytNmy - ytXy) - 0.5 * (ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0])))
 
-        kernelproduct.params = sorted(self.N_var.params + P_var_inv.params + Ffunc.params)
+        kernelproduct.params = sorted(set(self.N_var.params + P_var_inv.params + Ffunc.params))
 
         return kernelproduct
 
@@ -1382,7 +1382,7 @@ class WoodburyKernel_varNP(VariableKernel):
 
             return -0.5 * (yp @ Nmyp + c @ Pmc + ldP + ldN)
 
-        kernelproduct.params = sorted(self.N_var.params + self.P_var.params + cvars)
+        kernelproduct.params = sorted(set(self.N_var.params + self.P_var.params + cvars))
 
         return kernelproduct
 
@@ -1415,7 +1415,7 @@ class WoodburyKernel_varNP(VariableKernel):
 
             return TtSy, TtST
 
-        kernelsolve.params = sorted(self.N_var.params + P_var_inv.params)
+        kernelsolve.params = sorted(set(self.N_var.params + P_var_inv.params))
 
         return kernelsolve
 
@@ -1441,7 +1441,7 @@ class WoodburyKernel_varNP(VariableKernel):
 
             return b_mean, ch
 
-        kernelsolve.params = sorted(self.N_var.params + P_var.params)
+        kernelsolve.params = sorted(set(self.N_var.params + P_var.params))
         return kernelsolve
 
     def make_solve_2d(self):
@@ -1461,7 +1461,7 @@ class WoodburyKernel_varNP(VariableKernel):
             ld = ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0]))
 
             return N_solve_2d(params, Fr)[0] - NmFl @ matrix_solve(cf, NmFltFr), ld
-        solve_2d.params = sorted(self.N_var.params + P_var.params)
+        solve_2d.params = sorted(set(self.N_var.params + P_var.params))
 
         return solve_2d
 
@@ -1482,7 +1482,7 @@ class WoodburyKernel_varNP(VariableKernel):
             ld = ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0]))
 
             return N_solve_1d(params, y)[0] - NmF @ matrix_solve(cf, NmFty), ld
-        solve_1d.params = sorted(self.N_var.params + P_var.params)
+        solve_1d.params = sorted(set(self.N_var.params + P_var.params))
 
         return solve_1d
 
@@ -1529,7 +1529,7 @@ class WoodburyKernel_varNP(VariableKernel):
 
             return a, b, c
 
-        kernelterms.params = sorted(self.N_var.params + self.P_var.params)
+        kernelterms.params = sorted(set(self.N_var.params + self.P_var.params))
 
         return kernelterms
 
@@ -1578,7 +1578,7 @@ class WoodburyKernel_varP(VariableKernel):
             cf = matrix_factor(Pinv + FtNmF)
 
             return Nmy - NmF @ matrix_solve(cf, FtNmy), ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0]))
-        solve_1d.params = sorted(self.N.params + P_var_inv.params)
+        solve_1d.params = sorted(set(self.N.params + P_var_inv.params))
 
         return solve_1d
 
@@ -1599,7 +1599,7 @@ class WoodburyKernel_varP(VariableKernel):
             cf = matrix_factor(Pinv + FtNmF)
 
             return NmT - NmF @ matrix_solve(cf, FtNmT), ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0]))
-        solve_2d.params = sorted(self.N.params + P_var_inv.params)
+        solve_2d.params = sorted(set(self.N.params + P_var_inv.params))
 
         return solve_2d
 
@@ -1640,7 +1640,7 @@ class WoodburyKernel_varP(VariableKernel):
 
             return TtSy, TtST
 
-        kernelsolve.params = sorted(y.params + P_var_inv.params)
+        kernelsolve.params = sorted(set(y.params + P_var_inv.params))
 
         return kernelsolve
 
@@ -1705,7 +1705,7 @@ class WoodburyKernel_varP(VariableKernel):
             ytXy = FtNmy.T @ matrix_solve(cf, FtNmy)
 
             return -0.5 * (ytNmy - ytXy) - 0.5 * (ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0])))
-        kernel.params = sorted(y.params + P_var_inv.params)
+        kernel.params = sorted(set(y.params + P_var_inv.params))
 
         return kernel
 
@@ -1753,7 +1753,7 @@ class WoodburyKernel_varP(VariableKernel):
 
             return logp
 
-        kernelproduct.params = sorted(P_var_inv.params + (kmean.params if kmean is not None else []))
+        kernelproduct.params = sorted(set(P_var_inv.params + (kmean.params if kmean is not None else [])))
 
         return kernelproduct
 
@@ -1938,7 +1938,7 @@ class WoodburyKernel_varN(VariableKernel):
 
             return -0.5 * (ytNmy - ytXy) - 0.5 * (ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0])))
 
-        kernelproduct.params = sorted(self.N_var.params + Ffunc.params + y_var.params)
+        kernelproduct.params = sorted(set(self.N_var.params + Ffunc.params + y_var.params))
 
         return kernelproduct
 
@@ -2002,7 +2002,7 @@ class WoodburyKernel_varN(VariableKernel):
             c = TtNmT - TtNmF @ sol2
 
             return a, b, c
-        kernelterms.params = sorted(self.N_var.params + y_var.params)
+        kernelterms.params = sorted(set(self.N_var.params + y_var.params))
 
         return kernelterms
 
@@ -2079,7 +2079,7 @@ class WoodburyKernel_varN(VariableKernel):
                 TtST = TtNmT - TtNmF @ matrix_solve(cf, FtNmT)
 
                 return TtSy, TtST
-            kernelsolve.params = sorted(self.N_var.params + y_var.params + T.params)
+            kernelsolve.params = sorted(set(self.N_var.params + y_var.params + T.params))
         else:
             Tmat = jnparray(T)
 
@@ -2105,7 +2105,7 @@ class WoodburyKernel_varN(VariableKernel):
                 TtST = TtNmT - TtNmF @ matrix_solve(cf, FtNmT)
 
                 return TtSy, TtST
-            kernelsolve.params = sorted(self.N_var.params + y_var.params)
+            kernelsolve.params = sorted(set(self.N_var.params + y_var.params))
 
         return kernelsolve
 
@@ -2141,7 +2141,7 @@ class WoodburyKernel_varN(VariableKernel):
                 TtST = TtNmT - TtNmF @ matrix_solve(cf, FtNmT)
 
                 return TtSy, TtST
-            kernelsolve.params = self.N_var.params + T.params
+            kernelsolve.params = sorted(set(self.N_var.params + T.params))
         else:
             Tmat = jnparray(T)
 
@@ -2332,8 +2332,8 @@ class VectorWoodburyKernel_varP(VariableKernel):
             return logp
 
         params_kmeans = kmeans.params if kmeans is not None else []
-        kernelproduct.params = sorted(sum([N_solve_1d.params for N_solve_1d in N_solve_1ds], []) +
-                                      P_var_inv.params + params_kmeans)
+        kernelproduct.params = sorted(set(sum([N_solve_1d.params for N_solve_1d in N_solve_1ds], []) +
+                                          P_var_inv.params + params_kmeans))
 
         return kernelproduct
 
@@ -2388,7 +2388,7 @@ class VectorWoodburyKernel_varP(VariableKernel):
             return logp
 
         params_kmeans = kmeans.params if kmeans is not None else []
-        kernelproduct.params = sorted(P_var_inv.params + params_kmeans)
+        kernelproduct.params = sorted(set(P_var_inv.params + params_kmeans))
 
         return kernelproduct
 
