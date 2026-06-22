@@ -8,6 +8,7 @@ from .. import prior
 from .. import solar
 from .. import likelihood
 from .. import deterministic
+from .. import bayesephem as bayesephem_mod
 from .. import const
 
 def write_ml_json(df, savename):
@@ -252,18 +253,26 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     
     return m
 
-def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn", chrom_poly=True):
+def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn", chrom_poly=True, Tspan=None,
+                 bayesephem=False, bayesephem_partials=bayesephem_mod.DEFAULT_PARTIALS,
+                 bayesephem_inc_saturn=True, bayesephem_frame_3axis=True, bayesephem_inc_mainbelt=False):
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
     def has_param(df, param_string):
         return any(param_string in col for col in df.columns)
- 
+
     if chrom_poly:
         print("Note: chrom_poly=True (chromatic polynomial is marginalised by default). Set chrom_poly=False to disable.")
- 
-    Tspan = signals.getspan(psrs)
+
+    if bayesephem:
+        # Register uniform [-1, 1] priors for the global BayesEphem coefficients
+        # (the inter-ephemeris prior half-widths are folded into the design matrix).
+        prior.priordict_standard.update(bayesephem_mod.bayesephem_priordict())
+
+    if Tspan is None:
+        Tspan = signals.getspan(psrs)
     common_components = int(Tspan / (max_cadence_days * 86400))
     common_knots = 2 * common_components + 1
- 
+
     psls = []
     for psr, df in zip(psrs, chain_dfs):
         if not any(psr.name in col for col in df.columns):
@@ -292,7 +301,15 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
         else:
             curn = signals.makegp_fftcov(psr, signals.powerlaw, common_knots, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
         extra_gps = curn if isinstance(curn, list) else [curn]
- 
+
+        if bayesephem:
+            # Global (common) deterministic physical-ephemeris delay; the same
+            # coefficient names appear in every pulsar, so they are shared.
+            extra_gps = extra_gps + [bayesephem_mod.makedelay_bayesephem(
+                psr, bayesephem_partials, inc_saturn=bayesephem_inc_saturn,
+                frame_drift_3axis=bayesephem_frame_3axis,
+                inc_mainbelt=bayesephem_inc_mainbelt)]
+
         # background=False, as we are including a common red noise process
         m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict, 
                                 ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
