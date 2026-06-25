@@ -732,7 +732,7 @@ def fourierbasis_dm(psr, components, T=None, fref=1400.0):
 
     return f, df, fmat * Dm[:, None]
 
-def fourierbasis_chrom(psr, components, T=None, fref=1400.0):
+def fourierbasis_chrom(psr, components, T=None, fref=1400.0, alpha=None):
     """Fourier design matrix for a chromatic Gaussian process with variable index.
 
     Returns a callable design-matrix factory ``fmatfunc(alpha)`` that scales the
@@ -744,8 +744,11 @@ def fourierbasis_chrom(psr, components, T=None, fref=1400.0):
     f, df, fmat = fourierbasis(psr, components, T)
 
     fmat, fnorm = matrix.jnparray(fmat), matrix.jnparray(fref / psr.freqs)
-    def fmatfunc(alpha):
-        return fmat * fnorm[:, None]**alpha
+    if alpha is None:
+        def fmatfunc(alpha):
+            return fmat * fnorm[:, None]**alpha
+    else:
+        return f, df, fmat * fnorm[:, None]**alpha
 
     return f, df, fmatfunc
 
@@ -892,7 +895,7 @@ def make_dmfourierbasis(alpha=2.0, tndm=False):
                   DeprecationWarning, stacklevel=2)
     return make_fourierbasis_dm(alpha=alpha, tndm=tndm)
 
-def makegp_fourier(psr, prior, components, T=None, mean=None, fourierbasis=fourierbasis, common=[], exclude=['f', 'df'], name='fourierGP'):
+def makegp_fourier(psr, prior, components, T=None, mean=None, fourierbasis=fourierbasis, common=[], exclude=['f', 'df'], name='fourierGP', **kwargs):
     argspec = inspect.getfullargspec(prior)
     argmap = [(arg if arg in common else f'{name}_{arg}' if f'{name}_{arg}' in common else f'{psr.name}_{name}_{arg}') +
               (f'({components[arg] if isinstance(components, dict) else components})' if argspec.annotations.get(arg) == typing.Sequence else '')
@@ -902,7 +905,7 @@ def makegp_fourier(psr, prior, components, T=None, mean=None, fourierbasis=fouri
     if isinstance(components, dict):
         components = max(components.values())
 
-    f, df, fmat = fourierbasis(psr, components, T)
+    f, df, fmat = fourierbasis(psr, components, T, **kwargs)
 
     # f, df = matrix.jnparray(f), matrix.jnparray(df)
     def priorfunc(params):
@@ -1256,7 +1259,7 @@ def make_timeinterpbasis(start_time=None, order=1):
 
     return timeinterpbasis
 
-def make_timeinterpbasis_chromatic(start_time=None, order=1, fref=1400.0):
+def make_timeinterpbasis_chromatic(start_time=None, order=1, fref=1400.0, alpha=None):
     """Build a chromatic time-interpolation basis with a variable chromatic index.
 
     Time-domain analogue of :func:`fourierbasis_chrom` used by the FFT-covariance
@@ -1269,8 +1272,11 @@ def make_timeinterpbasis_chromatic(start_time=None, order=1, fref=1400.0):
     def timeinterpbasis_chrom(psr, nmodes, T):
         t_coarse, dt_coarse, Bmat = timeinterpbasis_achrom(psr, nmodes, T)
         scale = (fref / psr.freqs)
-        def Bmat_func(alpha):
-            return (scale[:, None]**alpha) * Bmat
+        if alpha is None:
+            def Bmat_func(alpha):
+                return (scale[:, None]**alpha) * Bmat
+        else:
+            Bmat_func = (scale[:, None]**alpha) * Bmat
         return t_coarse, dt_coarse, Bmat_func
 
     return timeinterpbasis_chrom
@@ -1472,7 +1478,7 @@ def makegp_fftcov_dm(psr, prior, components, T=None, t0=None, order=1, oversampl
     return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
                           components, T=T, fourierbasis=make_timeinterpbasis_dm(start_time=t0, order=order, fref=fref), common=common, name=name)
 
-def makegp_fftcov_chrom(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='chrom_gp', fref=1400.0):
+def makegp_fftcov_chrom(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='chrom_gp', fref=1400.0, alpha=None):
     """FFT-covariance (time-domain) GP for chromatic noise with a variable index.
 
     Chromatic counterpart of :func:`makegp_fftcov`: the achromatic time-interpolation
@@ -1484,7 +1490,7 @@ def makegp_fftcov_chrom(psr, prior, components, T=None, t0=None, order=1, oversa
     """
     T = getspan(psr) if T is None else T
     return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
-                          components, T=T, fourierbasis=make_timeinterpbasis_chromatic(start_time=t0, order=order, fref=fref), common=common, name=name)
+                          components, T=T, fourierbasis=make_timeinterpbasis_chromatic(start_time=t0, order=order, fref=fref, alpha=alpha), common=common, name=name)
 
 def makegp_fftcov_band(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='fftcovGP_band', fref=1400.0):
     T = getspan(psr) if T is None else T

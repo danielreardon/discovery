@@ -25,6 +25,32 @@ def monopole_orfa(z):
 def make2d(array):
     return matrix.jnp.diag(array) if array.ndim == 1 else array
 
+
+def inv_prior(P):
+    """Inverse of a GP prior covariance for the Woodbury factorization.
+
+    ``P`` is the combined intrinsic GP prior, ``psl.N.P_var.getN(params)``.
+    ``discovery.matrix.CompoundGP`` returns it as one of exactly two forms:
+      * a 1-D vector of variances when every intrinsic GP has a diagonal prior
+        (NoiseMatrix1D_var: Fourier red noise / DM, standard ECORR); or
+      * a 2-D block-diagonal covariance when any intrinsic GP has a structured
+        prior (NoiseMatrix2D_var: the correlated / "decorrelating" Legendre ECORR
+        from ``makegp_ecorr_legendre_correlated``), assembled by ``block_diag``
+        with the diagonal blocks promoted via ``jnp.diag``.
+    Branching on ``ndim`` therefore matches the two possible cases exactly, and
+    the off-diagonal mode correlations of the 2-D prior are preserved. Returns
+    the dense inverse to add to ``F^T N^-1 F``.
+
+    NB: the old ``jnp.diag(1.0 / P)`` is only correct for 1-D ``P`` -- on a 2-D
+    ``P`` it silently extracts the diagonal and discards the correlations.
+    """
+    P = matrix.jnp.asarray(P)
+    if P.ndim == 1:
+        return matrix.jnp.diag(1.0 / P)
+    elif P.ndim == 2:
+        return matrix.jnp.linalg.inv(P)
+    raise ValueError(f"inv_prior: expected a 1-D or 2-D GP prior, got ndim={P.ndim}")
+
 class OS:
     def __init__(self, gbl):
         self.psls = gbl.psls
@@ -67,7 +93,7 @@ class OS:
         def get_Q(params, orf=hd_orfa):
             sPhi = matrix.jnp.sqrt(Phivar(params))
 
-            cs = [matrix.jsp.linalg.cho_factor(matrix.jnp.diag(1.0 / Pvar(params)) + FFt) for Pvar, FFt in zip(Pvars, FFts)]
+            cs = [matrix.jsp.linalg.cho_factor(inv_prior(Pvar(params)) + FFt) for Pvar, FFt in zip(Pvars, FFts)]
             Ss = [TTt - FTt.T @ matrix.jsp.linalg.cho_solve(c, FTt) for c, TTt, FTt in zip(cs, TTts, FTts)]
 
             Ss = [0.5 * (S + S.T) for S in Ss]  # ensure symmetry
@@ -118,7 +144,7 @@ class OS:
         def get_opQ(params, orf=hd_orfa):
             sPhi = matrix.jnp.sqrt(Phivar(params))
 
-            cs = [matrix.jsp.linalg.cho_factor(matrix.jnp.diag(1.0 / Pvar(params)) + FFt) for Pvar, FFt in zip(Pvars, FFts)]
+            cs = [matrix.jsp.linalg.cho_factor(inv_prior(Pvar(params)) + FFt) for Pvar, FFt in zip(Pvars, FFts)]
             Ss = [TTt - FTt.T @ matrix.jsp.linalg.cho_solve(c, FTt) for c, TTt, FTt in zip(cs, TTts, FTts)]
 
             Ss = [0.5 * (S + S.T) for S in Ss]  # ensure symmetry
@@ -173,7 +199,7 @@ class OS:
             sPhi = matrix.jnp.sqrt(Phivar(params))
 
             # TO DO: should probably close on Ft.T @ Ft, Tt.T @ Tt, and Tt.T @ Ft (and Ft.T @ Tt) rather than on Fts and Tts
-            cs = [matrix.jsp.linalg.cho_factor(matrix.jnp.diag(1.0 / Pvar(params)) + FFt) for Pvar, FFt in zip(Pvars, FFts)]
+            cs = [matrix.jsp.linalg.cho_factor(inv_prior(Pvar(params)) + FFt) for Pvar, FFt in zip(Pvars, FFts)]
             Ss = [TTt - FTt.T @ matrix.jsp.linalg.cho_solve(c, FTt) for c, TTt, FTt in zip(cs, TTts, FTts)]
 
             Ss = [0.5 * (S + S.T) for S in Ss]  # ensure symmetry
@@ -213,7 +239,7 @@ class OS:
         Fts = [LNm[:,None] * Fmat for LNm, Fmat in zip(LNms, Fmats)]
         Tts = [LNm[:,None] * Tmat for LNm, Tmat in zip(LNms, Tmats)] # this is GW-only
 
-        cs = [matrix.jsp.linalg.cho_factor(matrix.jnp.diag(1/Pmat) + Ft.T @ Ft) for Pmat, Ft in zip(Pmats, Fts)]
+        cs = [matrix.jsp.linalg.cho_factor(inv_prior(Pmat) + Ft.T @ Ft) for Pmat, Ft in zip(Pmats, Fts)]
         Xs = [Tt - Ft @ matrix.jsp.linalg.cho_solve(c, Ft.T @ Tt) for c, Ft, Tt in zip(cs, Fts, Tts)]
 
         Ss = [Tt.T @ X for Tt, X in zip(Tts, Xs)]
@@ -268,6 +294,18 @@ class OS:
         sPhi = matrix.jnp.sqrt(Phi)
 
         Nmats, Fmats, Pmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.N.P_var.getN(params), psl.gw.F) for psl in self.psls])
+
+        # This sampler whitens the F-coefficients with an elementwise sqrt(Pmat)
+        # and a 1-D NoiseMatrix1D_novar(Pmat), which is only valid for a diagonal
+        # prior. A 2-D prior (correlated / decorrelating Legendre ECORR) would be
+        # silently mishandled, so fail loudly. Use OS.os / OS.os_rhosigma / OS.mcos
+        # (full kernel solve, handles 2-D priors) for point estimates, or build the
+        # OS model with the uncorrelated makegp_ecorr_legendre for sampling.
+        if any(matrix.jnp.asarray(Pmat).ndim > 1 for Pmat in Pmats):
+            raise NotImplementedError(
+                "OS.sample_rhosigma assumes a diagonal (1-D) GP prior, but a pulsar has a "
+                "2-D prior covariance (e.g. correlated Legendre ECORR). Use OS.os/os_rhosigma/"
+                "mcos, or an uncorrelated ECORR model for sampling.")
 
         Ks = [matrix.WoodburyKernel_novar(matrix.NoiseMatrix1D_novar(Nmat), Fmat, matrix.NoiseMatrix1D_novar(Pmat))
               for Nmat, Fmat, Pmat in zip(Nmats, Fmats, Pmats)]

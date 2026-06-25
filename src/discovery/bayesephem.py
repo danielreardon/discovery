@@ -56,11 +56,6 @@ _GEN = {
     "z": np.array([[0, -1, 0], [1, 0, 0], [0, 0, 0]], float),
 }
 
-# Solar GM in light-seconds^3 / s^2 (for the crude main-belt model).
-_MU_SUN_LS = const.GMsun / const.c**3
-_AU_LS = const.AU / const.c
-_MJD_J2000 = 51544.5
-
 
 def _ecl2eq(x):
     """(...,3) ecliptic -> equatorial (ICRF), same matrix as enterprise."""
@@ -87,9 +82,22 @@ def _interp_partial(grid_mjd, Q_planet, toas_mjd):
     return out
 
 
+def _col_ranges(params):
+    """Map each param name to its column index range in the assembled G."""
+    ranges, j = {}, 0
+    for nm in params:
+        sz = int(nm[nm.index("(") + 1:-1]) if nm.endswith(")") else 1
+        ranges[nm] = list(range(j, j + sz))
+        j += sz
+    return ranges
+
+
 def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
-                                 inc_saturn=True, frame_drift_3axis=True,
-                                 inc_mainbelt=False):
+                                 inc_jupiter=True, inc_saturn=True, inc_masses=True,
+                                 frame_drift_3axis=True, inc_mainbelt=False,
+                                 inc_minorbody=True, orthogonalize_minorbody=True,
+                                 inc_jerk=False,
+                                 mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     """Build the static per-pulsar design matrix and the parameter spec.
 
     Returns
@@ -119,7 +127,7 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         params.append(f"{name}({size})" if size > 1 else name)
 
     # --- orbit blocks (Jupiter, then optionally Saturn) -----------------
-    for planet, flag in [("jupiter", True), ("saturn", inc_saturn)]:
+    for planet, flag in [("jupiter", inc_jupiter), ("saturn", inc_saturn)]:
         if not flag:
             continue
         Q = _interp_partial(grid, npz[f"{planet}_Q"], toas_mjd)   # (6, ntoa, 3)
@@ -128,13 +136,18 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         add_block(Q, scales, f"bayesephem_{planet}_orbit", 6)
 
     # --- outer-planet masses -------------------------------------------
-    mass_w = prior_block["mass_uniform_width"]
-    mass_order = ["d_jupiter_mass", "d_saturn_mass", "d_uranus_mass", "d_neptune_mass"]
-    body = {"d_jupiter_mass": "jupiter", "d_saturn_mass": "saturn",
-            "d_uranus_mass": "uranus", "d_neptune_mass": "neptune"}
-    mvecs = np.stack([psr.planetssb[:, _PLANET_IDX[body[m]], :3] for m in mass_order])
-    add_block(mvecs, np.array([mass_w[m] for m in mass_order]),
-              "bayesephem_mass", 4)
+    if inc_masses:
+        mass_w = prior_block["mass_uniform_width"]
+        # Select which outer-planet masses to free. Default all four, but over a
+        # short (~6-yr) baseline Uranus/Neptune produce <1 ns of *residual* (their
+        # >80-yr arcs are absorbed by F0/F1) and only serve as leakage channels
+        # for eta, so they can be dropped via mass_bodies=("jupiter","saturn").
+        _all = [("jupiter", "d_jupiter_mass"), ("saturn", "d_saturn_mass"),
+                ("uranus", "d_uranus_mass"), ("neptune", "d_neptune_mass")]
+        sel = [(b, m) for (b, m) in _all if b in mass_bodies]
+        mvecs = np.stack([psr.planetssb[:, _PLANET_IDX[b], :3] for (b, m) in sel])
+        add_block(mvecs, np.array([mass_w[m] for (b, m) in sel]),
+                  "bayesephem_mass", len(sel))
 
     # --- frame rotation rate (3-axis or z-only) ------------------------
     earth = np.asarray(psr.planetssb[:, 2, :3])      # (ntoa, 3) light-seconds
@@ -150,45 +163,94 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
     ])
     add_block(fvecs, fwidth, "bayesephem_frame_rate", len(axes))
 
-    # --- optional main-belt total-mass term ----------------------------
+    # --- optional main-belt asteroid block (Ceres/Pallas/Vesta) --------
+    # Mass perturbations d_mu_a = d(m_a / M_sun); basis = each asteroid's real
+    # barycentric trajectory (from EPM2021) tabulated in the artifact. Periods
+    # 3.6-4.6 yr sit inside the MPTA band; priors come from the inter-ephemeris
+    # GM spread (Pallas dominates).
     if inc_mainbelt:
-        bw = prior_block.get("mainbelt_width")
-        if bw is None or not np.isfinite(bw):
-            raise ValueError("inc_mainbelt=True but artifact has no mainbelt_width")
-        belt = _mainbelt_vector(toas_mjd)            # (ntoa, 3) light-seconds
-        add_block(belt[None], np.array([bw]), "bayesephem_mainbelt", 1)
+        if "mainbelt_basis" not in npz:
+            raise ValueError("inc_mainbelt=True but artifact has no main-belt block")
+        basis = _interp_partial(grid, npz["mainbelt_basis"], toas_mjd)  # (n_ast, ntoa, 3)
+        widths = npz["mainbelt_widths"]
+        add_block(basis, widths, "bayesephem_mainbelt", basis.shape[0])
+
+    # --- minor-body (TNO-dominated) barycentre normalisation eta -------
+    # The Kuiper belt is a quasi-symmetric ring centred on the SSB: it has no
+    # net dipole, so its mass enters only the *denominator* M_tot of
+    # R_SSB = sum(m_i r_i)/sum(m_i). Changing the adopted total minor-body mass
+    # therefore rescales the entire (Jupiter-dominated) Sun->SSB wobble by
+    # eta = -dM/M_tot, coherently: dx_Earth->SSB(t) = eta * r_Sun->SSB(t)|_ref.
+    # This is the physical origin of the otherwise "effective, unphysical
+    # Jupiter-mass" term seen when bridging ephemerides; its prior is the
+    # inter-ephemeris TNO+asteroid total-mass spread (~1-1.5e-7), NOT the
+    # Juno-tight GM_Jupiter prior. Degenerate with d_jupiter_mass at the ~85%
+    # level (they differ only by the Saturn-and-beyond fraction of the wobble);
+    # the correct, very different priors break the degeneracy.
+    if inc_minorbody:
+        # r_Sun->SSB = R_SSB - r_Sun = -(Sun relative to SSB) = -sunssb.
+        r_sun_ssb = -np.asarray(psr.sunssb)[:, :3]      # (ntoa, 3) light-seconds
+        eta_w = float(prior_block.get("minorbody_width", 1.5e-7))
+        add_block(r_sun_ssb[None], np.array([eta_w]), "bayesephem_minorbody", 1)
+
+    # --- free-direction SSB jerk (3-axis) ------------------------------
+    # A distant unmodelled mass (e.g. Planet Nine) or any common dipolar
+    # perturber: the *constant* SSB acceleration it produces is degenerate with
+    # per-pulsar F1 (spin-down) and unobservable, but the *jerk* (cubic in time)
+    # survives an F0+F1 fit. dx_Earth->SSB(t) = (1/6) jerk * (t-tref)^3 (free 3D
+    # direction); delay = -(1/6) jerk.p_hat (t-tref)^3. Generalises the
+    # fixed-direction outer-planet mass dipoles to a free direction; the fitted
+    # vector maps to (mass, distance) of a perturber via |jerk| ~ m r^-3.5.
+    if inc_jerk:
+        tsec = np.asarray(psr.toas)
+        tc3 = ((tsec - tsec.mean()) ** 3) / 6.0          # (ntoa,), seconds^3
+        jvecs = np.zeros((3, ntoa, 3))
+        for a in range(3):
+            jvecs[a, :, a] = tc3                          # dx_Earth->SSB along axis a
+        jw = float(prior_block.get("jerk_width", 1.0e-31))
+        add_block(jvecs, np.array([jw, jw, jw]), "bayesephem_ssb_jerk", 3)
 
     G = np.concatenate(cols, axis=1)
+
+    # Orthogonalise the planet mass/orbit columns against eta so eta carries the
+    # full (Jupiter-dominated) normalisation wobble and the planet terms only
+    # span its orthogonal complement -- removing the ~85% eta<->Jupiter
+    # degeneracy at the design-matrix level (cleaner sampling; eta is "pinned"
+    # to the normalisation, not double-counted by Jupiter mass/orbit).
+    if inc_minorbody and orthogonalize_minorbody:
+        rng = _col_ranges(params)            # keys carry the (size) suffix
+        base = {nm.split("(")[0]: cols for nm, cols in rng.items()}
+        e = G[:, base["bayesephem_minorbody"][0]]
+        ee = float(e @ e)
+        if ee > 0:
+            for nm in ("bayesephem_jupiter_orbit", "bayesephem_saturn_orbit",
+                       "bayesephem_mass"):
+                for j in base.get(nm, []):
+                    G[:, j] -= (G[:, j] @ e / ee) * e
     return G, params
 
 
-def _mainbelt_vector(toas_mjd):
-    """Crude single-body circular-orbit model of the main-belt centre of mass.
-
-    NOTE: this is a deliberately simple placeholder (a point mass on a fixed
-    circular ecliptic orbit at R = 2.77 AU) so the main-belt mass parameter can
-    be exercised and its effect on GW posteriors assessed (per the brief). It is
-    NOT a faithful belt model and should be refined (e.g. Ceres/Vesta/Pallas
-    individually, or a precomputed belt basis in the artifact).
-    """
-    R = 2.77 * _AU_LS
-    nmean = np.sqrt(_MU_SUN_LS / R**3)               # rad/s
-    phase = nmean * (toas_mjd * 86400.0 - _MJD_J2000 * 86400.0)
-    x_ecl = np.stack([R * np.cos(phase), R * np.sin(phase), np.zeros_like(phase)], axis=1)
-    return _ecl2eq(x_ecl)
-
-
-def makedelay_bayesephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_saturn=True,
-                         frame_drift_3axis=True, inc_mainbelt=False):
+def makedelay_bayesephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=True,
+                         inc_saturn=True, inc_masses=True, frame_drift_3axis=True,
+                         inc_mainbelt=False, inc_minorbody=True,
+                         orthogonalize_minorbody=True, inc_jerk=False,
+                         mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     """Factory for the BayesEphem 2.0 deterministic delay component.
+
+    Block toggles (``inc_jupiter``, ``inc_saturn``, ``inc_masses``,
+    ``frame_drift_3axis``, ``inc_mainbelt``) select which perturbation blocks
+    enter the model, e.g. frame + main belt only with everything else off.
 
     Returns a callable ``delay(params) -> jnp.ndarray`` (length ntoa) with a
     ``.params`` attribute listing the global/common parameter names. The design
     matrix is static; only the global coefficients ``c`` are sampled.
     """
     G_np, names = physical_ephem_design_matrix(
-        psr, partials_file, inc_saturn=inc_saturn,
-        frame_drift_3axis=frame_drift_3axis, inc_mainbelt=inc_mainbelt)
+        psr, partials_file, inc_jupiter=inc_jupiter, inc_saturn=inc_saturn,
+        inc_masses=inc_masses, frame_drift_3axis=frame_drift_3axis,
+        inc_mainbelt=inc_mainbelt, inc_minorbody=inc_minorbody,
+        orthogonalize_minorbody=orthogonalize_minorbody, inc_jerk=inc_jerk,
+        mass_bodies=mass_bodies)
     G = jnp.asarray(G_np)
 
     def assemble_c(params):
@@ -216,4 +278,6 @@ def bayesephem_priordict():
         "bayesephem_mass": [-1.0, 1.0],
         "bayesephem_frame_rate": [-1.0, 1.0],
         "bayesephem_mainbelt": [-1.0, 1.0],
+        "bayesephem_minorbody": [-1.0, 1.0],
+        "bayesephem_ssb_jerk": [-1.0, 1.0],
     }
