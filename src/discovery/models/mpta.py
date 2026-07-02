@@ -144,8 +144,9 @@ def _set_band_priors(psr, band=False, band_alpha=False, bw_min_mhz=20.0):
     names = ([] + (['band_gp'] if band else []) + (['bandalpha_gp'] if band_alpha else []))
     updates = {}
     for n in names:
-        updates[f'{psr.name}_{n}_fcenter'] = [fmin, fmax]
-        updates[f'{psr.name}_{n}_log10_bw'] = [float(np.log10(bw_min_mhz)), float(np.log10(span))]
+        psr_key = re.escape(psr.name)
+        updates[f'{psr_key}_{n}_fcenter'] = [fmin, fmax]
+        updates[f'{psr_key}_{n}_log10_bw'] = [float(np.log10(bw_min_mhz)), float(np.log10(span))]
     prior.priordict_standard.update(updates)
 
 
