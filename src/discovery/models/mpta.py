@@ -253,14 +253,19 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     
     return m
 
-def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn", chrom_poly=True):
+def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn", chrom_poly=True,
+                 freespec=False, freespec_components=30):
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
     def has_param(df, param_string):
         return any(param_string in col for col in df.columns)
  
     if chrom_poly:
         print("Note: chrom_poly=True (chromatic polynomial is marginalised by default). Set chrom_poly=False to disable.")
- 
+
+    if freespec:
+        prior.priordict_standard.update({r'curn_log10_rho\(([0-9]*)\)': [-9, -4],
+                                         'curn_log10_rho': [-9, -4]})
+
     Tspan = signals.getspan(psrs)
     common_components = int(Tspan / (max_cadence_days * 86400))
     common_knots = 2 * common_components + 1
@@ -288,14 +293,19 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
         # sw_gp_log10_ell / sw_gp_log10_sigma. See single_pulsar_noise.
         sw_powerlaw = has_param(df, "sw_gp_log10_A") or has_param(df, "sw_gp_gamma")
 
-        if not fftInt:
+        if freespec:
+            # Free-spectrum CURN: one common log10_rho per frequency bin
+            # (Fourier basis; use with fftInt=False). Motivated by the
+            # non-power-law common band power at 1.5-2.1 yr (Gate-2).
+            curn = signals.makegp_fourier(psr, signals.freespectrum, freespec_components, Tspan, common=['curn_log10_rho'], name='curn')
+        elif not fftInt:
             curn = signals.makegp_fourier(psr, signals.powerlaw, common_components, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
         else:
             curn = signals.makegp_fftcov(psr, signals.powerlaw, common_knots, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
         extra_gps = curn if isinstance(curn, list) else [curn]
- 
+
         # background=False, as we are including a common red noise process
-        m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict, 
+        m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict,
                                 ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
                                 red=has_param(df, "red_noise"), red2=has_param(df, "red_noise2"),
                                 dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_poly=chrom_poly, sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw,
