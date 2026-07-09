@@ -258,6 +258,8 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
 
 def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn", Tspan=None,
                  chrom_poly=False, fix_chrom_alpha=True, hd=False,
+                 freespec=False, freespec_components=30,  # free-spectrum CURN (per-bin log10_rho) instead of the power law; ~30 components keeps the parameter space manageable for a steep process
+                 red_fixed_dict=None,  # {psrname: (log10_A, gamma)}: FIX each pulsar's red noise at these values (e.g. the power-law common-run posteriors) so the free-spectrum bins test excess over the same null the band power was defined against, rather than competing with co-sampled red noise for the same variance
                  bayesephem=False, bayesephem_partials=bayesephem_mod.DEFAULT_PARTIALS,
                  bayesephem_inc_jupiter=True, bayesephem_inc_saturn=False, bayesephem_inc_masses=True,
                  bayesephem_frame_3axis=True, bayesephem_inc_mainbelt=True,
@@ -271,6 +273,9 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
     if chrom_poly:
         print("Note: chrom_poly=True (chromatic polynomial is marginalised by default). Set chrom_poly=False to disable.")
 
+    if freespec:
+        prior.priordict_standard.update({r'curn_log10_rho\(([0-9]*)\)': [-9, -4],
+                                         'curn_log10_rho': [-9, -4]})
     if bayesephem:
         # Register uniform [-1, 1] priors for the global BayesEphem coefficients
         # (the inter-ephemeris prior half-widths are folded into the design matrix).
@@ -309,11 +314,26 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
         # sw_gp_log10_ell / sw_gp_log10_sigma. See single_pulsar_noise.
         sw_powerlaw = has_param(df, "sw_gp_log10_A") or has_param(df, "sw_gp_gamma")
 
-        if not fftInt:
+        if freespec:
+            # Free-spectrum CURN: one common log10_rho per frequency bin
+            # (Fourier basis; use with fftInt=False). Motivated by the
+            # non-power-law common band power at 1.5-2.1 yr (Gate-2).
+            curn = signals.makegp_fourier(psr, signals.freespectrum, freespec_components, Tspan, common=['curn_log10_rho'], name='curn')
+        elif not fftInt:
             curn = signals.makegp_fourier(psr, signals.powerlaw, common_components, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
         else:
             curn = signals.makegp_fftcov(psr, signals.powerlaw, common_knots, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
         extra_gps = curn if isinstance(curn, list) else [curn]
+
+        red_flag = has_param(df, "red_noise")
+        if red_fixed_dict is not None and psr.name in red_fixed_dict:
+            _la, _ga = red_fixed_dict[psr.name]
+            def _make_fixed_red(_la=_la, _ga=_ga):
+                def powerlaw_fixed(f, df):
+                    return signals.powerlaw(f, df, log10_A=_la, gamma=_ga)
+                return powerlaw_fixed
+            extra_gps = extra_gps + [signals.makegp_fourier(psr, _make_fixed_red(), common_components, Tspan, name='red_noise_fixed')]
+            red_flag = False
 
         if bayesephem:
             # Global (common) deterministic physical-ephemeris delay; the same
@@ -330,7 +350,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn
         # background=False, as we are including a common red noise process
         m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict, 
                                 ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
-                                red=has_param(df, "red_noise"), red2=has_param(df, "red_noise2"),
+                                red=red_flag, red2=has_param(df, "red_noise2"),
                                 dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_alpha=chrom_alpha, chrom_poly=chrom_poly, sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw,
                                 band=has_param(df, "band_gp"), band_alpha=has_param(df, "bandalpha_gp"),
                                 chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
