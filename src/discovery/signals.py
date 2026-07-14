@@ -1123,7 +1123,12 @@ def makeglobalgp_fourier(psrs, priors, orfs, components, T, fourierbasis=fourier
             orfcf = matrix.jsp.linalg.cho_factor(orfmat)
             def factors(params):
                 phi = prior(f, df, *[params[arg] for arg in argmap])
-                phicf = matrix.jsp.linalg.cho_factor(phi)
+                # phi is the 1D diagonal PSD for a power-law (diagonal) HD spectrum;
+                # cglogL consumes phicf as an (ngp x ngp) Cholesky factor tuple, so
+                # densify the diagonal before factoring (ngp x ngp is small -- the
+                # matrix-free path never forms the full (npsr*ngp)^2 matrix).
+                phimat = phi if phi.ndim == 2 else jnp.diag(phi)
+                phicf = matrix.jsp.linalg.cho_factor(phimat)
 
                 return orfcf, phicf
             factors.params = argmap

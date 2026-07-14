@@ -133,3 +133,4 @@ dmypy.json
 
 # OS X
 .DS_Store
+.claude/worktrees/
