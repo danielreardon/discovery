@@ -1,6 +1,6 @@
-"""Deterministic physical-ephemeris (BayesEphem 2.0) signal for Discovery.
+"""Deterministic physical-ephemeris (PEBBLE) signal for Discovery.
 
-This is the JAX backend of the broadened, multi-ephemeris BayesEphem model
+This is the JAX backend of the broadened, multi-ephemeris PEBBLE model
 (Jupiter + Saturn orbital blocks, 3-axis frame rotation rate, outer-planet
 masses, optional main-belt term). It mirrors enterprise's
 ``physical_ephem_delay`` math but, because the delay is *linear* in the global
@@ -16,7 +16,7 @@ parameter names appear in every ``PulsarLikelihood``, like ``crn_*``); only
 Parameterization (all uniform priors on [-1, 1]): the artifact's physical prior
 half-widths are folded into ``G_alpha``, so each sampled coefficient is a
 dimensionless fraction of its prior range. Physical perturbation = width x
-coefficient. This keeps every BayesEphem parameter uniform (Discovery
+coefficient. This keeps every PEBBLE parameter uniform (Discovery
 convention) while reproducing the artifact's inter-ephemeris prior envelope.
 
 Artifact produced by the ``bayesephem2`` pipeline (see
@@ -133,7 +133,7 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         Q = _interp_partial(grid, npz[f"{planet}_Q"], toas_mjd)   # (6, ntoa, 3)
         widths = npz[f"{planet}_orbit_widths"]                    # (6,)
         scales = _MASS_RATIO[planet] * widths
-        add_block(Q, scales, f"bayesephem_{planet}_orbit", 6)
+        add_block(Q, scales, f"phys_ephem_{planet}_orbit", 6)
 
     # --- outer-planet masses -------------------------------------------
     if inc_masses:
@@ -147,7 +147,7 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         sel = [(b, m) for (b, m) in _all if b in mass_bodies]
         mvecs = np.stack([psr.planetssb[:, _PLANET_IDX[b], :3] for (b, m) in sel])
         add_block(mvecs, np.array([mass_w[m] for (b, m) in sel]),
-                  "bayesephem_mass", len(sel))
+                  "phys_ephem_mass", len(sel))
 
     # --- frame rotation rate (3-axis or z-only) ------------------------
     earth = np.asarray(psr.planetssb[:, 2, :3])      # (ntoa, 3) light-seconds
@@ -161,7 +161,7 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         _ecl2eq(yrfrac[:, None] * np.einsum("jk,ik->ij", _GEN[a], earth_ecl))
         for a in axes
     ])
-    add_block(fvecs, fwidth, "bayesephem_frame_rate", len(axes))
+    add_block(fvecs, fwidth, "phys_ephem_frame_rate", len(axes))
 
     # --- optional main-belt asteroid block (Ceres/Pallas/Vesta) --------
     # Mass perturbations d_mu_a = d(m_a / M_sun); basis = each asteroid's real
@@ -173,7 +173,7 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
             raise ValueError("inc_mainbelt=True but artifact has no main-belt block")
         basis = _interp_partial(grid, npz["mainbelt_basis"], toas_mjd)  # (n_ast, ntoa, 3)
         widths = npz["mainbelt_widths"]
-        add_block(basis, widths, "bayesephem_mainbelt", basis.shape[0])
+        add_block(basis, widths, "phys_ephem_mainbelt", basis.shape[0])
 
     # --- minor-body (TNO-dominated) barycentre normalisation eta -------
     # The Kuiper belt is a quasi-symmetric ring centred on the SSB: it has no
@@ -191,7 +191,7 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         # r_Sun->SSB = R_SSB - r_Sun = -(Sun relative to SSB) = -sunssb.
         r_sun_ssb = -np.asarray(psr.sunssb)[:, :3]      # (ntoa, 3) light-seconds
         eta_w = float(prior_block.get("minorbody_width", 1.5e-7))
-        add_block(r_sun_ssb[None], np.array([eta_w]), "bayesephem_minorbody", 1)
+        add_block(r_sun_ssb[None], np.array([eta_w]), "phys_ephem_minorbody", 1)
 
     # --- free-direction SSB jerk (3-axis) ------------------------------
     # A distant unmodelled mass (e.g. Planet Nine) or any common dipolar
@@ -208,7 +208,7 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         for a in range(3):
             jvecs[a, :, a] = tc3                          # dx_Earth->SSB along axis a
         jw = float(prior_block.get("jerk_width", 1.0e-31))
-        add_block(jvecs, np.array([jw, jw, jw]), "bayesephem_ssb_jerk", 3)
+        add_block(jvecs, np.array([jw, jw, jw]), "phys_ephem_ssb_jerk", 3)
 
     G = np.concatenate(cols, axis=1)
 
@@ -220,22 +220,22 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
     if inc_minorbody and orthogonalize_minorbody:
         rng = _col_ranges(params)            # keys carry the (size) suffix
         base = {nm.split("(")[0]: cols for nm, cols in rng.items()}
-        e = G[:, base["bayesephem_minorbody"][0]]
+        e = G[:, base["phys_ephem_minorbody"][0]]
         ee = float(e @ e)
         if ee > 0:
-            for nm in ("bayesephem_jupiter_orbit", "bayesephem_saturn_orbit",
-                       "bayesephem_mass"):
+            for nm in ("phys_ephem_jupiter_orbit", "phys_ephem_saturn_orbit",
+                       "phys_ephem_mass"):
                 for j in base.get(nm, []):
                     G[:, j] -= (G[:, j] @ e / ee) * e
     return G, params
 
 
-def makedelay_bayesephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=True,
+def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=True,
                          inc_saturn=True, inc_masses=True, frame_drift_3axis=True,
                          inc_mainbelt=False, inc_minorbody=True,
                          orthogonalize_minorbody=True, inc_jerk=False,
                          mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
-    """Factory for the BayesEphem 2.0 deterministic delay component.
+    """Factory for the PEBBLE deterministic delay component.
 
     Block toggles (``inc_jupiter``, ``inc_saturn``, ``inc_masses``,
     ``frame_drift_3axis``, ``inc_mainbelt``) select which perturbation blocks
@@ -259,25 +259,25 @@ def makedelay_bayesephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=Tru
         parts = [jnp.atleast_1d(params[name]) for name in names]
         return jnp.concatenate(parts)
 
-    def delay_bayesephem(params):
+    def delay_phys_ephem(params):
         return G @ assemble_c(params)
 
-    delay_bayesephem.params = names
-    return delay_bayesephem
+    delay_phys_ephem.params = names
+    return delay_phys_ephem
 
 
-def bayesephem_priordict():
-    """Uniform [-1, 1] priors for every BayesEphem 2.0 coefficient.
+def phys_ephem_priordict():
+    """Uniform [-1, 1] priors for every PEBBLE coefficient.
 
     Widths are folded into the design matrix, so the sampled coefficients are
     dimensionless fractions of their (inter-ephemeris-derived) prior ranges.
     """
     return {
-        "bayesephem_jupiter_orbit": [-1.0, 1.0],
-        "bayesephem_saturn_orbit": [-1.0, 1.0],
-        "bayesephem_mass": [-1.0, 1.0],
-        "bayesephem_frame_rate": [-1.0, 1.0],
-        "bayesephem_mainbelt": [-1.0, 1.0],
-        "bayesephem_minorbody": [-1.0, 1.0],
-        "bayesephem_ssb_jerk": [-1.0, 1.0],
+        "phys_ephem_jupiter_orbit": [-1.0, 1.0],
+        "phys_ephem_saturn_orbit": [-1.0, 1.0],
+        "phys_ephem_mass": [-1.0, 1.0],
+        "phys_ephem_frame_rate": [-1.0, 1.0],
+        "phys_ephem_mainbelt": [-1.0, 1.0],
+        "phys_ephem_minorbody": [-1.0, 1.0],
+        "phys_ephem_ssb_jerk": [-1.0, 1.0],
     }

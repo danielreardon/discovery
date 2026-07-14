@@ -8,7 +8,7 @@ from .. import prior
 from .. import solar
 from .. import likelihood
 from .. import deterministic
-from .. import bayesephem as bayesephem_mod
+from .. import phys_ephem as phys_ephem_mod
 from .. import const
 
 def write_ml_json(df, savename):
@@ -299,13 +299,22 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                  chrom_poly=False, fix_chrom_alpha=True, hd=False, use_commongp=False,
                  freespec=False, freespec_components=30,  # free-spectrum CURN (per-bin log10_rho) instead of the power law; ~30 components keeps the parameter space manageable for a steep process
                  red_fixed_dict=None,  # {psrname: (log10_A, gamma)}: FIX each pulsar's red noise at these values (e.g. the power-law common-run posteriors) so the free-spectrum bins test excess over the same null the band power was defined against, rather than competing with co-sampled red noise for the same variance
-                 bayesephem=False, bayesephem_partials=bayesephem_mod.DEFAULT_PARTIALS,
-                 bayesephem_inc_jupiter=True, bayesephem_inc_saturn=False, bayesephem_inc_masses=True,
-                 bayesephem_frame_3axis=True, bayesephem_inc_mainbelt=True,
-                 bayesephem_inc_minorbody=True, bayesephem_orthogonalize_minorbody=False,
-                 bayesephem_inc_jerk=True,
-                 bayesephem_mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
+                 use_phys_ephem=False, phys_ephem_partials=phys_ephem_mod.DEFAULT_PARTIALS,
+                 phys_ephem_inc_jupiter=True, phys_ephem_inc_saturn=False, phys_ephem_inc_masses=True,
+                 phys_ephem_frame_3axis=True, phys_ephem_inc_mainbelt=True,
+                 phys_ephem_inc_minorbody=True, phys_ephem_orthogonalize_minorbody=False,
+                 phys_ephem_inc_jerk=True,
+                 phys_ephem_mass_bodies=("jupiter", "saturn", "uranus", "neptune"),
+                 bayesephem=None):  # DEPRECATED alias for use_phys_ephem; remove once transition complete
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
+    # DEPRECATED alias: bayesephem= -> use_phys_ephem= (the model is physical, not Bayesian; PEBBLE).
+    # Remove once the transition is complete (see pebble-naming-convention).
+    if bayesephem is not None:
+        import warnings
+        warnings.warn("common_noise(bayesephem=...) is deprecated; use use_phys_ephem=...",
+                      DeprecationWarning, stacklevel=2)
+        use_phys_ephem = bayesephem
+
     def has_param(df, param_string):
         return any(param_string in col for col in df.columns)
 
@@ -335,10 +344,10 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
     if freespec:
         prior.priordict_standard.update({r'curn_log10_rho\(([0-9]*)\)': [-9, -4],
                                          'curn_log10_rho': [-9, -4]})
-    if bayesephem:
-        # Register uniform [-1, 1] priors for the global BayesEphem coefficients
-        # (the inter-ephemeris prior half-widths are folded into the design matrix).
-        prior.priordict_standard.update(bayesephem_mod.bayesephem_priordict())
+    if use_phys_ephem:
+        # Register uniform [-1, 1] priors for the global PEBBLE (physical-ephemeris)
+        # coefficients (the inter-ephemeris prior half-widths are folded into the design matrix).
+        prior.priordict_standard.update(phys_ephem_mod.phys_ephem_priordict())
 
     if Tspan is None:
         Tspan = signals.getspan(psrs)
@@ -396,21 +405,21 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             common_gps = common_gps + [signals.makegp_fourier(psr, _make_fixed_red(), common_components, Tspan, name='red_noise_fixed')]
             red_flag = False
 
-        # BayesEphem is a DETERMINISTIC (callable) delay, not a sampled GP: it flows
-        # through psl.y as a CompoundDelay and stays in the per-pulsar likelihood in
-        # both paths (it is not stacked into the commongp).
-        be_delays = []
-        if bayesephem:
+        # PEBBLE (physical-ephemeris) is a DETERMINISTIC (callable) delay, not a sampled
+        # GP: it flows through psl.y as a CompoundDelay and stays in the per-pulsar
+        # likelihood in both paths (it is not stacked into the commongp).
+        pe_delays = []
+        if use_phys_ephem:
             # Global (common) deterministic physical-ephemeris delay; the same
             # coefficient names appear in every pulsar, so they are shared.
-            be_delays = [bayesephem_mod.makedelay_bayesephem(
-                psr, bayesephem_partials, inc_jupiter=bayesephem_inc_jupiter,
-                inc_saturn=bayesephem_inc_saturn, inc_masses=bayesephem_inc_masses,
-                frame_drift_3axis=bayesephem_frame_3axis,
-                inc_mainbelt=bayesephem_inc_mainbelt,
-                inc_minorbody=bayesephem_inc_minorbody,
-                orthogonalize_minorbody=bayesephem_orthogonalize_minorbody,
-                inc_jerk=bayesephem_inc_jerk, mass_bodies=bayesephem_mass_bodies)]
+            pe_delays = [phys_ephem_mod.makedelay_phys_ephem(
+                psr, phys_ephem_partials, inc_jupiter=phys_ephem_inc_jupiter,
+                inc_saturn=phys_ephem_inc_saturn, inc_masses=phys_ephem_inc_masses,
+                frame_drift_3axis=phys_ephem_frame_3axis,
+                inc_mainbelt=phys_ephem_inc_mainbelt,
+                inc_minorbody=phys_ephem_inc_minorbody,
+                orthogonalize_minorbody=phys_ephem_orthogonalize_minorbody,
+                inc_jerk=phys_ephem_inc_jerk, mass_bodies=phys_ephem_mass_bodies)]
 
         if commongp_path:
             # Build the STACKABLE sampled Fourier/fftcov GPs with the SAME makegp_*
@@ -434,7 +443,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                                        red=False, red2=False, dm=False, chrom=False, chrom_alpha=chrom_alpha, chrom_poly=False, sw=False, sw_powerlaw=sw_powerlaw,
                                        band=False, band_alpha=False,
                                        chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
-                                       extra_gps=(sw_gps + be_delays))
+                                       extra_gps=(sw_gps + pe_delays))
 
             per_psr_stack_gps.append(matrix.CompoundGP(stack_gps + common_gps))
             print("Including pulsar", psr.name, "(commongp) with model parameters:\n", core.logL.params)
@@ -447,7 +456,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                                     dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_alpha=chrom_alpha, chrom_poly=chrom_poly, sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw,
                                     band=has_param(df, "band_gp"), band_alpha=has_param(df, "bandalpha_gp"),
                                     chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
-                                    extra_gps=(common_gps + be_delays))
+                                    extra_gps=(common_gps + pe_delays))
 
             print("Including pulsar", psr.name, "with model parameters:\n", m.logL.params)
             psls.append(m)
