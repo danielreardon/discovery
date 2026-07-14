@@ -158,6 +158,48 @@ def fourier_variance_fixed(psr):
     ])
 
 
+def chrom_varfp(psr):
+    """Callable-F GP on a CONSTANT-N base -> WoodburyKernel_varFP.
+
+    A variable-index chromatic Fourier basis (``fourierbasis_chrom``) makes the
+    design matrix F a callable of the sampled chromatic index; with fixed
+    (noisedict) white noise the Woodbury N stays constant, so the dispatcher
+    picks ``varFP``."""
+    return ds.PulsarLikelihood([
+        psr.residuals,
+        ds.makenoise_measurement(psr, psr.noisedict),
+        ds.makegp_timing(psr, svd=True),
+        ds.makegp_fourier(psr, ds.powerlaw, components=20, name="chrom_gp",
+                          fourierbasis=ds.fourierbasis_chrom),
+    ])
+
+
+def chrom_varnp(psr):
+    """Callable-F GP with a VARIABLE-N base -> WoodburyKernel_varNP (the
+    "_varNFP" case). Free white noise (no noisedict) makes N variable, so even
+    with a callable F the dispatcher routes to ``varNP``. This is what most
+    real chromatic-noise runs actually hit."""
+    return ds.PulsarLikelihood([
+        psr.residuals,
+        ds.makenoise_measurement(psr),  # free efac/equad -> variable N
+        ds.makegp_timing(psr, svd=True),
+        ds.makegp_fourier(psr, ds.powerlaw, components=20, name="chrom_gp",
+                          fourierbasis=ds.fourierbasis_chrom),
+    ])
+
+
+def chrom_delay(psr):
+    """Callable F (varFP) AND callable y (deterministic delay) together."""
+    return ds.PulsarLikelihood([
+        psr.residuals,
+        ds.makenoise_measurement(psr, psr.noisedict),
+        ds.makegp_timing(psr, svd=True),
+        ds.makegp_fourier(psr, ds.powerlaw, components=20, name="chrom_gp",
+                          fourierbasis=ds.fourierbasis_chrom),
+        ds.makedelay(psr, _toy_delay, name="toydelay"),
+    ])
+
+
 # ---------------------------------------------------------------------------
 # Multi-pulsar: GlobalLikelihood — per-pulsar models + optional correlated GP
 # ---------------------------------------------------------------------------

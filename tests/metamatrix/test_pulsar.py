@@ -38,6 +38,9 @@ LOGL_ROWS = [
     pytest.param(R.fftcov_2d,             id="fftcov_2d"),
     pytest.param(R.delay,                 id="delay"),
     pytest.param(R.fourier_variance_fixed, id="fourier_variance_fixed"),
+    pytest.param(R.chrom_varfp,           id="chrom_varfp(callableF)"),
+    pytest.param(R.chrom_varnp,           id="chrom_varnp(callableF+varN)"),
+    pytest.param(R.chrom_delay,           id="chrom_delay(callableF+callableY)"),
 ]
 
 
@@ -79,6 +82,17 @@ def test_logL(psr, build):
 CONDITIONAL_ROWS = [
     pytest.param(R.full_rn, id="full_rn"),
     pytest.param(R.multi_vgp, id="multi_vgp"),
+    pytest.param(R.chrom_varfp, id="chrom_varfp(callableF)"),
+    pytest.param(R.chrom_varnp, id="chrom_varnp(callableF+varN)"),
+]
+
+# clogL (GP-component decomposition) and sample are unsupported for callable-F
+# Woodbury kernels even in matrix.py (the reference), so their rows exclude the
+# callable-F recipes; callable-F is validated for logL / conditional /
+# sample_conditional only.
+CLOGL_ROWS = [
+    pytest.param(R.full_rn, id="full_rn"),
+    pytest.param(R.multi_vgp, id="multi_vgp"),
 ]
 
 
@@ -99,7 +113,7 @@ def test_conditional(psr, build):
                      name=f"{build.__name__}[{route}].cf")
 
 
-@pytest.mark.parametrize("build", CONDITIONAL_ROWS)
+@pytest.mark.parametrize("build", CLOGL_ROWS)
 def test_clogL(psr, build):
     r = _routes(build, psr)
     ref = r["matrix"]
