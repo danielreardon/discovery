@@ -19,8 +19,8 @@ dimensionless fraction of its prior range. Physical perturbation = width x
 coefficient. This keeps every PEBBLE parameter uniform (Discovery
 convention) while reproducing the artifact's inter-ephemeris prior envelope.
 
-Artifact produced by the ``bayesephem2`` pipeline (see
-BayesEphem2.0/src/bayesephem2). Consumed identically here and by the enterprise
+Artifact produced by the ``PEBBLE`` pipeline (see
+PEBBLE/src/pebble). Consumed identically here and by the enterprise
 backend.
 """
 
@@ -33,7 +33,7 @@ import jax.numpy as jnp
 from . import const
 
 # Default shipped artifact (multi-ephemeris: DE440 ref, INPOP21a, EPM2021).
-DEFAULT_PARTIALS = "/fred/oz002/dreardon/BayesEphem2.0/src/BayesEphem2.0/bayesephem2_artifact.npz"
+DEFAULT_PARTIALS = "/fred/oz002/dreardon/PEBBLE/src/pebble/pebble.npz"
 
 # planetssb body-index order (matches enterprise / libstempo).
 _PLANET_IDX = {"jupiter": 4, "saturn": 5, "uranus": 6, "neptune": 7}
