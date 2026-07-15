@@ -304,17 +304,8 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                  phys_ephem_frame_3axis=True, phys_ephem_inc_mainbelt=True,
                  phys_ephem_inc_minorbody=True, phys_ephem_orthogonalize_minorbody=False,
                  phys_ephem_inc_jerk=True,
-                 phys_ephem_mass_bodies=("jupiter", "saturn", "uranus", "neptune"),
-                 bayesephem=None):  # DEPRECATED alias for use_phys_ephem; remove once transition complete
+                 phys_ephem_mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
-    # DEPRECATED alias: bayesephem= -> use_phys_ephem= (the model is physical, not Bayesian; PEBBLE).
-    # Remove once the transition is complete (see pebble-naming-convention).
-    if bayesephem is not None:
-        import warnings
-        warnings.warn("common_noise(bayesephem=...) is deprecated; use use_phys_ephem=...",
-                      DeprecationWarning, stacklevel=2)
-        use_phys_ephem = bayesephem
-
     def has_param(df, param_string):
         return any(param_string in col for col in df.columns)
 
