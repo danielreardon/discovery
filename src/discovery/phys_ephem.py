@@ -94,7 +94,7 @@ def _col_ranges(params):
 
 def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
                                  inc_jupiter=True, inc_saturn=True, inc_masses=True,
-                                 frame_drift_3axis=True, inc_mainbelt=False,
+                                 frame_drift_3axis=True, inc_frame_drift=True, inc_mainbelt=False,
                                  inc_minorbody=True, orthogonalize_minorbody=True,
                                  inc_jerk=False,
                                  mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
@@ -149,19 +149,20 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         add_block(mvecs, np.array([mass_w[m] for (b, m) in sel]),
                   "phys_ephem_mass", len(sel))
 
-    # --- frame rotation rate (3-axis or z-only) ------------------------
-    earth = np.asarray(psr.planetssb[:, 2, :3])      # (ntoa, 3) light-seconds
-    earth_ecl = _eq2ecl(earth)
-    yrfrac = (toas_mjd - _FRAME_T0) / 365.25
-    axes = ["x", "y", "z"] if frame_drift_3axis else ["z"]
-    fwidth = np.atleast_1d(np.asarray(prior_block["frame_rate_width"], float))
-    if fwidth.size != len(axes):
-        fwidth = np.full(len(axes), fwidth.flat[0])
-    fvecs = np.stack([
-        _ecl2eq(yrfrac[:, None] * np.einsum("jk,ik->ij", _GEN[a], earth_ecl))
-        for a in axes
-    ])
-    add_block(fvecs, fwidth, "phys_ephem_frame_rate", len(axes))
+    # --- frame rotation rate (3-axis, z-only, or off) ------------------
+    if inc_frame_drift:
+        earth = np.asarray(psr.planetssb[:, 2, :3])      # (ntoa, 3) light-seconds
+        earth_ecl = _eq2ecl(earth)
+        yrfrac = (toas_mjd - _FRAME_T0) / 365.25
+        axes = ["x", "y", "z"] if frame_drift_3axis else ["z"]
+        fwidth = np.atleast_1d(np.asarray(prior_block["frame_rate_width"], float))
+        if fwidth.size != len(axes):
+            fwidth = np.full(len(axes), fwidth.flat[0])
+        fvecs = np.stack([
+            _ecl2eq(yrfrac[:, None] * np.einsum("jk,ik->ij", _GEN[a], earth_ecl))
+            for a in axes
+        ])
+        add_block(fvecs, fwidth, "phys_ephem_frame_rate", len(axes))
 
     # --- optional main-belt asteroid block (Ceres/Pallas/Vesta) --------
     # Mass perturbations d_mu_a = d(m_a / M_sun); basis = each asteroid's real
@@ -232,7 +233,7 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
 
 def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=True,
                          inc_saturn=True, inc_masses=True, frame_drift_3axis=True,
-                         inc_mainbelt=False, inc_minorbody=True,
+                         inc_frame_drift=True, inc_mainbelt=False, inc_minorbody=True,
                          orthogonalize_minorbody=True, inc_jerk=False,
                          mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     """Factory for the PEBBLE deterministic delay component.
@@ -248,6 +249,7 @@ def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=Tru
     G_np, names = physical_ephem_design_matrix(
         psr, partials_file, inc_jupiter=inc_jupiter, inc_saturn=inc_saturn,
         inc_masses=inc_masses, frame_drift_3axis=frame_drift_3axis,
+        inc_frame_drift=inc_frame_drift,
         inc_mainbelt=inc_mainbelt, inc_minorbody=inc_minorbody,
         orthogonalize_minorbody=orthogonalize_minorbody, inc_jerk=inc_jerk,
         mass_bodies=mass_bodies)
