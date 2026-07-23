@@ -47,13 +47,30 @@ def makemodel(mylogl, priordict={}):
 
 
 def makesampler_nuts(numpyro_model, num_warmup=512, num_samples=1024, num_chains=1, **kwargs):
-    nutsargs = dict(max_tree_depth=8, dense_mass=False,
-                    forward_mode_differentiation=False, target_accept_prob=0.8,
-                    **{arg: val for arg in kwargs.items() if arg in inspect.getfullargspec(infer.NUTS).args})
+    nuts_argnames = set(inspect.signature(infer.NUTS).parameters) - {"model"}
+    mcmc_argnames = set(inspect.signature(infer.MCMC).parameters) - {"sampler"}
 
-    mcmcargs = dict(num_warmup=num_warmup, num_samples=num_samples, num_chains=num_chains,
-                    chain_method='vectorized', progress_bar=True,
-                    **{arg: val for arg in kwargs.items() if arg in inspect.getfullargspec(infer.MCMC).kwonlyargs})
+    unknown = set(kwargs) - nuts_argnames - mcmc_argnames
+    if unknown:
+        names = ", ".join(sorted(unknown))
+        raise TypeError(f"makesampler_nuts() got unexpected keyword argument(s): {names}")
+
+    nutsargs = {
+        "max_tree_depth": 8,
+        "dense_mass": False,
+        "forward_mode_differentiation": False,
+        "target_accept_prob": 0.8,
+    }
+    nutsargs.update({name: value for name, value in kwargs.items() if name in nuts_argnames})
+
+    mcmcargs = {
+        "num_warmup": num_warmup,
+        "num_samples": num_samples,
+        "num_chains": num_chains,
+        "chain_method": "vectorized",
+        "progress_bar": True,
+    }
+    mcmcargs.update({name: value for name, value in kwargs.items() if name in mcmc_argnames})
 
     sampler = infer.MCMC(infer.NUTS(numpyro_model, **nutsargs), **mcmcargs)
 
@@ -122,6 +139,29 @@ def print_summary(chain, prob=0.9, exclude=('logl', 'logZ', 'logZ_err', 'ess', '
     diag.print_summary(samples, prob=prob, group_by_chain=True)
 
 
+def _ensure_sampler_to_df(sampler):
+    """Attach ``sampler.to_df`` from the underlying model when missing.
+
+    ``makesampler_nuts`` already wires this. For a raw ``numpyro.infer.MCMC``
+    built around a model that defines ``to_df``, recover the same attachment
+    from ``sampler.sampler.model``. Otherwise raise a clear error.
+    """
+    if hasattr(sampler, "to_df") and callable(getattr(sampler, "to_df")):
+        return
+
+    kernel = getattr(sampler, "sampler", None)
+    model = getattr(kernel, "model", None)
+    if model is not None and hasattr(model, "to_df") and callable(model.to_df):
+        sampler.to_df = lambda s=sampler, m=model: m.to_df(s.get_samples())
+        return
+
+    raise AttributeError(
+        "sampler has no to_df; build it with makesampler_nuts(...) "
+        "or use a NumPyro model that defines to_df "
+        "(makesampler_nuts / run_nuts_with_checkpoints will attach it)"
+    )
+
+
 def run_nuts_with_checkpoints(
     sampler,
     num_samples_per_checkpoint,
@@ -134,7 +174,12 @@ def run_nuts_with_checkpoints(
 
     This function performs multiple iterations of MCMC sampling, saving checkpoints
     after each iteration. It saves samples to feather files and the NumPyro MCMC
-    state to a pickle file.
+    state to a pickle.
+
+    Preferred construction is :func:`makesampler_nuts`, which attaches
+    ``sampler.to_df`` from the model's ``to_df``. If ``sampler.to_df`` is
+    missing but the underlying NUTS kernel's ``.model`` defines ``to_df``,
+    that attachment is recovered automatically.
 
     Parameters
     ----------
@@ -154,8 +199,8 @@ def run_nuts_with_checkpoints(
 
     Returns
     -------
-    None
-        This function doesn't return any value but saves the results to disk.
+    pandas.DataFrame
+        The concatenated sample table written to ``numpyro-samples.feather``.
 
     Side Effects
     ------------
@@ -173,6 +218,8 @@ def run_nuts_with_checkpoints(
     >>> ds_numpyro.run_nuts_with_checkpoints(npsampler, 10, jax.random.key(42))
 
     """
+    _ensure_sampler_to_df(sampler)
+
     # convert to pathlib object and make the output directory if needed
     outdir = Path(outdir)
     outdir.mkdir(exist_ok=True, parents=True)
@@ -236,6 +283,8 @@ def run_nuts_with_checkpoints(
         sampler.post_warmup_state = sampler.last_state
 
         rng_key, _ = jax.random.split(rng_key)
+
+    return df
 
 
 def _laplace_logz(df):
