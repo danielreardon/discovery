@@ -959,6 +959,44 @@ def makeglobalgp_intcov(psr, prior, orf, components, T, timeinterpbasis=timeinte
 def powerlaw(f, df, log10_A, gamma):
     return (10.0**(2.0 * log10_A)) / 12.0 / jnp.pi**2 * const.fyr ** (gamma - 3.0) * f ** (-gamma) * df
 
+def make_powerlaw(gamma=None, log10_A=None):
+    """Return a power-law PSD model, optionally fixing gamma and/or log10_A.
+
+    Either argument left as None becomes a sampled parameter of the returned
+    model; a supplied value is held fixed. With both None the returned model has
+    the same ``(f, df, log10_A, gamma)`` signature and result as ``powerlaw``.
+    Supplying ``gamma=13.0/3.0`` gives a fixed-index isotropic-GWB spectrum.
+    """
+    def _phi(f, df, log10_A, gamma):
+        return (10.0**(2.0 * log10_A)) / 12.0 / jnp.pi**2 * const.fyr ** (gamma - 3.0) * f ** (-gamma) * df
+
+    if gamma is None and log10_A is None:
+        def powerlaw_model(f, df, log10_A, gamma):
+            return _phi(f, df, log10_A, gamma)
+    elif gamma is not None and log10_A is None:
+        _g = float(gamma)
+        def powerlaw_model(f, df, log10_A):
+            return _phi(f, df, log10_A, _g)
+    elif gamma is None and log10_A is not None:
+        _A = float(log10_A)
+        def powerlaw_model(f, df, gamma):
+            return _phi(f, df, _A, gamma)
+    else:
+        _g, _A = float(gamma), float(log10_A)
+        def powerlaw_model(f, df):
+            return _phi(f, df, _A, _g)
+
+    return powerlaw_model
+
+def powerlaw_gwb(log10_A=None):
+    """Fixed-index (gamma = 13/3) isotropic-GWB power law.
+
+    Convenience wrapper for ``make_powerlaw(gamma=13.0/3.0, log10_A=log10_A)``:
+    with ``log10_A=None`` the returned model samples ``log10_A``; otherwise the
+    amplitude is held fixed.
+    """
+    return make_powerlaw(gamma=13.0 / 3.0, log10_A=log10_A)
+
 def brokenpowerlaw(f, df, log10_A, gamma, log10_fb):
     kappa = 0.1 # smoothness of transition
 
