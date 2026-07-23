@@ -1210,6 +1210,7 @@ def makegp_fourier_allpsr(psrs, prior, components, T=None, fourierbasis=fourierb
 
 
 def makeglobalgp_fourier(psrs, priors, orfs, components, T, fourierbasis=fourierbasis, means=None, common=[], exclude=['f', 'df'],
+                         cross_only=False, auto_prior=None, auto_name=None,
                          name='fourierGlobalGP', meansname='meanFourierGlobalGP'):
     priors = priors if isinstance(priors, list) else [priors]
     orfs   = orfs   if isinstance(orfs, list)   else [orfs]
@@ -1226,7 +1227,54 @@ def makeglobalgp_fourier(psrs, priors, orfs, components, T, fourierbasis=fourier
 
     orfmats = [matrix.jnparray([[orf(p1.pos, p2.pos) for p1 in psrs] for p2 in psrs]) for orf in orfs]
 
-    if len(priors) == 1 and len(orfs) == 1:
+    if cross_only:
+        # Decoupled auto/cross prior: the correlated (e.g. HD) term contributes
+        # ONLY to the off-diagonal (cross-correlation) blocks, and a separate,
+        # independently-parametrised uncorrelated term carries the diagonal
+        # (auto) power. So Phi = D_auto(theta_auto) (+) C_cross(theta_cross),
+        # with C_cross_ij = orf(i,j) * phi_cross (i != j) and C_cross_ii = 0.
+        # This lets the HD amplitude be fit with no autocorrelation from the GW
+        # term (cf. an HD+CURN run, but with HD's auto power removed).
+        #
+        # NOTE: positive-definiteness is NOT guaranteed here; it requires the
+        # auto power to dominate the cross power (Cauchy-Schwarz). Choose the
+        # priors so that non-PD regions are excluded (or expect -inf logL).
+        if len(priors) != 1 or len(orfs) != 1:
+            raise ValueError("makeglobalgp_fourier: cross_only=True expects a single prior and a single (correlated) orf")
+
+        cross_prior = priors[0]
+        aprior = cross_prior if auto_prior is None else auto_prior
+        aname  = f'{name}_auto' if auto_name is None else auto_name
+
+        # cross-correlation matrix with the autocorrelation (diagonal) removed
+        cross_orfmat = np.array([[orfs[0](p1.pos, p2.pos) for p1 in psrs] for p2 in psrs], dtype=float)
+        np.fill_diagonal(cross_orfmat, 0.0)
+        if cross_orfmat.ndim != 2:
+            raise ValueError("makeglobalgp_fourier: cross_only=True does not support the pixel-basis orf case")
+        cross_orfmat = matrix.jnparray(cross_orfmat)
+
+        def _crossonly_argmap(prior, pname):
+            argspec = inspect.getfullargspec(prior)
+            return [f'{pname}_{arg}' + (f'({components})' if argspec.annotations.get(arg) == typing.Sequence else '')
+                    for arg in argspec.args if arg not in exclude]
+
+        cross_argmap = _crossonly_argmap(cross_prior, name)
+        auto_argmap  = _crossonly_argmap(aprior, aname)
+        npsr = len(psrs)
+
+        def priorfunc(params):
+            phi_cross = cross_prior(f, df, *[params[arg] for arg in cross_argmap])
+            phi_auto  = aprior(f, df, *[params[arg] for arg in auto_argmap])
+
+            return jnp.block([[jnp.make2d(phi_auto) if i == j else jnp.make2d(cross_orfmat[i][j] * phi_cross)
+                               for j in range(npsr)] for i in range(npsr)])
+        priorfunc.params = sorted(set(cross_argmap) | set(auto_argmap))
+        priorfunc.type = jax.Array
+
+        # Phi depends on params through both terms with no static ORF to
+        # pre-invert, so use the general per-evaluation factorization path.
+        invprior, factors = None, None
+    elif len(priors) == 1 and len(orfs) == 1:
         prior, orfmat, argmap = priors[0], orfmats[0], argmaps[0]
 
         def priorfunc(params):
@@ -1595,9 +1643,11 @@ def makecommongp_fftcov(psrs, prior, components, T, t0=None, order=1, oversample
                                 fourierbasis=(make_timeinterpbasis(start_time=t0, order=order) if fourierbasis is None else fourierbasis),
                                 common=common, vector=vector, name=name)
 
-def makeglobalgp_fftcov(psrs, prior, orf, components, T, t0, order=1, oversample=3, fmax_factor=1, cutoff=1, fourierbasis=None, name='fftcovGlobalGP'):
+def makeglobalgp_fftcov(psrs, prior, orf, components, T, t0, order=1, oversample=3, fmax_factor=1, cutoff=1, fourierbasis=None,
+                        cross_only=False, auto_prior=None, auto_name=None, name='fftcovGlobalGP'):
     return makeglobalgp_fourier(psrs, psd2cov(prior, components, T, oversample, fmax_factor, cutoff), orf, components, T,
                                 fourierbasis=(make_timeinterpbasis(start_time=t0, order=order) if fourierbasis is None else fourierbasis),
+                                cross_only=cross_only, auto_prior=auto_prior, auto_name=auto_name,
                                 name=name)
 
 
@@ -1612,9 +1662,11 @@ def makecommongp_intcov(psr, prior, components, T, timeinterpbasis=timeinterpbas
     return makecommongp_fourier(psr, cov2cov(prior),
                                 components, T, fourierbasis=timeinterpbasis, common=common, exclude=['t1', 't2', 'tau'], name=name)
 
-def makeglobalgp_intcov(psr, prior, orf, components, T, timeinterpbasis=timeinterpbasis, common=[], name='intcovGlobalGP'):
+def makeglobalgp_intcov(psr, prior, orf, components, T, timeinterpbasis=timeinterpbasis, common=[],
+                        cross_only=False, auto_prior=None, auto_name=None, name='intcovGlobalGP'):
     return makeglobalgp_fourier(psr, cov2cov(prior), orf,
-                                components, T, fourierbasis=timeinterpbasis, exclude=['t1', 't2', 'tau'], name=name)
+                                components, T, fourierbasis=timeinterpbasis, exclude=['t1', 't2', 'tau'],
+                                cross_only=cross_only, auto_prior=auto_prior, auto_name=auto_name, name=name)
 
 
 # single powerlaws
@@ -1836,6 +1888,25 @@ def uncorrelated_orf(pos1, pos2):
 def hd_orf(pos1, pos2):
     if np.all(pos1 == pos2):
         return 1.0
+    else:
+        omc2 = (1.0 - np.dot(pos1, pos2)) / 2.0
+        return 1.5 * omc2 * np.log(omc2) - 0.25 * omc2 + 0.5
+
+def hd_orf_crossonly(pos1, pos2):
+    """Hellings-Downs ORF with the autocorrelation (self-pair) term set to zero.
+
+    Identical to :func:`hd_orf` off the diagonal, but returns 0 for a pulsar
+    paired with itself. On its own this is NOT a valid GP-prior correlation
+    matrix (a zero diagonal forces zero trace, hence negative eigenvalues), so
+    it should not be passed to ``makeglobalgp_fourier`` directly. Use it via
+    ``makeglobalgp_fourier(..., cross_only=True)``, which pairs the cross term
+    with a separate, independently-parametrised uncorrelated auto term so the
+    combined prior can be positive-definite. This lets the HD correlation
+    amplitude be fit with no autocorrelation contribution from the GW term
+    (the auto power is carried entirely by the separate term, à la CURN).
+    """
+    if np.all(pos1 == pos2):
+        return 0.0
     else:
         omc2 = (1.0 - np.dot(pos1, pos2)) / 2.0
         return 1.5 * omc2 * np.log(omc2) - 0.25 * omc2 + 0.5
