@@ -25,14 +25,9 @@ def update_priordict_standard_ppta():
         '(.*_)?sw_gp_gamma':        [0, 4],
         '(.*_)?band_gp_log10_A':    [-18, -11],
         '(.*_)?band_gp_gamma':      [0, 7],
-        '(.*_)?band_gp_flow':       [600, 4000], # PPTA full band
-        '(.*_)?band_gp_fhigh':      [600, 4000], # PPTA full band
         '(.*_)?bandalpha_gp_log10_A':    [-18, -11],
         '(.*_)?bandalpha_gp_gamma':      [0, 7],
         '(.*_)?bandalpha_gp_alpha':      [0, 10],
-        '(.*_)?bandalpha_gp_fcutoff':    [600, 4000], # PPTA full band
-        '(.*_)?bandalpha_gp_fhigh':    [600, 4000], # PPTA full band
-        '(.*_)?bandalpha_gp_flow':    [600, 4000], # PPTA full band
         # common noise parameters
         'curn_log10_A':             [-18, -11],
         'curn_gamma':               [0, 7],

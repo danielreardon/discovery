@@ -58,7 +58,7 @@ def update_priordict_standard_mpta():
         # time. A generic regex fallback would shadow those per-pulsar entries
         # (getprior_uniform returns the first matching pattern), so it is omitted. The old
         # (flow, fhigh, fcutoff) edge parametrisation is gone -- band/band_alpha now use the
-        # robust fcenter+log10_bw band_width models.
+        # robust fcenter+log10_bw band models.
         # common noise parameters
         'curn_log10_A':             [-18, -11],
         'curn_gamma':               [0, 7],
@@ -164,8 +164,8 @@ def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=No
             # Solar wind: time-domain squared-exponential GP by default, or the power-law (Fourier) GP when sw_powerlaw=True (legacy treatment).
             ([solar.makegp_timedomain_solar_dm(psr, covariance=signals.squared_exponential, dt=max_cadence_days*86400.0, name='sw_gp')] if (sw and not sw_powerlaw) else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=solar.fourierbasis_solar, name='sw_gp')] if (sw and sw_powerlaw) else []) + \
-            ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_band_width, name='band_gp')] if band else []) + \
-            ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_band_width_alpha, name='bandalpha_gp')] if band_alpha else []))
+            ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_band, name='band_gp')] if band else []) + \
+            ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_band_alpha, name='bandalpha_gp')] if band_alpha else []))
 
 
 def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, sw_powerlaw=False, band=False, band_alpha=False):
@@ -183,8 +183,8 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
             # Solar wind: time-domain squared-exponential GP by default, or the power-law (FFT-covariance) GP when sw_powerlaw=True (legacy treatment).
             ([solar.makegp_timedomain_solar_dm(psr, covariance=signals.squared_exponential, dt=max_cadence_days*86400.0, name='sw_gp')] if (sw and not sw_powerlaw) else []) + \
             ([signals.makegp_fftcov_solar(psr, signals.powerlaw, components=psr_knots, name='sw_gp')] if (sw and sw_powerlaw) else []) + \
-            ([signals.makegp_fftcov_band_width(psr, signals.powerlaw, components=psr_knots, name='band_gp')] if band else []) + \
-            ([signals.makegp_fftcov_band_width_alpha(psr, signals.powerlaw, components=psr_knots, name='bandalpha_gp')] if band_alpha else []))
+            ([signals.makegp_fftcov_band(psr, signals.powerlaw, components=psr_knots, name='band_gp')] if band else []) + \
+            ([signals.makegp_fftcov_band_alpha(psr, signals.powerlaw, components=psr_knots, name='bandalpha_gp')] if band_alpha else []))
 
 
 def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={},

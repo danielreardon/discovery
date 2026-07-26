@@ -749,54 +749,6 @@ def fourierbasis_chrom(psr, components, T=None, fref=1400.0):
 
     return f, df, fmatfunc
 
-def fourierbasis_band(psr, components, T=None):
-    f, df, fmat = fourierbasis(psr, components, T)
-
-    fmat = matrix.jnparray(fmat)
-    def fmatfunc(fcutoff):
-        scale = 5.0  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
-        band_filter = jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fcutoff) / scale))
-        return fmat * band_filter[:, None]
-
-    return f, df, fmatfunc
-
-def fourierbasis_band_range(psr, components, T=None):
-    warnings.warn("fourierbasis_band_range is deprecated; use fourierbasis_band_width "
-                  "(parametrised by fcenter, log10_bw) instead.", DeprecationWarning, stacklevel=2)
-    f, df, fmat = fourierbasis(psr, components, T)
-
-    fmat = matrix.jnparray(fmat)
-    def fmatfunc(flow, fhigh):
-        scale = 5.0  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
-        band_filter = jnp.reciprocal(1.0 + jnp.exp((flow - psr.freqs) / scale)) * jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fhigh) / scale))
-        return fmat * band_filter[:, None]
-
-    return f, df, fmatfunc
-
-def fourierbasis_band_alpha(psr, components, T=None, fref=1400.0):
-    f, df, fmat = fourierbasis(psr, components, T)
-
-    fmat, fnorm = matrix.jnparray(fmat), matrix.jnparray(fref / psr.freqs)
-    def fmatfunc(fcutoff, alpha):
-        scale = 5.0  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
-        band_filter = jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fcutoff) / scale))
-        return fmat * fnorm[:, None]**alpha * band_filter[:, None]
-
-    return f, df, fmatfunc
-
-def fourierbasis_band_range_alpha(psr, components, T=None, fref=1400.0):
-    warnings.warn("fourierbasis_band_range_alpha is deprecated; use fourierbasis_band_width_alpha "
-                  "(parametrised by fcenter, log10_bw) instead.", DeprecationWarning, stacklevel=2)
-    f, df, fmat = fourierbasis(psr, components, T)
-
-    fmat, fnorm = matrix.jnparray(fmat), matrix.jnparray(fref / psr.freqs)
-    def fmatfunc(flow, fhigh, alpha):
-        scale = 5.0  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
-        band_filter = jnp.reciprocal(1.0 + jnp.exp((flow - psr.freqs) / scale)) * jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fhigh) / scale))
-        return fmat * fnorm[:, None]**alpha * band_filter[:, None]
-
-    return f, df, fmatfunc
-
 def _band_envelope(psr, fcenter, log10_bw, scale=None):
     """Smooth, RMS-normalised band-pass envelope over ``psr.freqs``.
 
@@ -815,13 +767,13 @@ def _band_envelope(psr, fcenter, log10_bw, scale=None):
     env = jnp.reciprocal(1.0 + jnp.exp((flow - freqs) / s)) * jnp.reciprocal(1.0 + jnp.exp((freqs - fhigh) / s))
     return env / jnp.sqrt(jnp.mean(env ** 2) + 1e-12)
 
-def fourierbasis_band_width(psr, components, T=None, scale=None):
+def fourierbasis_band(psr, components, T=None, scale=None):
     """Band-limited Fourier basis parametrised by ``(fcenter, log10_bw)``.
 
-    Robust replacement for :func:`fourierbasis_band_range`: the band is specified by
-    its centre and log10 bandwidth (guaranteeing ``fhigh > flow``), with the smooth,
-    RMS-normalised envelope of :func:`_band_envelope`. The returned ``fmatfunc(fcenter,
-    log10_bw)`` scales the achromatic :func:`fourierbasis` columns by that envelope.
+    The band is specified by its centre and log10 bandwidth (guaranteeing
+    ``fhigh > flow``), with the smooth, RMS-normalised envelope of
+    :func:`_band_envelope`. The returned ``fmatfunc(fcenter, log10_bw)`` scales the
+    achromatic :func:`fourierbasis` columns by that envelope.
     """
     f, df, fmat = fourierbasis(psr, components, T)
 
@@ -831,12 +783,11 @@ def fourierbasis_band_width(psr, components, T=None, scale=None):
 
     return f, df, fmatfunc
 
-def fourierbasis_band_width_alpha(psr, components, T=None, fref=1400.0, scale=None):
+def fourierbasis_band_alpha(psr, components, T=None, fref=1400.0, scale=None):
     """Chromatic band-limited Fourier basis parametrised by ``(fcenter, log10_bw, alpha)``.
 
-    As :func:`fourierbasis_band_width`, but additionally scales by
-    ``(fref / psr.freqs) ** alpha`` for a variable chromatic index ``alpha``. Robust
-    replacement for :func:`fourierbasis_band_range_alpha`.
+    As :func:`fourierbasis_band`, but additionally scales by
+    ``(fref / psr.freqs) ** alpha`` for a variable chromatic index ``alpha``.
     """
     f, df, fmat = fourierbasis(psr, components, T)
 
@@ -1275,101 +1226,40 @@ def make_timeinterpbasis_chromatic(start_time=None, order=1, fref=1400.0):
 
     return timeinterpbasis_chrom
 
-def make_timeinterpbasis_band(start_time=None, order=1, fref=1400.0):
-    timeinterpbasis_achrom = make_timeinterpbasis(start_time=start_time, order=order)
-
-    def timeinterpbasis_band(psr, nmodes, T):
-        t_coarse, dt_coarse, Bmat = timeinterpbasis_achrom(psr, nmodes, T)
-        def Bmat_func(fcutoff):
-            scale = 5.0
-            band_filter = jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fcutoff) / scale))
-            return Bmat * band_filter[:, None]
-        return t_coarse, dt_coarse, Bmat_func
-
-    return timeinterpbasis_band
-
-def make_timeinterpbasis_band_range(start_time=None, order=1, fref=1400.0):
-    warnings.warn("make_timeinterpbasis_band_range is deprecated; use "
-                  "make_timeinterpbasis_band_width (fcenter, log10_bw) instead.",
-                  DeprecationWarning, stacklevel=2)
-    timeinterpbasis_achrom = make_timeinterpbasis(start_time=start_time, order=order)
-
-    def timeinterpbasis_band_range(psr, nmodes, T):
-        t_coarse, dt_coarse, Bmat = timeinterpbasis_achrom(psr, nmodes, T)
-        def Bmat_func(flow, fhigh):
-            scale = 5.0
-            band_filter = jnp.reciprocal(1.0 + jnp.exp((flow - psr.freqs) / scale)) * jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fhigh) / scale))
-            return Bmat * band_filter[:, None]
-        return t_coarse, dt_coarse, Bmat_func
-
-    return timeinterpbasis_band_range
-
-def make_timeinterpbasis_band_alpha(start_time=None, order=1, fref=1400.0):
-    timeinterpbasis_achrom = make_timeinterpbasis(start_time=start_time, order=order)
-
-    def timeinterpbasis_band_alpha(psr, nmodes, T):
-        t_coarse, dt_coarse, Bmat = timeinterpbasis_achrom(psr, nmodes, T)
-        fnorm = (fref / psr.freqs)
-        def Bmat_func(fcutoff, alpha):
-            scale = 5.0
-            band_filter = jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fcutoff) / scale))  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
-            return fnorm[:, None]**alpha * Bmat * band_filter[:, None]  # 0.0 for freqs >= fcutoff
-        return t_coarse, dt_coarse, Bmat_func
-
-    return timeinterpbasis_band_alpha
-
-def make_timeinterpbasis_band_range_alpha(start_time=None, order=1, fref=1400.0):
-    warnings.warn("make_timeinterpbasis_band_range_alpha is deprecated; use "
-                  "make_timeinterpbasis_band_width_alpha (fcenter, log10_bw) instead.",
-                  DeprecationWarning, stacklevel=2)
-    timeinterpbasis_achrom = make_timeinterpbasis(start_time=start_time, order=order)
-
-    def timeinterpbasis_band_range_alpha(psr, nmodes, T):
-        t_coarse, dt_coarse, Bmat = timeinterpbasis_achrom(psr, nmodes, T)
-        fnorm = (fref / psr.freqs)
-        def Bmat_func(flow, fhigh, alpha):
-            scale = 5.0
-            band_filter = jnp.reciprocal(1.0 + jnp.exp((flow - psr.freqs) / scale)) * jnp.reciprocal(1.0 + jnp.exp((psr.freqs - fhigh) / scale))  # at scale=5.0 MHz, the 10% to 90% roll-off happens across ~22MHz.
-            return fnorm[:, None]**alpha * Bmat * band_filter[:, None]  # 0.0 for freqs >= fcutoff
-        return t_coarse, dt_coarse, Bmat_func
-
-    return timeinterpbasis_band_range_alpha
-
-def make_timeinterpbasis_band_width(start_time=None, order=1, fref=1400.0, scale=None):
+def make_timeinterpbasis_band(start_time=None, order=1, fref=1400.0, scale=None):
     """Time-interpolation band basis parametrised by ``(fcenter, log10_bw)``.
 
-    Robust replacement for :func:`make_timeinterpbasis_band_range` used by the
-    FFT-covariance GPs: it applies the smooth, RMS-normalised :func:`_band_envelope`
-    to the achromatic :func:`make_timeinterpbasis` basis. Used by
-    :func:`makegp_fftcov_band_width`.
+    Used by the FFT-covariance GPs: it applies the smooth, RMS-normalised
+    :func:`_band_envelope` to the achromatic :func:`make_timeinterpbasis` basis. Used
+    by :func:`makegp_fftcov_band`.
     """
     timeinterpbasis_achrom = make_timeinterpbasis(start_time=start_time, order=order)
 
-    def timeinterpbasis_band_width(psr, nmodes, T):
+    def timeinterpbasis_band(psr, nmodes, T):
         t_coarse, dt_coarse, Bmat = timeinterpbasis_achrom(psr, nmodes, T)
         def Bmat_func(fcenter, log10_bw):
             return Bmat * _band_envelope(psr, fcenter, log10_bw, scale)[:, None]
         return t_coarse, dt_coarse, Bmat_func
 
-    return timeinterpbasis_band_width
+    return timeinterpbasis_band
 
-def make_timeinterpbasis_band_width_alpha(start_time=None, order=1, fref=1400.0, scale=None):
+def make_timeinterpbasis_band_alpha(start_time=None, order=1, fref=1400.0, scale=None):
     """Chromatic time-interpolation band basis parametrised by ``(fcenter, log10_bw, alpha)``.
 
-    As :func:`make_timeinterpbasis_band_width`, additionally scaling by
+    As :func:`make_timeinterpbasis_band`, additionally scaling by
     ``(fref / psr.freqs) ** alpha`` for a variable chromatic index ``alpha``. Used by
-    :func:`makegp_fftcov_band_width_alpha`.
+    :func:`makegp_fftcov_band_alpha`.
     """
     timeinterpbasis_achrom = make_timeinterpbasis(start_time=start_time, order=order)
 
-    def timeinterpbasis_band_width_alpha(psr, nmodes, T):
+    def timeinterpbasis_band_alpha(psr, nmodes, T):
         t_coarse, dt_coarse, Bmat = timeinterpbasis_achrom(psr, nmodes, T)
         fnorm = (fref / psr.freqs)
         def Bmat_func(fcenter, log10_bw, alpha):
             return fnorm[:, None]**alpha * Bmat * _band_envelope(psr, fcenter, log10_bw, scale)[:, None]
         return t_coarse, dt_coarse, Bmat_func
 
-    return timeinterpbasis_band_width_alpha
+    return timeinterpbasis_band_alpha
 
 def make_timeinterpbasis_dm(start_time=None, order=1, fref=1400.0):
     """Build a DM time-interpolation basis (fixed chromatic index alpha = 2).
@@ -1486,52 +1376,27 @@ def makegp_fftcov_chrom(psr, prior, components, T=None, t0=None, order=1, oversa
     return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
                           components, T=T, fourierbasis=make_timeinterpbasis_chromatic(start_time=t0, order=order, fref=fref), common=common, name=name)
 
-def makegp_fftcov_band(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='fftcovGP_band', fref=1400.0):
-    T = getspan(psr) if T is None else T
-    return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
-                          components, T=T, fourierbasis=make_timeinterpbasis_band(start_time=t0, order=order, fref=fref), common=common, name=name)
-
-def makegp_fftcov_band_range(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='fftcovGP_band_range', fref=1400.0):
-    warnings.warn("makegp_fftcov_band_range is deprecated; use makegp_fftcov_band_width "
-                  "(parametrised by fcenter, log10_bw) instead.", DeprecationWarning, stacklevel=2)
-    T = getspan(psr) if T is None else T
-    return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
-                          components, T=T, fourierbasis=make_timeinterpbasis_band_range(start_time=t0, order=order, fref=fref), common=common, name=name)
-
-def makegp_fftcov_band_alpha(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='fftcovGP_band_alpha', fref=1400.0):
-    T = getspan(psr) if T is None else T
-    return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
-                          components, T=T, fourierbasis=make_timeinterpbasis_band_alpha(start_time=t0, order=order, fref=fref), common=common, name=name)
-
-def makegp_fftcov_band_range_alpha(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='fftcovGP_band_range_alpha', fref=1400.0):
-    warnings.warn("makegp_fftcov_band_range_alpha is deprecated; use makegp_fftcov_band_width_alpha "
-                  "(parametrised by fcenter, log10_bw) instead.", DeprecationWarning, stacklevel=2)
-    T = getspan(psr) if T is None else T
-    return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
-                          components, T=T, fourierbasis=make_timeinterpbasis_band_range_alpha(start_time=t0, order=order, fref=fref), common=common, name=name)
-
-def makegp_fftcov_band_width(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='band_gp', fref=1400.0, scale=None):
+def makegp_fftcov_band(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='band_gp', fref=1400.0, scale=None):
     """FFT-covariance (time-domain) band-limited GP parametrised by ``(fcenter, log10_bw)``.
 
-    Robust replacement for :func:`makegp_fftcov_band_range`: uses the smooth,
-    RMS-normalised band basis :func:`make_timeinterpbasis_band_width`, so the band edges
-    cannot invert (no ``fhigh < flow`` dead zone) and the GP amplitude is decoupled from
-    the bandwidth. ``scale`` sets the sigmoid roll-off in MHz (default: 10% of bandwidth).
+    Uses the smooth, RMS-normalised band basis :func:`make_timeinterpbasis_band`, so
+    the band edges cannot invert (no ``fhigh < flow`` dead zone) and the GP amplitude is
+    decoupled from the bandwidth. ``scale`` sets the sigmoid roll-off in MHz (default:
+    10% of bandwidth).
     """
     T = getspan(psr) if T is None else T
     return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
-                          components, T=T, fourierbasis=make_timeinterpbasis_band_width(start_time=t0, order=order, fref=fref, scale=scale), common=common, name=name)
+                          components, T=T, fourierbasis=make_timeinterpbasis_band(start_time=t0, order=order, fref=fref, scale=scale), common=common, name=name)
 
-def makegp_fftcov_band_width_alpha(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='bandalpha_gp', fref=1400.0, scale=None):
+def makegp_fftcov_band_alpha(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='bandalpha_gp', fref=1400.0, scale=None):
     """FFT-covariance (time-domain) chromatic band-limited GP parametrised by ``(fcenter, log10_bw, alpha)``.
 
-    As :func:`makegp_fftcov_band_width`, additionally fitting a variable chromatic index
-    ``alpha`` via :func:`make_timeinterpbasis_band_width_alpha`. Robust replacement for
-    :func:`makegp_fftcov_band_range_alpha`.
+    As :func:`makegp_fftcov_band`, additionally fitting a variable chromatic index
+    ``alpha`` via :func:`make_timeinterpbasis_band_alpha`.
     """
     T = getspan(psr) if T is None else T
     return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
-                          components, T=T, fourierbasis=make_timeinterpbasis_band_width_alpha(start_time=t0, order=order, fref=fref, scale=scale), common=common, name=name)
+                          components, T=T, fourierbasis=make_timeinterpbasis_band_alpha(start_time=t0, order=order, fref=fref, scale=scale), common=common, name=name)
 
 def makegp_fftcov_solar(psr, prior, components, T=None, t0=None, order=1, oversample=3, fmax_factor=1, cutoff=1, common=[], name='fftcovGP_solar'):
     T = getspan(psr) if T is None else T
