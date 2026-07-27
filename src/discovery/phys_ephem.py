@@ -96,7 +96,7 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
                                  inc_jupiter=True, inc_saturn=True, inc_masses=True,
                                  frame_drift_3axis=True, inc_frame_drift=True, inc_mainbelt=False,
                                  inc_minorbody=True, orthogonalize_minorbody=True,
-                                 inc_jerk=False,
+                                 inc_jerk=False, mainbelt_prior_scale=1.0,
                                  mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     """Build the static per-pulsar design matrix and the parameter spec.
 
@@ -173,7 +173,13 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         if "mainbelt_basis" not in npz:
             raise ValueError("inc_mainbelt=True but artifact has no main-belt block")
         basis = _interp_partial(grid, npz["mainbelt_basis"], toas_mjd)  # (n_ast, ntoa, 3)
-        widths = npz["mainbelt_widths"]
+        # mainbelt_prior_scale multiplies every mode's physical half-width by a
+        # common factor (coefficients stay uniform on [-1, 1], so the SVD's
+        # relative mode scaling is preserved). Use >1 to test whether a mode that
+        # leans on the fiducial prior edge localises at a finite amplitude when
+        # allowed more room, or simply tracks the boundary (= unconstrained
+        # direction, prior doing the work).
+        widths = np.asarray(npz["mainbelt_widths"], float) * float(mainbelt_prior_scale)
         add_block(basis, widths, "phys_ephem_mainbelt", basis.shape[0])
 
     # --- minor-body (TNO-dominated) barycentre normalisation eta -------
@@ -235,6 +241,7 @@ def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=Tru
                          inc_saturn=True, inc_masses=True, frame_drift_3axis=True,
                          inc_frame_drift=True, inc_mainbelt=False, inc_minorbody=True,
                          orthogonalize_minorbody=True, inc_jerk=False,
+                         mainbelt_prior_scale=1.0,
                          mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     """Factory for the PEBBLE deterministic delay component.
 
@@ -252,7 +259,7 @@ def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=Tru
         inc_frame_drift=inc_frame_drift,
         inc_mainbelt=inc_mainbelt, inc_minorbody=inc_minorbody,
         orthogonalize_minorbody=orthogonalize_minorbody, inc_jerk=inc_jerk,
-        mass_bodies=mass_bodies)
+        mainbelt_prior_scale=mainbelt_prior_scale, mass_bodies=mass_bodies)
     G = jnp.asarray(G_np)
 
     def assemble_c(params):

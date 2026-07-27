@@ -296,14 +296,14 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     return m
 
 def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
-                 chrom_poly=False, fix_chrom_alpha=True, hd=False, use_commongp=False,
+                 chrom_poly=False, fix_chrom_alpha=True, hd=False, hd_fixed_gamma=False, use_commongp=False,
                  freespec=False, freespec_components=30,  # free-spectrum CURN (per-bin log10_rho) instead of the power law; ~30 components keeps the parameter space manageable for a steep process
                  red_fixed_dict=None,  # {psrname: (log10_A, gamma)}: FIX each pulsar's red noise at these values (e.g. the power-law common-run posteriors) so the free-spectrum bins test excess over the same null the band power was defined against, rather than competing with co-sampled red noise for the same variance
                  use_phys_ephem=False, phys_ephem_partials=phys_ephem_mod.DEFAULT_PARTIALS,
                  phys_ephem_inc_jupiter=True, phys_ephem_inc_saturn=False, phys_ephem_inc_masses=True,
                  phys_ephem_frame_3axis=True, phys_ephem_inc_frame_drift=True, phys_ephem_inc_mainbelt=True,
                  phys_ephem_inc_minorbody=True, phys_ephem_orthogonalize_minorbody=False,
-                 phys_ephem_inc_jerk=True,
+                 phys_ephem_inc_jerk=True, phys_ephem_mainbelt_prior_scale=1.0,
                  phys_ephem_mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
     def has_param(df, param_string):
@@ -411,7 +411,9 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                 inc_mainbelt=phys_ephem_inc_mainbelt,
                 inc_minorbody=phys_ephem_inc_minorbody,
                 orthogonalize_minorbody=phys_ephem_orthogonalize_minorbody,
-                inc_jerk=phys_ephem_inc_jerk, mass_bodies=phys_ephem_mass_bodies)]
+                inc_jerk=phys_ephem_inc_jerk,
+                mainbelt_prior_scale=phys_ephem_mainbelt_prior_scale,
+                mass_bodies=phys_ephem_mass_bodies)]
 
         if commongp_path:
             # Build the STACKABLE sampled Fourier/fftcov GPs with the SAME makegp_*
@@ -460,8 +462,12 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
     # than absorbed into one another. Parameters: gw_log10_A, gw_gamma.
     globalgp = None
     if hd:
+        # hd_fixed_gamma: fix the HD spectral index to 13/3 (signals.powerlaw_gwb)
+        # so only gw_log10_A is sampled -- isolates the HD amplitude<->PEBBLE
+        # covariance from the A-gamma degeneracy. Default: free gw_gamma.
+        hd_spectrum = signals.powerlaw_gwb() if hd_fixed_gamma else signals.powerlaw
         globalgp = signals.makeglobalgp_fourier(
-            psrs, signals.powerlaw, signals.hd_orf, common_components, Tspan, name='gw')
+            psrs, hd_spectrum, signals.hd_orf, common_components, Tspan, name='gw')
 
     if commongp_path:
         # Stack the per-pulsar sampled GPs into a single (padded) common GP and use
