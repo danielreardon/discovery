@@ -8,7 +8,6 @@ import numpy as np
 import scipy.interpolate as si
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 from . import matrix
 from . import const
@@ -64,7 +63,7 @@ def makenoise_measurement_simple(psr, noisedict={}, add_equad=True, tnequad=Fals
         return matrix.NoiseMatrix1D_var(getnoise)
 
 
-# get pulsar backends
+# nanograv backends
 def selection_backend_flags(psr):
     return psr.backend_flags
 

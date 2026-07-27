@@ -90,7 +90,7 @@ def dm_solar(n_earth, theta, r_earth):
                     _dm_solar(n_earth, theta, r_earth),
                     _dm_solar_close(n_earth, r_earth))
 
-def fourierbasis_solar(psr,
+def fourierbasis_solar_dm(psr,
                         components,
                         T=None):
     """
