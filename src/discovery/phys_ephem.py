@@ -33,7 +33,13 @@ import jax.numpy as jnp
 from . import const
 
 # Default shipped artifact (multi-ephemeris: DE440 ref, INPOP21a, EPM2021).
-DEFAULT_PARTIALS = "/fred/oz002/dreardon/PEBBLE/src/pebble/pebble.npz"
+# Set PEBBLE_PARTIALS to point at your PEBBLE checkout's src/pebble/pebble.npz;
+# read at import time, so export it before importing discovery. Individual calls
+# can still override with partials_file=... . The literal below is the historical
+# OzSTAR location, kept as the fallback so existing setups keep working -- it
+# will not resolve on any other machine, hence the env var.
+_FALLBACK_PARTIALS = "/fred/oz002/dreardon/PEBBLE/src/pebble/pebble.npz"
+DEFAULT_PARTIALS = os.environ.get("PEBBLE_PARTIALS", _FALLBACK_PARTIALS)
 
 # planetssb body-index order (matches enterprise / libstempo).
 _PLANET_IDX = {"jupiter": 4, "saturn": 5, "uranus": 6, "neptune": 7}
@@ -67,6 +73,14 @@ def _eq2ecl(x):
 
 
 def _load_artifact(path):
+    if not os.path.exists(path):
+        hint = ("Set PEBBLE_PARTIALS to your PEBBLE checkout's "
+                "src/pebble/pebble.npz, or pass partials_file=... .")
+        if path == _FALLBACK_PARTIALS and "PEBBLE_PARTIALS" not in os.environ:
+            hint = ("This is the built-in OzSTAR fallback and PEBBLE_PARTIALS is "
+                    "unset, so it will not resolve off OzSTAR. " + hint)
+        raise FileNotFoundError(f"PEBBLE artifact not found: {path}\n{hint}")
+
     npz = dict(np.load(path, allow_pickle=False))
     prior_block = json.loads(str(npz["prior_block_json"]))
     return npz, prior_block
