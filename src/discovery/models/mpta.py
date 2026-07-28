@@ -318,7 +318,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
         return any(param_string in col for col in df.columns)
 
     if chrom_poly:
-        print("Note: chrom_poly=True (chromatic polynomial is marginalised by default). Set chrom_poly=False to disable.")
+        print("Note: chrom_poly=True (the chromatic polynomial is marginalised analytically).")
 
     # The commongp/ArrayLikelihood path moves every SAMPLED Fourier/fftcov GP out of
     # the per-pulsar likelihoods into a single stacked common GP and uses the

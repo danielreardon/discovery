@@ -279,7 +279,7 @@ def makefourier_binary(pulsarterm=True):
     return fourier_binary
 
 
-def chromatic_exponential(psr, fref=1400.0):
+def chromatic_exponential(psr, fref=1400.0, alpha=None):
     r"""
     Factory function for chromatic exponential delay model.
 
@@ -292,6 +292,10 @@ def chromatic_exponential(psr, fref=1400.0):
         Pulsar object containing toas and freqs attributes
     fref : float, optional
         Reference frequency in MHz for normalization (default: 1400.0)
+    alpha : float or None, optional
+        Chromatic index. If None (default) it is a sampled parameter of the
+        returned delay; set a value to hold it fixed (e.g. ``alpha=2`` for a
+        pure DM/dispersive event), which drops it from the sampled parameters.
 
     Returns
     -------
@@ -307,17 +311,25 @@ def chromatic_exponential(psr, fref=1400.0):
     """
     toas, fnorm = matrix.jnparray(psr.toas / const.day), matrix.jnparray(fref / psr.freqs)
 
-    def delay(t0, log10_Amp, log10_tau, sign_param, alpha):
+    def _core(t0, log10_Amp, log10_tau, sign_param, alpha):
         dt = toas - t0
         tau = 10**log10_tau
         amp = 10**log10_Amp
         return jnp.sign(sign_param) * amp * fnorm**alpha * jnp.where(dt >= 0, jnp.exp(-dt / tau), 0.0 )
 
+    if alpha is None:
+        def delay(t0, log10_Amp, log10_tau, sign_param, alpha):
+            return _core(t0, log10_Amp, log10_tau, sign_param, alpha)
+    else:
+        _a = float(alpha)
+        def delay(t0, log10_Amp, log10_tau, sign_param):
+            return _core(t0, log10_Amp, log10_tau, sign_param, _a)
+
     delay.__name__ = "chromatic_exponential_delay"
     return delay
 
 
-def chromatic_annual(psr, fref=1400.0):
+def chromatic_annual(psr, fref=1400.0, alpha=None):
     r"""
     Factory function for chromatic annual delay model.
 
@@ -330,6 +342,10 @@ def chromatic_annual(psr, fref=1400.0):
         Pulsar object containing toas and freqs attributes
     fref : float, optional
         Reference frequency in MHz for normalization (default: 1400.0)
+    alpha : float or None, optional
+        Chromatic index. If None (default) it is a sampled parameter of the
+        returned delay; set a value to hold it fixed (e.g. ``alpha=2`` for a
+        pure DM/dispersive event), which drops it from the sampled parameters.
 
     Returns
     -------
@@ -345,14 +361,22 @@ def chromatic_annual(psr, fref=1400.0):
     """
     toas, fnorm = matrix.jnparray(psr.toas), matrix.jnparray(fref / psr.freqs)
 
-    def delay(log10_Amp, phase, alpha):
+    def _core(log10_Amp, phase, alpha):
         return 10**log10_Amp * jnp.sin(2*jnp.pi * const.fyr * toas + phase) * fnorm**alpha
+
+    if alpha is None:
+        def delay(log10_Amp, phase, alpha):
+            return _core(log10_Amp, phase, alpha)
+    else:
+        _a = float(alpha)
+        def delay(log10_Amp, phase):
+            return _core(log10_Amp, phase, _a)
 
     delay.__name__ = "chromatic_annual_delay"
     return delay
 
 
-def chromatic_gaussian(psr, fref=1400.0):
+def chromatic_gaussian(psr, fref=1400.0, alpha=None):
     r"""
     Factory function for chromatic Gaussian delay model.
 
@@ -365,6 +389,10 @@ def chromatic_gaussian(psr, fref=1400.0):
         Pulsar object containing toas and freqs attributes
     fref : float, optional
         Reference frequency in MHz for normalization (default: 1400.0)
+    alpha : float or None, optional
+        Chromatic index. If None (default) it is a sampled parameter of the
+        returned delay; set a value to hold it fixed (e.g. ``alpha=2`` for a
+        pure DM/dispersive event), which drops it from the sampled parameters.
 
     Returns
     -------
@@ -378,32 +406,49 @@ def chromatic_gaussian(psr, fref=1400.0):
     """
     toas, fnorm = matrix.jnparray(psr.toas / const.day), matrix.jnparray(fref / psr.freqs)
 
-    def delay(t0, log10_Amp, log10_sigma, sign_param, alpha):
+    def _core(t0, log10_Amp, log10_sigma, sign_param, alpha):
         return jnp.sign(sign_param) * 10**log10_Amp * jnp.exp(-(toas - t0)**2 / (2 * (10**log10_sigma)**2)) * fnorm**alpha
+
+    if alpha is None:
+        def delay(t0, log10_Amp, log10_sigma, sign_param, alpha):
+            return _core(t0, log10_Amp, log10_sigma, sign_param, alpha)
+    else:
+        _a = float(alpha)
+        def delay(t0, log10_Amp, log10_sigma, sign_param):
+            return _core(t0, log10_Amp, log10_sigma, sign_param, _a)
 
     delay.__name__ = "chromatic_gaussian_delay"
     return delay
 
 
-def chromatic_sphere(psr, fref=1400.0):
+def chromatic_sphere(psr, fref=1400.0, alpha=None):
     """Chromatic delay from a uniform-density sphere crossing the line of sight."""
     toas, fnorm = matrix.jnparray(psr.toas / const.day), matrix.jnparray(fref / psr.freqs)
 
-    def delay(t0, log10_Amp, log10_tau, sign_param, alpha, smooth):
+    def _core(t0, log10_Amp, log10_tau, sign_param, alpha, smooth):
         tau = 10**log10_tau
         x = (toas - t0) / tau
         # Scale factor k controls the sharpness of the edge transition
         chord = jnp.sqrt(jnp.logaddexp(0.0, smooth * (1.0 - x**2)) / smooth)
         return jnp.sign(sign_param) * 10**log10_Amp * chord * fnorm**alpha
 
+    if alpha is None:
+        def delay(t0, log10_Amp, log10_tau, sign_param, alpha, smooth):
+            return _core(t0, log10_Amp, log10_tau, sign_param, alpha, smooth)
+    else:
+        _a = float(alpha)
+        def delay(t0, log10_Amp, log10_tau, sign_param, smooth):
+            return _core(t0, log10_Amp, log10_tau, sign_param, _a, smooth)
+
+    delay.__name__ = "chromatic_sphere_delay"
     return delay
 
 
-def chromatic_step(psr, fref=1400.0):
+def chromatic_step(psr, fref=1400.0, alpha=None):
     """Chromatic delay from a flat-bottomed rise or drop with smooth edges."""
     toas, fnorm = matrix.jnparray(psr.toas / const.day), matrix.jnparray(fref / psr.freqs)
 
-    def delay(t0, log10_Amp, log10_span, sign_param, alpha, smooth):
+    def _core(t0, log10_Amp, log10_span, sign_param, alpha, smooth):
         span = 10**log10_span
         t_start = t0 - 0.5 * span
         t_end = t0 + 0.5 * span
@@ -415,6 +460,15 @@ def chromatic_step(psr, fref=1400.0):
 
         return jnp.sign(sign_param) * 10**log10_Amp * profile * fnorm**alpha
 
+    if alpha is None:
+        def delay(t0, log10_Amp, log10_span, sign_param, alpha, smooth):
+            return _core(t0, log10_Amp, log10_span, sign_param, alpha, smooth)
+    else:
+        _a = float(alpha)
+        def delay(t0, log10_Amp, log10_span, sign_param, smooth):
+            return _core(t0, log10_Amp, log10_span, sign_param, _a, smooth)
+
+    delay.__name__ = "chromatic_step_delay"
     return delay
 
 
