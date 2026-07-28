@@ -296,7 +296,9 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     return m
 
 def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
-                 chrom_poly=False, fix_chrom_alpha=True, hd=False, hd_fixed_gamma=False, use_commongp=False,
+                 chrom_poly=False, fix_chrom_alpha=True, hd=False, hd_fixed_gamma=False,
+                 hd_components=None,  # HD Fourier bins; None -> common_components (i.e. tied to max_cadence_days)
+                 use_commongp=False,
                  freespec=False, freespec_components=30,  # free-spectrum CURN (per-bin log10_rho) instead of the power law; ~30 components keeps the parameter space manageable for a steep process
                  red_fixed_dict=None,  # {psrname: (log10_A, gamma)}: FIX each pulsar's red noise at these values (e.g. the power-law common-run posteriors) so the free-spectrum bins test excess over the same null the band power was defined against, rather than competing with co-sampled red noise for the same variance
                  use_phys_ephem=False, phys_ephem_partials=phys_ephem_mod.DEFAULT_PARTIALS,
@@ -466,8 +468,18 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
         # so only gw_log10_A is sampled -- isolates the HD amplitude<->PEBBLE
         # covariance from the A-gamma degeneracy. Default: free gw_gamma.
         hd_spectrum = signals.powerlaw_gwb() if hd_fixed_gamma else signals.powerlaw
+        # hd_components decouples the HD Fourier bin count from max_cadence_days.
+        # common_components = int(Tspan/max_cadence_days) is set by what the
+        # per-pulsar DM/chromatic bases need; a gamma~13/3 GWB has essentially no
+        # support in the high bins, so tying the two makes the global term
+        # (n_psr*2*n_bins)^2 far larger than the physics requires -- and that dense
+        # Cholesky is ~57% of the per-step cost at 14-day cadence. Fewer GWB
+        # frequencies than intrinsic red-noise frequencies is standard NANOGrav /
+        # EPTA practice; validate with a bin-count ladder on (gw_log10_A, gw_gamma).
+        # None reproduces the previous behaviour exactly.
+        hd_nc = common_components if hd_components is None else int(hd_components)
         globalgp = signals.makeglobalgp_fourier(
-            psrs, hd_spectrum, signals.hd_orf, common_components, Tspan, name='gw')
+            psrs, hd_spectrum, signals.hd_orf, hd_nc, Tspan, name='gw')
 
     if commongp_path:
         # Stack the per-pulsar sampled GPs into a single (padded) common GP and use
