@@ -150,7 +150,7 @@ def _set_band_priors(psr, band=False, band_alpha=False, bw_min_mhz=20.0):
     prior.priordict_standard.update(updates)
 
 
-def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, sw_powerlaw=False, sw_logf=False, band=False, band_alpha=False):
+def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_poly=False, sw=True, sw_powerlaw=False, sw_logf=False, band=False, band_alpha=False):
     psr_Tspan = signals.getspan(psr) if Tspan is None else Tspan
     psr_components = int(psr_Tspan / (max_cadence_days * 86400))
     _set_band_priors(psr, band=band, band_alpha=band_alpha)
@@ -168,7 +168,7 @@ def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=No
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, fourierbasis=signals.fourierbasis_band_alpha, name='bandalpha_gp')] if band_alpha else []))
 
 
-def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_poly=True, sw=True, sw_powerlaw=False, band=False, band_alpha=False):
+def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_poly=False, sw=True, sw_powerlaw=False, band=False, band_alpha=False):
     psr_Tspan = signals.getspan(psr) if Tspan is None else Tspan
     psr_components = int(psr_Tspan / (max_cadence_days * 86400))
     psr_knots = 2 * psr_components + 1
@@ -258,14 +258,14 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     
     return m
 
-def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn", chrom_poly=True,
+def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, name="gw_crn", chrom_poly=False,
                  freespec=False, freespec_components=30):
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
     def has_param(df, param_string):
         return any(param_string in col for col in df.columns)
  
     if chrom_poly:
-        print("Note: chrom_poly=True (chromatic polynomial is marginalised by default). Set chrom_poly=False to disable.")
+        print("Note: chrom_poly=True (the chromatic polynomial is marginalised analytically).")
 
     if freespec:
         prior.priordict_standard.update({r'curn_log10_rho\(([0-9]*)\)': [-9, -4],
