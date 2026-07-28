@@ -286,6 +286,17 @@ def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=Tru
         return G @ assemble_c(params)
 
     delay_phys_ephem.params = names
+
+    # Declare that this delay is LINEAR in its parameters over a FIXED basis:
+    # delay(params) == linear_basis @ linear_coeffs(params).
+    # WoodburyKernel_varP.make_kernelterms_vary uses this to project N^-1 onto the
+    # 19-column basis once at build time instead of keeping the (n_toa)-shaped F.T
+    # and T.T on the device and re-solving N^-1 y every leapfrog step. Worth ~5.5 GiB
+    # of device constants across 83 pulsars. Any delay that sets these two
+    # attributes consistently gets the same treatment.
+    delay_phys_ephem.linear_basis = G_np          # host/numpy, (n_toa, ncoeff)
+    delay_phys_ephem.linear_coeffs = assemble_c   # params -> (ncoeff,)
+
     return delay_phys_ephem
 
 

@@ -336,7 +336,13 @@ def CompoundGP(gplist):
                                                for gp in gplist])
             Phi.params = sorted(set.union(*[set(gp.Phi.params) for gp in gplist]))
 
-            multigp = VariableGP(NoiseMatrix2D_var(Phi), F)
+            # Keep the per-GP block structure so Phi^-1 and log|Phi| can be built
+            # block-by-block instead of via a dense n^3/3 Cholesky plus an explicit
+            # 2n^3 inverse of the densified block-diagonal. See
+            # BlockDiagNoiseMatrix2D_var.
+            _blocks = [(isinstance(gp.Phi, NoiseMatrix1D_var), gp.Phi.getN) for gp in gplist]
+
+            multigp = VariableGP(BlockDiagNoiseMatrix2D_var(Phi, _blocks), F)
     else:
         raise NotImplementedError("Cannot concatenate these types of GPs.")
 
@@ -357,6 +363,26 @@ def CompoundDelay(residuals, delays):
     def delayfunc(params):
         return residuals - sum(delay(params) for delay in delays)
     delayfunc.params = sorted(set.union(*[set(delay.params) for delay in delays]))
+
+    # If EVERY delay is linear over a fixed basis, so is their sum, and so is
+    # y(params) = residuals - sum(...). Propagate the declaration by concatenating
+    # the bases columnwise and the coefficient vectors in the same order, so
+    # y(params) == y0 - linear_basis @ linear_coeffs(params). Consumers (see
+    # WoodburyKernel_varP.make_kernelterms_vary) can then precompute every
+    # N^-1-weighted projection of y at build time. If any delay lacks the
+    # declaration we simply omit it and the generic per-step path is used.
+    if delays and all(hasattr(d, 'linear_basis') and hasattr(d, 'linear_coeffs')
+                      for d in delays):
+        bases = [np.asarray(d.linear_basis) for d in delays]
+        coefffuncs = [d.linear_coeffs for d in delays]
+
+        def linear_coeffs(params):
+            return jnp.concatenate([jnp.atleast_1d(f(params)) for f in coefffuncs])
+        linear_coeffs.params = delayfunc.params
+
+        delayfunc.linear_y0 = np.asarray(residuals)
+        delayfunc.linear_basis = np.concatenate(bases, axis=1) if len(bases) > 1 else bases[0]
+        delayfunc.linear_coeffs = linear_coeffs
 
     return delayfunc
 
@@ -778,6 +804,58 @@ class NoiseMatrix2D_var(NoiseMatrix, VariableKernel):
         sample.params = getN.params
 
         return sample
+
+
+class BlockDiagNoiseMatrix2D_var(NoiseMatrix2D_var):
+    """A variable 2-D prior that is block diagonal *by construction*.
+
+    ``CompoundGP`` concatenates independent per-GP priors, so the assembled Phi is
+    exactly block diagonal -- but the base class forgets that: it densifies Phi,
+    takes a full ``n**3/3`` Cholesky, and then forms an EXPLICIT inverse via
+    ``matrix_solve(cf, eye(n))`` at ``2 n**3``, i.e. ``2.33 n**3`` with
+    ``n = sum(n_g)``. Factorising each block instead costs ``sum(n_g**3)``, which for
+    ``nb`` equal blocks is ``nb**2`` times fewer flops -- 16x for the four 331-wide
+    blocks (red, dm, chrom, curn) of the 14-day fftInt model. Diagonal (1-D) blocks
+    are inverted elementwise and cost nothing at all.
+
+    This is EXACT, not an approximation: the inverse of a block-diagonal matrix is
+    the block diagonal of the inverses, and ``log|Phi| = sum_g log|Phi_g|``.
+
+    Note this changes only the factorisation cost, not memory: the assembled
+    ``Phi^-1`` is still dense because it is added to a dense ``F^T N^-1 F``. It also
+    does NOT help the plain-Fourier path, where every block is already diagonal and
+    the base class's dense inverse was the only waste.
+
+    ``getN`` is kept as the dense block-diagonal assembly so that every other
+    consumer (``make_solve_1d``, ``make_sample``, ``gp.Phi.getN``) and every
+    ``isinstance(..., NoiseMatrix2D_var)`` test behaves exactly as before.
+    """
+
+    def __init__(self, getN, blocks):
+        super().__init__(getN)
+        # blocks: [(is_diagonal, callable(params) -> block matrix or diagonal vector)]
+        self.blocks = blocks
+
+    def make_inv(self):
+        blocks = self.blocks
+
+        def inv(params):
+            invs, ld = [], 0.0
+            for isdiag, getblock in blocks:
+                b = getblock(params)
+                if isdiag:
+                    # diagonal block: elementwise reciprocal, no factorisation
+                    invs.append(jnp.diag(1.0 / b))
+                    ld = ld + jnp.logdet(b)
+                else:
+                    cf = matrix_factor(b)
+                    invs.append(matrix_solve(cf, jnp.eye(cf[0].shape[0])))
+                    ld = ld + matrix_norm * jnp.logdet(jnp.diag(cf[0]))
+            return jsp.linalg.block_diag(*invs), ld
+
+        inv.params = self.params
+
+        return inv
 
 
 def VectorNoiseMatrix12D_var(getN):
@@ -1835,10 +1913,74 @@ class WoodburyKernel_varP(VariableKernel):
 
         y_var = y
         P_var_inv = self.P_var.make_inv()
-        Ft, Tt = jnparray(self.F.T), jnparray(T.T)
         FtNmF, FtNmT = jnparray(FtNmF), jnparray(FtNmT)
         TtNmT, TtNmF = jnparray(TtNmT), jnparray(TtNmF)
         N_solve_1d = self.N.make_solve_1d()
+
+        # ---- linear-delay fast path -------------------------------------------
+        # When y is affine in a small coefficient vector over a FIXED basis --
+        # y(params) = y0 - B c(params), which is exactly the PEBBLE case with
+        # ncoeff = 19 -- every N^-1-weighted projection of y collapses to build-time
+        # constants:
+        #     yt N^-1 y  = y0tNmy0 - 2 c.(Bt N^-1 y0) + c.(Bt N^-1 B).c
+        #     Ft N^-1 y  = FtNmy0 - (Ft N^-1 B) c
+        #     Tt N^-1 y  = TtNmy0 - (Tt N^-1 B) c
+        # so the (n_F, n_toa) `Ft` and (n_gp, n_toa) `Tt` never reach the device and
+        # the per-step N^-1 solve on an n_toa vector disappears. Across 83 MPTA
+        # pulsars that is ~5.5 GiB of device constants and ~11 GiB of host HLO
+        # literals (a closed-over array inlines at 2x its bytes, and XLA
+        # constant-folds transpose(constant) into a SECOND full-size literal).
+        # Replaces them with ncoeff-sized objects: BtNmB (19x19), FtNmB (n_F, 19),
+        # TtNmB (n_gp, 19) -- ~28 MB in total.
+        linear = (getattr(y, 'linear_basis', None) is not None
+                  and getattr(y, 'linear_coeffs', None) is not None
+                  and getattr(y, 'linear_y0', None) is not None)
+
+        if linear:
+            B = np.asarray(y.linear_basis)                  # (n_toa, ncoeff)
+            y0 = np.asarray(y.linear_y0)                    # (n_toa,)
+            coefffunc = y.linear_coeffs
+
+            Nmy0, ldN_const = self.N.solve_1d(y0)
+            NmB, _ = self.N.solve_2d(B)
+
+            y0tNmy0 = jnparray(y0 @ Nmy0)
+            BtNmy0  = jnparray(NmB.T @ y0)
+            BtNmB   = jnparray(B.T @ NmB)
+            FtNmy0  = jnparray(self.F.T @ Nmy0)
+            FtNmB   = jnparray(self.F.T @ NmB)
+            TtNmy0  = jnparray(T.T @ Nmy0)
+            TtNmB   = jnparray(T.T @ NmB)
+            ldN_const = jnparray(ldN_const)
+
+            def kernelterms(params):
+                c_pe = coefffunc(params)
+
+                # y = y0 - B c  =>  expand every projection
+                ytNmy = (y0tNmy0 - 2.0 * (BtNmy0 @ c_pe)
+                         + c_pe @ (BtNmB @ c_pe))
+                FtNmy = FtNmy0 - FtNmB @ c_pe
+                TtNmy = TtNmy0 - TtNmB @ c_pe
+                ldN = ldN_const
+
+                Pinv, ldP = P_var_inv(params)
+                cf = matrix_factor(Pinv + FtNmF)
+
+                sol = matrix_solve(cf, FtNmy)
+                sol2 = matrix_solve(cf, FtNmT)
+
+                a = -0.5 * (ytNmy - FtNmy.T @ sol) - 0.5 * (ldN + ldP + matrix_norm * jnp.logdet(jnp.diag(cf[0])))
+                b = TtNmy - TtNmF @ sol
+                c = TtNmT - TtNmF @ sol2
+
+                return a, b, c
+
+            kernelterms.params = sorted(set(self.P_var.params + y.params))
+
+            return kernelterms
+        # ---- end linear-delay fast path ---------------------------------------
+
+        Ft, Tt = jnparray(self.F.T), jnparray(T.T)
 
         # closes on P_var_inv, FtNmF, FtNmy, FtMmT, ytNmy, TtNmy, TtNmT, TtNmF
         def kernelterms(params):
