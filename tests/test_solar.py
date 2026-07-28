@@ -195,14 +195,14 @@ class TestMakeSolardm:
 
 
 class TestFourierbasisSolar:
-    """Tests for fourierbasis_solar function."""
+    """Tests for fourierbasis_solar_dm function."""
 
     def test_fourierbasis_solar_output_shapes(self):
-        """Test that fourierbasis_solar returns three values with correct shapes."""
+        """Test that fourierbasis_solar_dm returns three values with correct shapes."""
         psr = MockPsr()
         components = 10
 
-        result = solar.fourierbasis_solar(psr, components)
+        result = solar.fourierbasis_solar_dm(psr, components)
         assert len(result) == 3
 
         f, df, fmat = result

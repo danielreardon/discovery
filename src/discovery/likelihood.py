@@ -5,7 +5,7 @@ from typing import Callable
 import numpy as np
 import jax
 
-from . import jnp, matrix
+from . import matrix
 from . import signals
 
 # import jax
