@@ -5,6 +5,7 @@ import jax.numpy as jnp
 from . import const
 from . import matrix
 from . import fourierbasis
+from . import getspan
 from . import quantize
 
 AU_light_sec = const.AU / const.c  # 1 AU in light seconds
@@ -90,15 +91,42 @@ def dm_solar(n_earth, theta, r_earth):
                     _dm_solar(n_earth, theta, r_earth),
                     _dm_solar_close(n_earth, r_earth))
 
+def _log_fourierbasis(psr, components, T=None):
+    """Fourier basis on a log-spaced frequency grid.
+
+    Same band and conventions as :func:`signals.fourierbasis` -- ``components``
+    frequencies spanning ``1/T`` to ``components/T``, ``df`` from the bin edges
+    (so the bins tile the band), and ``f``/``df`` repeated per sin/cos column --
+    but log-spaced rather than linearly spaced.
+    """
+    if T is None:
+        T = getspan(psr)
+
+    f = np.logspace(np.log10(1.0 / T), np.log10(components / T), components, dtype=np.float64)
+    df = np.diff(np.concatenate((np.array([0.0]), f)))
+
+    fmat = np.zeros((psr.toas.shape[0], 2 * components), dtype=np.float64)
+    for i in range(components):
+        fmat[:, 2*i  ] = np.sin(2.0 * np.pi * f[i] * psr.toas)
+        fmat[:, 2*i+1] = np.cos(2.0 * np.pi * f[i] * psr.toas)
+
+    return np.repeat(f, 2), np.repeat(df, 2), fmat
+
 def fourierbasis_solar_dm(psr,
                         components,
-                        T=None):
+                        T=None,
+                        logf=False):
     """
     Construct a Fourier design matrix for solar wind dispersion measure variations.
 
     Adapted from enterprise_extensions. The design matrix is constructed by first
     obtaining a standard Fourier basis, then scaling each TOA by the solar wind DM
     signature computed from the 1/r^2 solar wind density model.
+
+    With ``logf=True`` the frequencies are log-spaced over the same band
+    (``1/T`` to ``components/T``) instead of linearly spaced, which concentrates
+    the modes at low frequency where the solar-wind DM power is. Use
+    :func:`make_fourierbasis_solar_dm` to select this from a GP factory.
 
     Parameters
     ----------
@@ -123,12 +151,31 @@ def fourierbasis_solar_dm(psr,
     """
 
     # get base Fourier design matrix and frequencies
-    f, df, fmat = fourierbasis(psr, components, T)
+    if logf:
+        f, df, fmat = _log_fourierbasis(psr, components, T)
+    else:
+        f, df, fmat = fourierbasis(psr, components, T)
     theta, R_earth, _, _ = theta_impact(psr)
     dm_sol_wind = dm_solar(1.0, theta, R_earth)
     dt_DM = dm_sol_wind * 4.148808e3 / (psr.freqs**2)
 
     return f, df, fmat * dt_DM[:, None]
+
+def make_fourierbasis_solar_dm(logf=False):
+    """Build a solar-wind DM Fourier basis with the frequency spacing fixed.
+
+    ``makegp_fourier(..., fourierbasis=X)`` calls ``X(psr, components, T)``, so
+    the ``logf`` option of :func:`fourierbasis_solar_dm` cannot be reached from
+    there directly; this factory bakes it in.
+
+    >>> gp = signals.makegp_fourier(psr, signals.powerlaw, components=30,
+    ...                             fourierbasis=solar.make_fourierbasis_solar_dm(logf=True),
+    ...                             name='sw_gp')
+    """
+    def fourierbasis_solar_dm_logf(psr, components, T=None):
+        return fourierbasis_solar_dm(psr, components, T=T, logf=logf)
+
+    return fourierbasis_solar_dm_logf
 
 def makegp_timedomain_solar_dm(psr, covariance, dt=1.0, common=[], name='timedomain_sw_gp'):
     """
