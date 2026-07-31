@@ -68,32 +68,63 @@ class OS:
     def params(self):
         return self.os_rhosigma.params
 
-    # TO DO: make opQ, and share init code between opQ, Q, and sample
+    @functools.cached_property
+    def kernelsolves(self):
+        """Per-pulsar ``k(params) -> (T^T K^-1 y, T^T K^-1 T)`` with ``T = gw.F``.
+
+        Element [1] is the GW-space matrix ``S`` that Q, opQ, sample and
+        sample_rhosigma_lowrank all need, and element [0] is what os_rhosigma
+        needs, so every consumer shares one build and one set of device copies.
+
+        This replaces the explicit Woodbury reduction those four used to do by
+        hand from ``psl.white_noise_matrix``, ``psl.N.F`` and ``psl.N.P_var``.
+        That reduction was WRONG whenever ``psl.N`` is a nested Woodbury, which
+        is the normal case: ``likelihood.PulsarLikelihood`` folds the CONSTANT
+        GPs (the SVD timing model from makegp_timing, any fixed ECORR GP) into
+        an inner ``WoodburyKernel_novar`` and layers the variable GPs on top, so
+        ``psl.N.F``/``psl.N.P_var`` describe only the outer layer while
+        ``white_noise_matrix`` walks all the way down to the bare TOA errors.
+        The hand-rolled S was therefore
+
+            T^T (N_w + F_v P_v F_v^T)^-1 T
+
+        with the constant-GP term ``F_c P_c F_c^T`` silently missing -- i.e. the
+        timing model was not marginalised in the OS noise covariance. Measured on
+        an 8-pulsar MPTA model: per-pulsar S off by 37% to 12400% in Frobenius
+        norm, Q's eigenvalue spectrum off by 37%, and gx2cdf p-values
+        anti-conservative by ~1.4x at OS ~ 5 (significance overstated).
+
+        NB the two identities ``trace(Q) == 0`` and ``2*sum(eig^2) == 1`` hold for
+        ANY S -- they are properties of the assembly code, not of S -- so they
+        cannot be used to validate this. Compare against make_kernelsolve, which
+        is exactly what tests/test_optimal.py does.
+
+        Letting each kernel class supply its own reduction also fixes the cases
+        the hand-rolled version could not express at all: variable white noise
+        (``NoiseMatrix1D_var`` has no ``.N``, so white_noise_matrix returns a
+        bound method and ``1/sqrt(...)`` raised TypeError), Sherman-Morrison
+        kernel ECORR, callable bases (``WoodburyKernel_varFP``), and arbitrary
+        nesting depth. It is also faster: for ``WoodburyKernel_varP`` the
+        O(N_toa) work happens once at build time, so a Q evaluation went from
+        1.82 s to 0.40 s on an 8-pulsar model.
+        """
+        return [psl.N.make_kernelsolve(psl.y, gw.F)
+                for psl, gw in zip(self.psls, self.gws)]
 
     @functools.cached_property
     def Q(self):
-        Nmats, Fmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.gw.F) for psl in self.psls])
-
-        LNms = [1.0 / matrix.jnp.sqrt(Nmat) for Nmat in Nmats]
-        Fts = [LNm[:,None] * Fmat for LNm, Fmat in zip(LNms, Fmats)]
-        Tts = [LNm[:,None] * Tmat for LNm, Tmat in zip(LNms, Tmats)] # this is GW-only
-
-        FFts = [matrix.jnparray(Ft.T @ Ft) for Ft in Fts]
-        TTts = [matrix.jnparray(Tt.T @ Tt) for Tt in Tts]
-        FTts = [matrix.jnparray(Ft.T @ Tt) for Ft, Tt in zip(Fts, Tts)]
+        kernelsolves = self.kernelsolves
 
         Phivar = self.psls[0].gw.Phi.getN
-        Pvars = [psl.N.P_var.getN for psl in self.psls]
 
-        ngw = Tts[0].shape[1]
+        ngw = self.gws[0].F.shape[1]
         cnt = len(self.psls) * ngw
         inds = [slice(i * ngw, (i + 1) * ngw) for i in range(len(self.psls))]
 
         def get_Q(params, orf=hd_orfa):
             sPhi = matrix.jnp.sqrt(Phivar(params))
 
-            cs = [matrix.jsp.linalg.cho_factor(inv_prior(Pvar(params)) + FFt) for Pvar, FFt in zip(Pvars, FFts)]
-            Ss = [TTt - FTt.T @ matrix.jsp.linalg.cho_solve(c, FTt) for c, TTt, FTt in zip(cs, TTts, FTts)]
+            Ss = [k(params)[1] for k in kernelsolves]
 
             # adaptively ridge-regularize each S so its Cholesky is well defined:
             # add only what is needed to make the smallest eigenvalue positive
@@ -135,28 +166,18 @@ class OS:
 
     @functools.cached_property
     def opQ(self):
-        Nmats, Fmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.gw.F) for psl in self.psls])
-
-        LNms = [1.0 / matrix.jnp.sqrt(Nmat) for Nmat in Nmats]
-        Fts = [LNm[:,None] * Fmat for LNm, Fmat in zip(LNms, Fmats)]
-        Tts = [LNm[:,None] * Tmat for LNm, Tmat in zip(LNms, Tmats)] # this is GW-only
-
-        FFts = [matrix.jnparray(Ft.T @ Ft) for Ft in Fts]
-        TTts = [matrix.jnparray(Tt.T @ Tt) for Tt in Tts]
-        FTts = [matrix.jnparray(Ft.T @ Tt) for Ft, Tt in zip(Fts, Tts)]
+        kernelsolves = self.kernelsolves
 
         Phivar = self.psls[0].gw.Phi.getN
-        Pvars = [psl.N.P_var.getN for psl in self.psls]
 
-        ngw = Tts[0].shape[1]
+        ngw = self.gws[0].F.shape[1]
         cnt = len(self.psls) * ngw
         inds = [slice(i * ngw, (i + 1) * ngw) for i in range(len(self.psls))]
 
         def get_opQ(params, orf=hd_orfa):
             sPhi = matrix.jnp.sqrt(Phivar(params))
 
-            cs = [matrix.jsp.linalg.cho_factor(inv_prior(Pvar(params)) + FFt) for Pvar, FFt in zip(Pvars, FFts)]
-            Ss = [TTt - FTt.T @ matrix.jsp.linalg.cho_solve(c, FTt) for c, TTt, FTt in zip(cs, TTts, FTts)]
+            Ss = [k(params)[1] for k in kernelsolves]
 
             Ss = [0.5 * (S + S.T) for S in Ss]  # ensure symmetry
             As = [matrix.jnp.linalg.cholesky(S + (1e-10 * matrix.jnp.trace(S) / S.shape[0]) * matrix.jnp.eye(S.shape[0]))
@@ -189,29 +210,18 @@ class OS:
 
     @functools.cached_property
     def sample(self):
-        Nmats, Fmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.gw.F) for psl in self.psls])
-
-        LNms = [1.0 / matrix.jnp.sqrt(Nmat) for Nmat in Nmats]
-        Fts = [LNm[:,None] * Fmat for LNm, Fmat in zip(LNms, Fmats)]
-        Tts = [LNm[:,None] * Tmat for LNm, Tmat in zip(LNms, Tmats)] # this is GW-only
-
-        FFts = [matrix.jnparray(Ft.T @ Ft) for Ft in Fts]
-        TTts = [matrix.jnparray(Tt.T @ Tt) for Tt in Tts]
-        FTts = [matrix.jnparray(Ft.T @ Tt) for Ft, Tt in zip(Fts, Tts)]
+        kernelsolves = self.kernelsolves
 
         Phivar = self.psls[0].gw.Phi.getN
-        Pvars = [psl.N.P_var.getN for psl in self.psls]
 
-        ngw = Tts[0].shape[1]
+        ngw = self.gws[0].F.shape[1]
         cnt = len(self.psls) * ngw
         inds = [slice(i * ngw, (i + 1) * ngw) for i in range(len(self.psls))]
 
         def get_sample(key, params, orf=hd_orfa):
             sPhi = matrix.jnp.sqrt(Phivar(params))
 
-            # TO DO: should probably close on Ft.T @ Ft, Tt.T @ Tt, and Tt.T @ Ft (and Ft.T @ Tt) rather than on Fts and Tts
-            cs = [matrix.jsp.linalg.cho_factor(inv_prior(Pvar(params)) + FFt) for Pvar, FFt in zip(Pvars, FFts)]
-            Ss = [TTt - FTt.T @ matrix.jsp.linalg.cho_solve(c, FTt) for c, TTt, FTt in zip(cs, TTts, FTts)]
+            Ss = [k(params)[1] for k in kernelsolves]
 
             Ss = [0.5 * (S + S.T) for S in Ss]  # ensure symmetry
             As = [matrix.jnp.linalg.cholesky(S + (1e-10 * matrix.jnp.trace(S) / S.shape[0]) * matrix.jnp.eye(S.shape[0]))
@@ -244,25 +254,7 @@ class OS:
         Phi = self.psls[0].gw.Phi.getN(params)
         sPhi = matrix.jnp.sqrt(Phi)
 
-        Nmats, Fmats, Pmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.N.P_var.getN(params), psl.gw.F) for psl in self.psls])
-
-        LNms = [1.0 / matrix.jnp.sqrt(Nmat) for Nmat in Nmats]
-        Fts = [LNm[:,None] * Fmat for LNm, Fmat in zip(LNms, Fmats)]
-        Tts = [LNm[:,None] * Tmat for LNm, Tmat in zip(LNms, Tmats)] # this is GW-only
-
-        cs = [matrix.jsp.linalg.cho_factor(inv_prior(Pmat) + Ft.T @ Ft) for Pmat, Ft in zip(Pmats, Fts)]
-        Xs = [Tt - Ft @ matrix.jsp.linalg.cho_solve(c, Ft.T @ Tt) for c, Ft, Tt in zip(cs, Fts, Tts)]
-
-        Ss = [Tt.T @ X for Tt, X in zip(Tts, Xs)]
-
-        # alternative formulation (numerically unstable?):
-        # R = chol(Pmat^-1 + Ft.T @ Ft)
-        # Y = R^-1 @ Ft.T @ Tt
-        # S = Tt.T @ Tt - Y.T @ Y
-        #
-        # Rs = [matrix.jnp.linalg.cholesky(matrix.jnp.diag(1/Pmat) + Ft.T @ Ft, upper=True) for Pmat, Ft in zip(Pmats, Fts)]
-        # Ys = [matrix.jsp.linalg.solve_triangular(R, Ft.T @ Tt, lower=False) for R, Ft, Tt in zip(Rs, Fts, Tts)]
-        # Ss = [Tt.T @ Tt - Y.T @ Y for Tt, Y in zip(Tts, Ys)]
+        Ss = [k(params)[1] for k in self.kernelsolves]
 
         # with ridge regularization; the simple estimate based on the trace seems fine
         # a more precise possibility is eps = matrix.jnp.maximum(0.0, -matrix.jnp.linalg.eigvalsh(S).min())
@@ -306,17 +298,36 @@ class OS:
 
         Nmats, Fmats, Pmats, Tmats = zip(*[(psl.white_noise_matrix, psl.N.F, psl.N.P_var.getN(params), psl.gw.F) for psl in self.psls])
 
-        # This sampler whitens the F-coefficients with an elementwise sqrt(Pmat)
-        # and a 1-D NoiseMatrix1D_novar(Pmat), which is only valid for a diagonal
-        # prior. A 2-D prior (correlated / decorrelating Legendre ECORR) would be
-        # silently mishandled, so fail loudly. Use OS.os / OS.os_rhosigma / OS.mcos
-        # (full kernel solve, handles 2-D priors) for point estimates, or build the
-        # OS model with the uncorrelated makegp_ecorr_legendre for sampling.
+        # Unlike Q/opQ/sample/sample_rhosigma_lowrank, this one CANNOT be routed
+        # through make_kernelsolve: it needs a generative square root of the
+        # kernel -- it draws y = sqrt(N) x_N + F sqrt(P) x_P and needs K^-1 as an
+        # operator on TOA-space vectors -- which the kernel API does not expose.
+        # So it keeps rebuilding a Woodbury by hand from the three pieces below,
+        # and inherits both of that approach's restrictions. Fail loudly rather
+        # than return quietly wrong numbers.
+        #
+        # (1) an elementwise sqrt(Pmat) is only valid for a diagonal prior.
         if any(matrix.jnp.asarray(Pmat).ndim > 1 for Pmat in Pmats):
             raise NotImplementedError(
                 "OS.sample_rhosigma assumes a diagonal (1-D) GP prior, but a pulsar has a "
                 "2-D prior covariance (e.g. correlated Legendre ECORR). Use OS.os/os_rhosigma/"
                 "mcos, or an uncorrelated ECORR model for sampling.")
+
+        # (2) psl.N.F / psl.N.P_var describe only the OUTERMOST Woodbury layer.
+        # When PulsarLikelihood has folded constant GPs (the SVD timing model, a
+        # fixed ECORR GP) into an inner WoodburyKernel, rebuilding the kernel from
+        # (white noise, outer F, outer P) silently omits them -- the timing model
+        # is then not marginalised. That is the bug that made OS.Q wrong; here it
+        # cannot be fixed by reusing the kernel, so refuse the model instead.
+        for psl in self.psls:
+            inner = getattr(psl.N, 'N', None)
+            if inner is not None and not isinstance(inner, matrix.NoiseMatrix):
+                raise NotImplementedError(
+                    "OS.sample_rhosigma cannot handle a nested kernel: this pulsar's psl.N "
+                    f"wraps a {type(inner).__name__}, i.e. constant GPs (timing model, fixed "
+                    "ECORR) live in an inner Woodbury layer that psl.N.F/psl.N.P_var do not "
+                    "describe, and this sampler would drop them. Use OS.sample or "
+                    "OS.sample_rhosigma_lowrank, which go through make_kernelsolve.")
 
         Ks = [matrix.WoodburyKernel_novar(matrix.NoiseMatrix1D_novar(Nmat), Fmat, matrix.NoiseMatrix1D_novar(Pmat))
               for Nmat, Fmat, Pmat in zip(Nmats, Fmats, Pmats)]
@@ -362,7 +373,7 @@ class OS:
 
     @functools.cached_property
     def os_rhosigma(self):
-        kernelsolves = [psl.N.make_kernelsolve(psl.y, gw.F) for (psl, gw) in zip(self.psls, self.gws)]
+        kernelsolves = self.kernelsolves
         getN = self.gws[0].Phi.getN   # use GW prior from first pulsar, assume all GW GP are the same
         pairs = self.pairs
 
@@ -498,7 +509,7 @@ class OS:
 
     @functools.cached_property
     def os_rhosigma_complex(self):
-        kernelsolves = [psl.N.make_kernelsolve(psl.y, gw.F) for (psl, gw) in zip(self.psls, self.gws)]
+        kernelsolves = self.kernelsolves
         getN = self.gws[0].Phi.getN
         pairs = self.pairs
 
