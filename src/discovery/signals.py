@@ -633,7 +633,71 @@ def makegp_timing(psr, constant=None, variance=None, svd=False, scale=1.0, varia
     return makegp_improper(psr, fmat, constant=constant, name='timingmodel', variable=variable)
 
 # Analytically-marginalised SVD chromatic polynomial GP.
-def makegp_chrom_poly_svd(psr, fref=None, sigma_c=1e-3, name='chrom_gp'):
+def makegp_fd_piecewise(psr, nodes=16, log_freq=True, project_tm=True, constant=1.0e40, name='fd'):
+    """Piecewise-linear frequency-dependent delay, constant in time, marginalised.
+
+    Absorbs arbitrary time-constant structure across the observing band -- residual
+    DM, a mean scattering delay, and profile evolution the template does not capture
+    -- as a non-parametric generalisation of the timing model's ``FDx`` parameters.
+
+    The basis is a set of hat (linear B-spline) functions over ``nodes`` frequency
+    nodes. Nodes are placed at QUANTILES of the pulsar's observed frequency
+    distribution, so every interval is guaranteed to contain data (roughly
+    ``ntoa/nodes`` TOAs each) and no node is wasted on a receiver gap. With
+    ``log_freq=True`` (default) the nodes are spaced in ``log(freq)``, matching the
+    ``FDx`` convention and representing power laws (DM ~ nu^-2, scattering ~ nu^-4)
+    far more efficiently than linear spacing.
+
+    The amplitudes are marginalised analytically with an improper (very broad)
+    prior, exactly like the timing model, so this removes the corresponding
+    directions from the data rather than measuring them.
+
+    ``project_tm=True`` (default) projects the timing-model column subspace out of
+    the basis. This is REQUIRED, not merely tidy: a flat-in-frequency column is
+    exactly the timing-model phase offset, a constant-in-time nu^-2 term is exactly
+    DM, and any ``FDx`` in the par file are literally columns of ``psr.Mmat`` -- so
+    without the projection the joint model is singular. Directions annihilated by
+    the projection are dropped, so the surviving basis is full rank.
+
+    Note this term is degenerate with the constant-in-time part of
+    :func:`makegp_chrom_poly_svd`; pass this GP to that function's ``project``
+    argument to remove the overlap.
+    """
+    freqs = np.asarray(psr.freqs, dtype=np.float64)
+    x = np.log(freqs) if log_freq else freqs
+
+    # quantile node placement: guarantees TOAs between consecutive nodes
+    q = np.unique(np.quantile(x, np.linspace(0.0, 1.0, nodes)))
+    if len(q) < 2:
+        raise ValueError(f"makegp_fd_piecewise: {psr.name} has too little frequency coverage "
+                         f"for a piecewise basis (got {len(q)} distinct nodes).")
+
+    # hat functions: unity at their own node, falling linearly to zero at the neighbours
+    fmat = np.zeros((len(x), len(q)), dtype=np.float64)
+    for i, c in enumerate(q):
+        lo = q[i-1] if i > 0 else c - (q[1] - q[0])
+        hi = q[i+1] if i < len(q) - 1 else c + (q[-1] - q[-2])
+        left, right = (x >= lo) & (x <= c), (x > c) & (x <= hi)
+        fmat[left, i] = (x[left] - lo) / (c - lo)
+        fmat[right, i] = (hi - x[right]) / (hi - c)
+
+    if project_tm:
+        Mmat = np.asarray(psr.Mmat, dtype=np.float64)
+        M_norm = Mmat / np.sqrt(np.sum(Mmat**2, axis=0))
+        Q_tm, _ = np.linalg.qr(M_norm)
+        fmat = fmat - Q_tm @ (Q_tm.T @ fmat)
+
+    # rank-revealing orthonormalisation: the projection above can annihilate
+    # directions (e.g. the flat and nu^-2 ones), so drop them rather than keeping
+    # a numerically null column.
+    U, S, _ = np.linalg.svd(fmat, full_matrices=False)
+    fmat = U[:, S > 1e-10 * S[0]]
+
+    gp = makegp_improper(psr, fmat, constant=constant, name=name)
+    gp.fd_nodes = np.exp(q) if log_freq else q
+    return gp
+
+def makegp_chrom_poly_svd(psr, fref=None, sigma_c=1e-3, name='chrom_gp', project=None):
     """SVD-orthogonalised chromatic polynomial GP, marginalised analytically.
 
     Basis: ``U * (fref/freq)**alpha``, where ``U`` is the SVD-orthonormalised
@@ -644,6 +708,11 @@ def makegp_chrom_poly_svd(psr, fref=None, sigma_c=1e-3, name='chrom_gp'):
 
     Shares ``alpha`` with a companion chromatic Fourier (or FFTint) GP via
     the parameter name ``{psr}_{name}_alpha``.
+
+    ``project`` optionally takes a further basis to remove -- either an array or a
+    GP with a non-callable ``.F``, e.g. the result of :func:`makegp_fd_piecewise`,
+    whose time-constant frequency structure overlaps the constant-in-time part of
+    this basis. It is projected out alongside the timing model.
     """
     t0_sec  = float(np.mean(psr.toas))
     toas_yr = (psr.toas - t0_sec) / const.yr
@@ -662,6 +731,15 @@ def makegp_chrom_poly_svd(psr, fref=None, sigma_c=1e-3, name='chrom_gp'):
     Mmat = np.asarray(psr.Mmat, dtype=np.float64)
     M_norm = Mmat / np.sqrt(np.sum(Mmat**2, axis=0))
     Q_tm, _ = np.linalg.qr(M_norm)
+
+    if project is not None:
+        # e.g. makegp_fd_piecewise: a time-constant frequency basis, already
+        # orthonormal and timing-model-projected. Fold it into the null space we
+        # project out, so this GP only describes what that basis cannot.
+        P = np.asarray(getattr(project, 'F', project), dtype=np.float64)
+        P = P - Q_tm @ (Q_tm.T @ P)
+        Up, Sp, _ = np.linalg.svd(P, full_matrices=False)
+        Q_tm = np.hstack([Q_tm, Up[:, Sp > 1e-10 * Sp[0]]])
 
     U_j     = matrix.jnparray(U)
     Q_tm_j  = matrix.jnparray(Q_tm)
