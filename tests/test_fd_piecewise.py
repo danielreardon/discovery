@@ -49,6 +49,36 @@ def test_log_spacing_survives_band_gaps(psr):
     assert np.allclose(F.T @ F, np.eye(F.shape[1]), atol=1e-8)
 
 
+def test_selection_gives_one_basis_per_group(psr):
+    """A selection builds a per-group basis, combined into one marginalised GP."""
+    plain = s.makegp_fd_piecewise(psr, nodes=8)
+    grouped = s.makegp_fd_piecewise(psr, nodes=8, selection=s.selection_backend_flags)
+
+    ngroups = len(set(np.asarray(s.selection_backend_flags(psr)).tolist()))
+    assert isinstance(grouped.fd_nodes, dict) and len(grouped.fd_nodes) == ngroups
+    assert not isinstance(plain.fd_nodes, dict)
+
+    F = np.asarray(grouped.F)
+    assert F.shape[1] > np.asarray(plain.F).shape[1]     # more DOF than a single basis
+    assert np.allclose(F.T @ F, np.eye(F.shape[1]), atol=1e-9)
+    # projecting the timing model out of the STACK (not per group) keeps the
+    # result orthogonal to it; doing it per group would not
+    assert np.abs(_qtm(psr).T @ F).max() < 1e-9
+
+
+def test_selection_blocks_have_disjoint_support(psr):
+    """Per-group hat blocks are zero outside their own TOAs, hence orthogonal."""
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    flags = np.asarray(s.selection_backend_flags(psr))
+    blocks = [s._fd_piecewise_block(psr, x, flags == g, 8, 'quantile', str(g))[0]
+              for g in sorted(set(flags.tolist()))]
+    for i in range(len(blocks)):
+        support = np.abs(blocks[i]).sum(axis=1) > 0
+        assert support.sum() == int((flags == sorted(set(flags.tolist()))[i]).sum())
+        for j in range(i + 1, len(blocks)):
+            assert np.abs(blocks[i].T @ blocks[j]).max() < 1e-12
+
+
 def test_unknown_spacing_raises(psr):
     with pytest.raises(ValueError, match="spacing"):
         s.makegp_fd_piecewise(psr, nodes=8, spacing='linear')

@@ -190,7 +190,7 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
 def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={},
                         ecorr=True, quadratic=False, ecorr_nmodes=None, ecorr_correlated=False, global_ecorr=False, # ecorr options. ecorr_nmodes=N selects an N-mode Legendre ECORR (log-frequency basis; nmodes=1 is standard ECORR); ecorr_correlated=True uses the full-M (correlated-mode) variant that can also model a frequency-asymmetric jitter amplitude
                         background=True, bkgrnd_log10_A=None, red=True, red2=False, dm=True, chrom=True, chrom_poly=False, sw=True, sw_powerlaw=False, sw_logf=False, # Base model: gwb, red, dm, chromatic, solar wind (sw_powerlaw=True selects the legacy power-law solar-wind GP instead of the time-domain one; sw_logf=True log-spaces its frequencies -- Fourier path only)
-                        band=False, band_alpha=False, fd=False, fd_nodes=16, # Additional GP models (fd=True marginalises an arbitrary time-constant frequency-dependent delay over fd_nodes frequency nodes)
+                        band=False, band_alpha=False, fd=False, fd_nodes=16, fd_spacing='quantile', fd_selection=None, # Additional GP models (fd=True marginalises an arbitrary time-constant frequency-dependent delay over fd_nodes frequency nodes; fd_selection splits it per TOA group)
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False, # Deterministic chromatic models
                         shapiro=False, orbital_dm=False, orbital_dm_fourier=False, extra_gps=None, # Shapiro delay and orbital DM, and extra GPs
                         return_components=False): # Whether to return the list of model components in addition to the likelihood object (useful for adding additional components)
@@ -241,7 +241,10 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     # scattering, uncorrected profile evolution). Built first so it can be
     # projected out of the chromatic polynomial, whose constant-in-time column
     # would otherwise be degenerate with it.
-    fd_gp = signals.makegp_fd_piecewise(psr, nodes=fd_nodes, name='fd') if fd else None
+    # fd_selection (e.g. signals.selection_backend_flags) gives each TOA group its
+    # own frequency basis, combined into the one marginalised GP.
+    fd_gp = signals.makegp_fd_piecewise(psr, nodes=fd_nodes, spacing=fd_spacing,
+                                        selection=fd_selection, name='fd') if fd else None
     if fd_gp is not None:
         model_components += [fd_gp]
 
