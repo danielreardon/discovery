@@ -69,11 +69,23 @@ class PulsarLikelihood:
             csm = noise
 
         if vgps:
+            # The optimal statistic reads ONE per-pulsar GP as its GW template
+            # (`psl.gw`) and takes its log10_A as the normalisation. Resolve it by
+            # PRIORITY, not by position: the previous if/elif ran once per vgp, so
+            # when both candidates were present whichever appeared LAST silently
+            # won. 'gw' beats 'curn', so a model carrying a per-pulsar 'gw' GP
+            # alongside 'curn' -- models.mpta.common_noise(os_analysis=True), built
+            # for OS runs -- selects the HD process, while a CURN-only model still
+            # selects 'curn' exactly as before.
+            _gwcands = {}
             for vgp in vgps:
-                if hasattr(vgp, 'gpname') and vgp.gpname == 'gw':
-                    self.gw = vgp
-                elif hasattr(vgp, 'gpname') and vgp.gpname == 'curn':
-                    self.gw = vgp
+                _gpname = getattr(vgp, 'gpname', None)
+                if _gpname in ('gw', 'curn') and _gpname not in _gwcands:
+                    _gwcands[_gpname] = vgp
+            for _gpname in ('gw', 'curn'):
+                if _gpname in _gwcands:
+                    self.gw = _gwcands[_gpname]
+                    break
 
             if len(vgps) > 1 and concat:
                 vgp = matrix.CompoundGP(vgps)
