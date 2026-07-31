@@ -633,20 +633,29 @@ def makegp_timing(psr, constant=None, variance=None, svd=False, scale=1.0, varia
     return makegp_improper(psr, fmat, constant=constant, name='timingmodel', variable=variable)
 
 # Analytically-marginalised SVD chromatic polynomial GP.
-def makegp_fd_piecewise(psr, nodes=16, log_freq=True, project_tm=True, constant=1.0e40, name='fd'):
+def makegp_fd_piecewise(psr, nodes=16, spacing='log', project_tm=True, constant=1.0e40, name='fd'):
     """Piecewise-linear frequency-dependent delay, constant in time, marginalised.
 
     Absorbs arbitrary time-constant structure across the observing band -- residual
     DM, a mean scattering delay, and profile evolution the template does not capture
     -- as a non-parametric generalisation of the timing model's ``FDx`` parameters.
 
-    The basis is a set of hat (linear B-spline) functions over ``nodes`` frequency
-    nodes. Nodes are placed at QUANTILES of the pulsar's observed frequency
-    distribution, so every interval is guaranteed to contain data (roughly
-    ``ntoa/nodes`` TOAs each) and no node is wasted on a receiver gap. With
-    ``log_freq=True`` (default) the nodes are spaced in ``log(freq)``, matching the
-    ``FDx`` convention and representing power laws (DM ~ nu^-2, scattering ~ nu^-4)
-    far more efficiently than linear spacing.
+    The basis is a set of hat (linear B-spline) functions, linear in ``log(freq)``,
+    over ``nodes`` frequency nodes placed according to ``spacing``:
+
+    - ``'log'`` (default): uniform in ``log(freq)`` between the lowest and highest
+      observed frequency. Gives even resolution across the band in the coordinate
+      the ``FDx`` convention uses, and in which power laws (DM ~ nu^-2, scattering
+      ~ nu^-4) are smoothest. Intervals containing no TOAs simply produce empty
+      basis columns, which are dropped (see below), so receiver gaps are harmless.
+    - ``'quantile'``: at quantiles of the observed frequency distribution, so each
+      interval holds roughly ``ntoa/nodes`` TOAs. This adapts to coverage but puts
+      the resolution where the TOAs are, not where the structure is -- with most
+      TOAs at high frequency it spends few nodes on the low-frequency end, where
+      profile evolution and scattering are strongest.
+
+    (Quantile placement is invariant under monotone transforms, so it gives the
+    same nodes whether computed in frequency or log-frequency.)
 
     The amplitudes are marginalised analytically with an improper (very broad)
     prior, exactly like the timing model, so this removes the corresponding
@@ -664,10 +673,16 @@ def makegp_fd_piecewise(psr, nodes=16, log_freq=True, project_tm=True, constant=
     argument to remove the overlap.
     """
     freqs = np.asarray(psr.freqs, dtype=np.float64)
-    x = np.log(freqs) if log_freq else freqs
+    x = np.log(freqs)                                   # hats are linear in log(freq)
 
-    # quantile node placement: guarantees TOAs between consecutive nodes
-    q = np.unique(np.quantile(x, np.linspace(0.0, 1.0, nodes)))
+    if spacing == 'log':
+        q = np.linspace(x.min(), x.max(), nodes)
+    elif spacing == 'quantile':
+        q = np.quantile(x, np.linspace(0.0, 1.0, nodes))
+    else:
+        raise ValueError(f"makegp_fd_piecewise: spacing must be 'log' or 'quantile', got {spacing!r}.")
+
+    q = np.unique(q)
     if len(q) < 2:
         raise ValueError(f"makegp_fd_piecewise: {psr.name} has too little frequency coverage "
                          f"for a piecewise basis (got {len(q)} distinct nodes).")
@@ -694,7 +709,7 @@ def makegp_fd_piecewise(psr, nodes=16, log_freq=True, project_tm=True, constant=
     fmat = U[:, S > 1e-10 * S[0]]
 
     gp = makegp_improper(psr, fmat, constant=constant, name=name)
-    gp.fd_nodes = np.exp(q) if log_freq else q
+    gp.fd_nodes = np.exp(q)                             # node frequencies, in psr.freqs units
     return gp
 
 def makegp_chrom_poly_svd(psr, fref=None, sigma_c=1e-3, name='chrom_gp', project=None):

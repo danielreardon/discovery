@@ -25,14 +25,33 @@ def _qtm(psr):
     return np.linalg.qr(M / np.sqrt(np.sum(M**2, axis=0)))[0]
 
 
-def test_nodes_have_data_in_every_interval(psr):
+def test_quantile_spacing_has_data_in_every_interval(psr):
     """Quantile placement must leave no empty interval between nodes."""
-    gp = s.makegp_fd_piecewise(psr, nodes=16)
+    gp = s.makegp_fd_piecewise(psr, nodes=16, spacing='quantile')
     counts, _ = np.histogram(np.asarray(psr.freqs), bins=gp.fd_nodes)
     assert np.all(counts > 0)
-    # end nodes are the min/max observed frequency, up to the log/exp round-trip
+
+
+def test_log_spacing_is_uniform_in_log_freq(psr):
+    """Log spacing puts nodes evenly in log(freq) across the observed band."""
+    gp = s.makegp_fd_piecewise(psr, nodes=16, spacing='log')
+    lq = np.log(gp.fd_nodes)
+    assert np.allclose(np.diff(lq), np.diff(lq)[0], rtol=1e-6)
     assert np.isclose(gp.fd_nodes[0], np.min(psr.freqs), rtol=1e-9)
     assert np.isclose(gp.fd_nodes[-1], np.max(psr.freqs), rtol=1e-9)
+
+
+def test_log_spacing_survives_band_gaps(psr):
+    """Nodes landing in a receiver gap give empty columns, which are dropped."""
+    gp = s.makegp_fd_piecewise(psr, nodes=16, spacing='log')
+    F = np.asarray(gp.F)
+    assert F.shape[1] <= 16                      # gap nodes dropped, never singular
+    assert np.allclose(F.T @ F, np.eye(F.shape[1]), atol=1e-8)
+
+
+def test_unknown_spacing_raises(psr):
+    with pytest.raises(ValueError, match="spacing"):
+        s.makegp_fd_piecewise(psr, nodes=8, spacing='linear')
 
 
 def test_basis_orthonormal_and_orthogonal_to_timing_model(psr):
@@ -45,15 +64,15 @@ def test_basis_orthonormal_and_orthogonal_to_timing_model(psr):
 
 
 def test_projection_drops_degenerate_directions(psr):
-    """With the TM projected out, the surviving basis is smaller than the node count."""
-    kept = np.asarray(s.makegp_fd_piecewise(psr, nodes=16, project_tm=True).F).shape[1]
-    raw = np.asarray(s.makegp_fd_piecewise(psr, nodes=16, project_tm=False).F).shape[1]
+    """With the TM projected out, the surviving basis is smaller than without it."""
+    kept = np.asarray(s.makegp_fd_piecewise(psr, nodes=16, spacing='quantile', project_tm=True).F).shape[1]
+    raw = np.asarray(s.makegp_fd_piecewise(psr, nodes=16, spacing='quantile', project_tm=False).F).shape[1]
     assert kept < raw
 
 
 def test_removes_time_constant_frequency_structure(psr):
     """An injected frequency-only signal is largely absorbed by the basis."""
-    gp = s.makegp_fd_piecewise(psr, nodes=24)
+    gp = s.makegp_fd_piecewise(psr, nodes=24, spacing='quantile')
     F, Qtm = np.asarray(gp.F), _qtm(psr)
     freqs = np.asarray(psr.freqs, dtype=np.float64)
     inject = 1e-6 * np.sin(3 * np.log(freqs / 1000.0)) + 4e-7 * (1400.0 / freqs) ** 4
@@ -62,11 +81,12 @@ def test_removes_time_constant_frequency_structure(psr):
     assert after.std() < 0.2 * resid.std()
 
 
-def test_linear_freq_option(psr):
-    gp = s.makegp_fd_piecewise(psr, nodes=12, log_freq=False)
-    assert np.asarray(gp.F).shape[0] == len(psr.toas)
-    counts, _ = np.histogram(np.asarray(psr.freqs), bins=gp.fd_nodes)
-    assert np.all(counts > 0)
+@pytest.mark.parametrize("spacing", ["log", "quantile"])
+def test_both_spacings_build_a_usable_basis(psr, spacing):
+    gp = s.makegp_fd_piecewise(psr, nodes=12, spacing=spacing)
+    F = np.asarray(gp.F)
+    assert F.shape[0] == len(psr.toas) and F.shape[1] >= 2
+    assert np.all(np.isfinite(F))
 
 
 def test_chrom_poly_project_removes_overlap(psr):
