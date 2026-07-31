@@ -84,6 +84,31 @@ def test_chrom_poly_project_removes_overlap(psr):
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("nodes", [16, 32])
+def test_mpta_wiring_auto_projects_chrom_poly(psr, nodes):
+    """mpta.single_pulsar_noise(fd=True) adds the term and passes project= on."""
+    import discovery.models.mpta as mpta
+
+    kw = dict(fftint=False, noisedict=psr.noisedict, background=False,
+              red=True, dm=True, chrom=True, sw=False)
+    comps = mpta.single_pulsar_noise(psr, fd=True, fd_nodes=nodes, chrom_poly=True,
+                                     return_components=True, **kw)[1]
+
+    fd = [np.asarray(c.F) for c in comps if getattr(c, "gpname", None) == "fd"]
+    assert len(fd) == 1 and fd[0].shape[1] <= nodes
+
+    # the chromatic-polynomial GP is the one carrying .svd metadata
+    poly = [c for c in comps if getattr(c, "svd", None) is not None]
+    assert len(poly) == 1
+    B = np.asarray(poly[0].F({f"{psr.name}_chrom_gp_alpha": 4.0}))
+    assert np.abs(fd[0].T @ B).max() < 1e-8       # project= was auto-passed
+
+    # and fd=False adds no such component
+    off = mpta.single_pulsar_noise(psr, fd=False, return_components=True, **kw)[1]
+    assert not any(getattr(c, "gpname", None) == "fd" for c in off)
+
+
+@pytest.mark.integration
 def test_fd_gp_logL_finite_and_adds_no_parameters(psr):
     gp = s.makegp_fd_piecewise(psr, nodes=16)
     base = ds.PulsarLikelihood([psr.residuals,
