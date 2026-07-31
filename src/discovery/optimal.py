@@ -1,7 +1,6 @@
 import functools
 
 import numpy as np
-import scipy.integrate
 
 from . import matrix
 from . import signals
@@ -70,12 +69,24 @@ class OS:
             cs = [matrix.jsp.linalg.cho_factor(matrix.jnp.diag(1.0 / Pvar(params)) + FFt) for Pvar, FFt in zip(Pvars, FFts)]
             Ss = [TTt - FTt.T @ matrix.jsp.linalg.cho_solve(c, FTt) for c, TTt, FTt in zip(cs, TTts, FTts)]
 
-            Ss = [0.5 * (S + S.T) for S in Ss]  # ensure symmetry
-            As = [matrix.jnp.linalg.cholesky(S + (1e-10 * matrix.jnp.trace(S) / S.shape[0]) * matrix.jnp.eye(S.shape[0]))
-                for S in Ss]
+            # adaptively ridge-regularize each S so its Cholesky is well defined:
+            # add only what is needed to make the smallest eigenvalue positive
+            As = []
+            for S in Ss:
+                S = 0.5 * (S + S.T)  # enforce symmetry
+
+                eigs = matrix.jnp.linalg.eigvalsh(S)
+                min_eig = matrix.jnp.min(eigs)
+                max_eig = matrix.jnp.max(matrix.jnp.abs(eigs))
+
+                eps = 1e-12 * matrix.jnp.maximum(max_eig, 1.0)
+                ridge = matrix.jnp.maximum(0.0, -min_eig) + eps
+
+                As.append(matrix.jnp.linalg.cholesky(S + ridge * matrix.jnp.eye(S.shape[0])))
 
             Ds = [sPhi[:,matrix.jnp.newaxis] * S * sPhi[matrix.jnp.newaxis,:] for S in Ss]
-            bs = [matrix.jnp.trace(Ds[i] @ Ds[j]) for (i,j) in self.pairs]
+            # Ds are symmetric, so tr(Ds[i] @ Ds[j]) == sum(Ds[i] * Ds[j]) (O(m^2), no m x m temporary)
+            bs = [matrix.jnp.sum(Ds[i] * Ds[j]) for (i,j) in self.pairs]
 
             orfs = orf(matrix.jnparray(self.angles))
             # note the 2 to get OS = x^T Q x
@@ -126,7 +137,7 @@ class OS:
                 for S in Ss]
 
             Ds = [sPhi[:,matrix.jnp.newaxis] * S * sPhi[matrix.jnp.newaxis,:] for S in Ss]
-            bs = [matrix.jnp.trace(Ds[i] @ Ds[j]) for (i,j) in self.pairs]
+            bs = [matrix.jnp.sum(Ds[i] * Ds[j]) for (i,j) in self.pairs]  # Ds symmetric: tr(A@B)==sum(A*B)
 
             orfs = orf(matrix.jnparray(self.angles))
             # note the 2 to get OS = x^T Q x
@@ -181,7 +192,7 @@ class OS:
                   for S in Ss]
 
             Ds = [sPhi[:,matrix.jnp.newaxis] * S * sPhi[matrix.jnp.newaxis,:] for S in Ss]
-            bs = [matrix.jnp.trace(Ds[i] @ Ds[j]) for (i,j) in self.pairs]
+            bs = [matrix.jnp.sum(Ds[i] * Ds[j]) for (i,j) in self.pairs]  # Ds symmetric: tr(A@B)==sum(A*B)
 
             xs = matrix.jnpnormal(key, cnt)
             uks = [sPhi * (A @ xs[ind]) for A, ind in zip(As, inds)]
@@ -235,7 +246,7 @@ class OS:
               for S in Ss]
 
         Ds = [sPhi[:,matrix.jnp.newaxis] * S * sPhi[matrix.jnp.newaxis,:] for S in Ss]
-        bs = [matrix.jnp.trace(Ds[i] @ Ds[j]) for (i,j) in self.pairs]
+        bs = [matrix.jnp.sum(Ds[i] * Ds[j]) for (i,j) in self.pairs]  # Ds symmetric: tr(A@B)==sum(A*B)
 
         inds, cnt = [], 0
         for A in As:
@@ -279,7 +290,7 @@ class OS:
         PsTts = [sPhi[:,matrix.jnp.newaxis] * Tmat.T for Tmat in Tmats]
 
         Ds = [sPhi[:,matrix.jnp.newaxis] * TtKmT * sPhi[matrix.jnp.newaxis,:] for TtKmT in TtKmTs]
-        bs = [matrix.jnp.trace(Ds[i] @ Ds[j]) for (i,j) in self.pairs]
+        bs = [matrix.jnp.sum(Ds[i] * Ds[j]) for (i,j) in self.pairs]  # Ds symmetric: tr(A@B)==sum(A*B)
 
         cnt, iNs, iPs = 0, [], []
         for Nmat in Nmats:
@@ -342,7 +353,7 @@ class OS:
                 ts = [matrix.jnp.dot(sN * ks[i][0], sN * ks[j][0]) for (i,j) in pairs]
                 ds = [sN[:,matrix.jnp.newaxis] * k[1] * sN[matrix.jnp.newaxis,:] for k in ks]
 
-                bs = [matrix.jnp.trace(ds[i] @ ds[j]) for (i,j) in pairs]
+                bs = [matrix.jnp.sum(ds[i] * ds[j]) for (i,j) in pairs]  # ds symmetric: tr(A@B)==sum(A*B)
             else:
                 U = matrix.jnp.linalg.cholesky(N, upper=True) # N = U^T U, so y = U^T x
 
@@ -350,7 +361,7 @@ class OS:
                 ds = [U @ k[1] @ U.T for k in ks]
 
                 ts = [matrix.jnp.dot(uks[i], uks[j].T) for (i,j) in pairs]
-                bs = [matrix.jnp.trace(ds[i] @ ds[j]) for (i,j) in pairs]
+                bs = [matrix.jnp.sum(ds[i] * ds[j]) for (i,j) in pairs]  # ds symmetric: tr(A@B)==sum(A*B)
 
                 # slower:
                 # ts = [matrix.jnp.dot(U @ ks[i][0], U @ ks[j][0]) for (i,j) in pairs]
@@ -457,7 +468,7 @@ class OS:
             N = getN(params)
             ks = [k(params) for k in kernelsolves]
 
-            if sN.ndim == 2:
+            if N.ndim == 2:
                 raise NotImplementedError("Complex rhosigma not defined for 2D Phi.")
 
             sN = matrix.jnp.sqrt(N)
@@ -466,7 +477,7 @@ class OS:
             ts = [tsf[i] * matrix.jnp.conj(tsf[j]) for (i,j) in pairs]
 
             ds = [sN[:,matrix.jnp.newaxis] * k[1] * sN[matrix.jnp.newaxis,:] for k in ks]
-            bs = [matrix.jnp.trace(ds[i] @ ds[j]) for (i,j) in pairs]
+            bs = [matrix.jnp.sum(ds[i] * ds[j]) for (i,j) in pairs]  # ds symmetric: tr(A@B)==sum(A*B)
 
             # can't use matrix.jnparray or complex will be downcast
             return (matrix.jnparray(ts) / matrix.jnparray(bs)[:,matrix.jnp.newaxis],
@@ -515,12 +526,26 @@ def imhof(u, x, eigs):
     theta = 0.5 * matrix.jnp.sum(matrix.jnp.arctan(eigs * u), axis=0) - 0.5 * x * u
     rho = matrix.jnp.prod((1.0 + (eigs * u)**2)**0.25, axis=0)
 
-    return matrix.jnp.sin(theta) / (u * rho)
+    # the integrand has a removable 0/0 singularity at u=0 with finite limit
+    # 1/2 (sum(eigs) - x); quadax may sample the lower endpoint, so return the
+    # limit there rather than nan
+    u0 = 0.5 * (matrix.jnp.sum(eigs, axis=0) - x)
+    return matrix.jnp.where(u == 0.0, u0, matrix.jnp.sin(theta) / (u * rho))
 
 def eig2cdf(osxs, eigs, cutoff=1e-6, limit=100, epsabs=1e-6):
-    # cutoff by number of eigenvalues is more friendly to jitted imhof
-    eigs = eigs[:cutoff] if cutoff > 1 else eigs[matrix.jnp.abs(eigs) > cutoff]
+    # imported here rather than at module scope so that quadax stays an optional
+    # dependency: only gx2cdf needs it, and discovery/__init__ star-imports this
+    # module, so a top-level import would make the whole package unimportable
+    import quadax
 
-    # jax.scipy.integrate is mostly not implemented. Could try quadax
-    return np.array([0.5 - scipy.integrate.quad(lambda u: float(imhof(u, osx, eigs)),
-                                                0, np.inf, limit=limit, epsabs=epsabs)[0] / np.pi for osx in osxs])
+    # cutoff by number of eigenvalues is more friendly to jitted imhof
+    eigs = eigs[:cutoff] if cutoff > 1 else eigs[matrix.jnp.abs(eigs) > cutoff * matrix.jnp.abs(eigs).max()]
+
+    # quadax.quadgk is a JAX-transformable analog of scipy.integrate.quad,
+    # so we can vmap over osxs and keep everything in jax
+    def cdf(osx):
+        integral = quadax.quadgk(imhof, [0.0, matrix.jnp.inf], args=(osx, eigs),
+                                 epsabs=epsabs, max_ninter=limit)[0]
+        return 0.5 - integral / matrix.jnp.pi
+
+    return jax.vmap(cdf)(matrix.jnparray(osxs))

@@ -31,6 +31,12 @@ dependencies = [
 
 [project.optional-dependencies]
 
+# OS.gx2cdf integrates the Imhof integrand with quadax so the generalized-chi2
+# null CDF stays jax-transformable; imported lazily, so only needed for that.
+optimal = [
+    "quadax",
+]
+
 test = [
     "bandit[toml]==1.7.9",
     "black==24.8.0",
