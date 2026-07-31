@@ -49,6 +49,51 @@ def test_log_spacing_survives_band_gaps(psr):
     assert np.allclose(F.T @ F, np.eye(F.shape[1]), atol=1e-8)
 
 
+def _labels(psr):
+    return sorted(set(np.asarray(s.selection_backend_flags(psr)).tolist()))
+
+
+def test_default_is_a_single_global_basis(psr):
+    """No selection: one block over all TOAs, and fd_nodes is just the node array."""
+    gp = s.makegp_fd_piecewise(psr, nodes=8)
+    assert not isinstance(gp.fd_nodes, dict)
+    assert np.asarray(gp.fd_nodes).ndim == 1
+
+
+def test_all_groups_gets_no_separate_global(psr):
+    """With every group selected the per-group bases already span common structure."""
+    gp = s.makegp_fd_piecewise(psr, nodes=8, selection=s.selection_backend_flags)
+    assert set(gp.fd_nodes) == set(_labels(psr))
+    assert None not in gp.fd_nodes
+
+
+def test_subset_of_groups_keeps_the_global(psr):
+    """Selecting only some groups leaves the rest to the global basis."""
+    sub = _labels(psr)[:2]
+    gp = s.makegp_fd_piecewise(psr, nodes=8, selection=s.selection_backend_flags, groups=sub)
+    assert set(gp.fd_nodes) == {None, *sub}
+
+    # and it carries more freedom than the global alone
+    alone = np.asarray(s.makegp_fd_piecewise(psr, nodes=8).F).shape[1]
+    assert np.asarray(gp.F).shape[1] > alone
+
+
+def test_unknown_group_warns_and_is_skipped(psr):
+    gp = s.makegp_fd_piecewise(psr, nodes=8, selection=s.selection_backend_flags,
+                               groups=['not-a-backend'])
+    assert list(gp.fd_nodes) == [None]           # falls back to the global block
+
+
+def test_user_supplied_list_of_selections(psr):
+    """A list of selections lets the caller compose blocks explicitly."""
+    def selection_global(p):
+        return np.array(['global'] * len(p.toas))
+
+    gp = s.makegp_fd_piecewise(psr, nodes=8,
+                               selection=[selection_global, s.selection_backend_flags])
+    assert set(gp.fd_nodes) == {'global', *_labels(psr)}
+
+
 def test_selection_gives_one_basis_per_group(psr):
     """A selection builds a per-group basis, combined into one marginalised GP."""
     plain = s.makegp_fd_piecewise(psr, nodes=8)
@@ -56,7 +101,6 @@ def test_selection_gives_one_basis_per_group(psr):
 
     ngroups = len(set(np.asarray(s.selection_backend_flags(psr)).tolist()))
     assert isinstance(grouped.fd_nodes, dict) and len(grouped.fd_nodes) == ngroups
-    assert not isinstance(plain.fd_nodes, dict)
 
     F = np.asarray(grouped.F)
     assert F.shape[1] > np.asarray(plain.F).shape[1]     # more DOF than a single basis

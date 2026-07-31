@@ -633,7 +633,7 @@ def makegp_timing(psr, constant=None, variance=None, svd=False, scale=1.0, varia
     return makegp_improper(psr, fmat, constant=constant, name='timingmodel', variable=variable)
 
 # Analytically-marginalised SVD chromatic polynomial GP.
-def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None,
+def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None, groups=None,
                         project_tm=True, constant=1.0e40, name='fd'):
     """Piecewise-linear frequency-dependent delay, constant in time, marginalised.
 
@@ -657,14 +657,27 @@ def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None,
     (Quantile placement is invariant under monotone transforms, so it gives the
     same nodes whether computed in frequency or log-frequency.)
 
-    ``selection`` optionally splits the term by TOA group, following the same
-    convention as the other selections here: a callable mapping ``psr`` to an
-    array of per-TOA labels (e.g. :func:`selection_backend_flags`). One basis is
-    built per label, restricted to that group's TOAs and named ``{name}_{label}``,
-    and a LIST of GPs is returned instead of a single GP. Use this when profile
-    evolution differs between receivers whose bands overlap, which a single
-    frequency-only basis cannot separate. Groups too sparse in frequency to
-    support a basis are skipped with a warning.
+    ``selection`` optionally gives TOA groups their own basis, for cases where
+    profile evolution differs between receivers whose bands overlap -- which a
+    single frequency-only basis cannot separate. It follows the usual convention:
+    a callable mapping ``psr`` to an array of per-TOA labels (e.g.
+    :func:`selection_backend_flags`), as the white-noise parameters use.
+
+    - ``selection=None`` (default): one global basis over all TOAs.
+    - ``selection=callable``: one basis per group, as the white-noise parameters
+      are split per backend. No separate global term -- the per-group bases
+      already span any structure common to all of them.
+    - ``selection=callable, groups=[...]``: only the listed groups get their own
+      basis, as band noise is switched on for selected pulsars, PLUS the global
+      basis, which covers the remaining groups and any common structure.
+    - ``selection=[callable, ...]``: a user-defined set of selections; every
+      label of every callable gets a block, and it is the caller's job to
+      include a global one if wanted (e.g. a selection labelling all TOAs alike).
+
+    All blocks are combined into the ONE marginalised GP, so a selection changes
+    the number of basis columns, not the number of GPs. Groups too sparse in
+    frequency to support a basis are skipped with a warning, and any redundancy
+    between blocks is removed by the rank-revealing step.
 
     The amplitudes are marginalised analytically with an improper (very broad)
     prior, exactly like the timing model, so this removes the corresponding
@@ -683,14 +696,38 @@ def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None,
     """
     x = np.log(np.asarray(psr.freqs, dtype=np.float64))
 
+    everything = np.ones(len(x), dtype=bool)
+
     if selection is None:
-        groups = [(None, np.ones(len(x), dtype=bool))]
+        blocks = [(None, everything)]
+    elif isinstance(selection, (list, tuple)):
+        # user-defined set of selections: every label of every callable gets a
+        # block, and it is the caller's job to include a global one if wanted
+        # (e.g. a selection returning the same label for all TOAs).
+        blocks = []
+        for sel_fn in selection:
+            flags = np.asarray(sel_fn(psr))
+            blocks += [(str(g), flags == g) for g in sorted(set(flags.tolist()))]
     else:
         flags = np.asarray(selection(psr))
-        groups = [(str(g), flags == g) for g in sorted(set(flags.tolist()))]
+        present = sorted(set(flags.tolist()))
+
+        if groups is None:
+            # every group gets its own basis: a global term would add nothing
+            # conceptually, since per-group terms already span any common
+            # structure (raise `nodes` for more resolution instead).
+            blocks = [(str(g), flags == g) for g in present]
+        else:
+            # only some groups get their own basis, so the rest -- and any
+            # structure common to all -- still need the global term.
+            for g in groups:
+                if g not in present:
+                    print(f"Warning: fd_piecewise group {g!r} not found among {psr.name}'s "
+                          f"selection labels; skipped.")
+            blocks = [(None, everything)] + [(str(g), flags == g) for g in groups if g in present]
 
     mats, group_nodes = [], {}
-    for label, sel in groups:
+    for label, sel in blocks:
         block = _fd_piecewise_block(psr, x, sel, nodes, spacing,
                                     name if label is None else f'{name}_{label}')
         if block is not None:
