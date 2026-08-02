@@ -10,76 +10,108 @@ import jax
 # cross-correlation limit plus a pulsar term: 0.5 + 0.5 for HD, and a small
 # 1e-6 for dipole/monopole so the autocorrelation stays distinguishable.
 
+# asarray because these are public (star-exported into the discovery namespace)
+# and jnp.clip rejects a plain list of angles outright.
+
 def hd_orfa(z):
-    omc2 = 0.5 * (1.0 - matrix.jnp.clip(z, -1.0, 1.0))
+    omc2 = 0.5 * (1.0 - matrix.jnp.clip(matrix.jnp.asarray(z), -1.0, 1.0))
     safe = matrix.jnp.where(omc2 > 0.0, omc2, 1.0)   # keep log finite at z == 1
     hd = 1.5 * omc2 * matrix.jnp.log(safe) - 0.25 * omc2 + 0.5
     return matrix.jnp.where(omc2 > 0.0, hd, 1.0)
 
 def dipole_orfa(z):
-    z = matrix.jnp.clip(z, -1.0, 1.0)
+    z = matrix.jnp.clip(matrix.jnp.asarray(z), -1.0, 1.0)
     return matrix.jnp.where(z < 1.0, z, 1.0 + 1.0e-6)
 
 def monopole_orfa(z):
-    z = matrix.jnp.clip(z, -1.0, 1.0)
+    z = matrix.jnp.clip(matrix.jnp.asarray(z), -1.0, 1.0)
     return matrix.jnp.where(z < 1.0, 1.0, 1.0 + 1.0e-6)
 
 
-# Relative size of a negative eigenvalue of S that we are willing to call
-# round-off. Measured on the 83-pulsar MPTA array: 81 of 83 pulsars have a
-# negative eigenvalue, all in the range -4.4e-17 .. -4.3e-14 of the largest,
-# i.e. n*eps for n ~ 150. Anything materially larger is not cancellation, it is
-# a broken model, and must not be silently repaired.
-_PSD_TOL = 1e-10
+def make2d(array):
+    return matrix.jnp.diag(array) if array.ndim == 1 else array
 
 
-def _psd(S, warn=True):
-    """Symmetrise, and clip round-off-level negative eigenvalues of ``S``.
+# Warn when a pair overlap is within this many error-lengths of zero. The error
+# length is the pair's own negative Frobenius mass, so this is a ratio of a
+# quantity to its own uncertainty and needs no per-array tuning.
+_OVERLAP_MARGIN = 1.0
 
-    ``S = T^T K^-1 T`` is PSD analytically but is formed as a Schur complement,
-    so cancellation leaves eigenvalues a few ulp below zero. That is harmless
-    for ``bs = tr(D_i D_j)`` -- a contraction over ngw^2 modes, measured
-    min bs = 1.7e-21 with the negative part contributing at most 1.3e-13 of it,
-    so no ``1/sqrt(bs)`` ever goes NaN -- but it does break ``cholesky``, which
-    is why this is applied at the Cholesky call sites and NOT in kernelsolves.
 
-    Keeping it out of kernelsolves matters twice over: the point estimate
-    (os_rhosigma / os / mcos) then still sees the raw S, as it always has, and
-    it avoids putting an eigendecomposition in the hottest path (measured +63%
-    on os() at 83 pulsars).
+@jax.custom_jvp
+def _psd(S):
+    """Symmetrise ``S`` and clip its negative eigenvalues to zero.
 
-    ``warn`` reports a clip too large to be cancellation. Without it a genuinely
-    wrong S is silently repaired: with S perturbed by 164% the projection
-    returns snr = -0.234162 against a true -0.234078, indistinguishable from
-    correct, where the unprojected code returned a loud NaN.
+    ``S = T^T K^-1 T`` is PSD analytically, but it is built as a Schur
+    complement, so cancellation leaves eigenvalues a few ulp below zero. Two
+    things then break: ``cholesky(S)`` is undefined, and the pair overlap
+    ``bs_ij = tr(D_i D_j)`` can go negative, making ``1/sqrt(bs_ij)`` NaN.
+
+    ``bs_ij >= 0`` holds identically for PSD operands, so a negative overlap
+    needs an indefinite ``S`` AND a nearly orthogonal pair. Heterogeneous arrays
+    supply the second and steep ``Phi`` the first, by putting the weight on the
+    low-frequency modes where the cancellation lives.
+
+    Applied once in ``kernelsolves`` so the statistic and its null share one S.
     """
     S = 0.5 * (S + S.T)
     w, V = matrix.jnp.linalg.eigh(S)
-
-    if warn:
-        wmin, wmax = float(matrix.jnp.min(w)), float(matrix.jnp.max(matrix.jnp.abs(w)))
-        if wmax > 0.0 and wmin < -_PSD_TOL * wmax:
-            warnings.warn(
-                f"OS: S has a negative eigenvalue {wmin:.3e}, which is "
-                f"{abs(wmin) / wmax:.2e} of the largest -- far above the {_PSD_TOL:.0e} "
-                "expected from Schur-complement cancellation. Clipping it to zero, but "
-                "this suggests the kernel or the parameters are wrong, not round-off.",
-                RuntimeWarning, stacklevel=2)
-
     return (V * matrix.jnp.maximum(w, 0.0)) @ V.T
 
 
-def _ridge(S):
-    """Nudge to lift the exact zeros _psd leaves, so cholesky(S) is defined.
+@_psd.defjvp
+def _psd_jvp(primals, tangents):
+    """Exact derivative of the clip, avoiding eigh's 1/(w_i - w_j).
 
-    Purely relative, so the result is invariant under ``S -> lambda S`` (a
-    change of time units). An earlier version used
-    ``1e-12 * maximum(scale, 1.0)``; that absolute floor is unreachable for real
-    data (max|diag S| is 1e14-1e15) but it destroyed the scale invariance of
-    opQ / sample / sample_rhosigma_lowrank -- a lowrank draw moved 0.822 -> 5519
-    as S was rescaled, where the relative form gives 0.822163 at every scale.
+    eigh's own VJP differentiates the eigenvectors, whose sensitivity is
+    1/(w_i - w_j) -- and this function exists to handle an S with many
+    eigenvalues piled up at zero, so that quotient is 0/0 and jax.grad returns
+    NaN. The composite map S -> V max(w,0) V^T has no such problem: the
+    eigenvector rotations cancel out of it. Its Frechet derivative is
+
+        d(_psd)(S)[E] = V (L o (V^T E V)) V^T,
+        L_ij = (max(w_i,0) - max(w_j,0)) / (w_i - w_j)  in [0, 1],
+
+    with L_ii = 1 if w_i > 0 else 0. The divided difference is bounded because
+    max(.,0) is Lipschitz, so nothing can cancel. This is exact, not a
+    straight-through stand-in.
     """
-    return 1e-12 * matrix.jnp.max(matrix.jnp.abs(matrix.jnp.diag(S)))
+    (S,), (dS,) = primals, tangents
+    w, V = matrix.jnp.linalg.eigh(0.5 * (S + S.T))
+    wc = matrix.jnp.maximum(w, 0.0)
+    dw = w[:, matrix.jnp.newaxis] - w[matrix.jnp.newaxis, :]
+    nz = dw != 0.0
+    L = matrix.jnp.where(nz,
+                         (wc[:, matrix.jnp.newaxis] - wc[matrix.jnp.newaxis, :])
+                         / matrix.jnp.where(nz, dw, 1.0),
+                         (w > 0.0).astype(w.dtype))
+    return ((V * wc) @ V.T,
+            V @ (L * (V.T @ (0.5 * (dS + dS.T)) @ V)) @ V.T)
+
+
+def _pair_overlaps(Ds):
+    """All pair overlaps ``bs_ij = tr(D_i D_j)`` as one Gram matrix.
+
+    ``D`` is symmetric, so ``tr(D_i D_j) = sum(D_i * D_j)``, and stacking the
+    flattened ``D`` gives every pair at once as ``G G^T`` -- one matmul instead
+    of npairs elementwise products. ``||D_i||_F**2`` is the diagonal.
+    """
+    G = matrix.jnp.stack([D.reshape(-1) for D in Ds])
+    return G @ G.T
+
+
+def _ridge(S):
+    """Relative nudge to lift the exact zeros ``_psd`` leaves, so cholesky is
+    defined.
+
+    Relative to ``max|diag S|``, so invariant under ``S -> lambda S`` (a change
+    of time units). It must never return exactly zero: ``_psd`` clips an
+    all-negative ``S`` to exactly zero, and ``cholesky`` of a zero matrix
+    returns NaN silently rather than raising.
+    """
+    scale = matrix.jnp.max(matrix.jnp.abs(matrix.jnp.diag(S)))
+    tiny = matrix.jnp.finfo(matrix.jnp.asarray(S).dtype).tiny
+    return matrix.jnp.where(scale > 0.0, 1e-12 * scale, tiny)
 
 
 def _require_1d_phi(Phi, name):
@@ -93,11 +125,10 @@ def _require_1d_phi(Phi, name):
 
 class OS:
     def __init__(self, gbl):
-        # list() so a generator gbl.psls is not consumed by the first
-        # comprehension below, which used to leave pos and pairs silently empty
+        # list() so a generator gbl.psls is not consumed by the comprehensions below
         self.psls = list(gbl.psls)
 
-        # before touching self.gws[0], or zero pulsars gives IndexError instead
+        # before self.gws[0], so zero pulsars gives this message and not IndexError
         if len(self.psls) < 2:
             raise ValueError(f"the OS needs at least two pulsars, got {len(self.psls)}.")
 
@@ -115,22 +146,117 @@ class OS:
         self.gwpar = gwpars[0]
 
         self.pairs = [(i1, i2) for i1 in range(len(self.pos)) for i2 in range(i1 + 1, len(self.pos))]
-        self.angles = [matrix.jnp.dot(self.pos[i], self.pos[j]) for (i,j) in self.pairs]
+        # materialised here, not inside a cached property: a first access from
+        # within a jax.jit trace would cache a tracer on the object and every
+        # later call would raise UnexpectedTracerError.
+        self.angles = matrix.jnparray([matrix.jnp.dot(self.pos[i], self.pos[j])
+                                       for (i, j) in self.pairs])
+
+        # eagerly, so this can never first happen inside a trace -- see invalidate
+        self._kernelsolves_raw = self._build_kernelsolves()
 
     def invalidate(self):
         """Drop cached kernel solves. Call after replacing ``gbl.residuals``.
 
         The cached properties close over ``psl.y``, so without this an OS built
-        before a residual swap keeps returning the old numbers.
+        before a residual swap keeps returning the old numbers. ``GlobalLikelihood``
+        clears only its own caches and knows nothing about an OS object.
+
+        Derived from the class rather than hardcoded, so a new cached_property
+        cannot be silently forgotten. The kernel solves are rebuilt eagerly, for
+        the same tracer-caching reason as in ``__init__``.
         """
-        for name in ['params', 'kernelsolves', 'Q', 'opQ', 'sample',
-                     'os_rhosigma', 'os', 'mcos', 'scramble',
-                     'os_rhosigma_complex', 'shift']:
-            self.__dict__.pop(name, None)
+        for name, value in vars(type(self)).items():
+            if isinstance(value, functools.cached_property):
+                self.__dict__.pop(name, None)
+
+        self._kernelsolves_raw = self._build_kernelsolves()
+
+    def validate(self, params, margin=_OVERLAP_MARGIN):
+        """Check the two model assumptions the OS cannot enforce inside a trace.
+
+        1. Every pulsar's GW ``Phi`` is the same vector. ``os_rhosigma`` uses
+           pulsar 0's for every pair, so a per-pulsar Tspan or a differing
+           template is silently wrong.
+        2. Every pair overlap ``bs_ij = tr(D_i D_j)`` is positive, where
+           ``D_i = diag(sqrt(Phi)) S_i diag(sqrt(Phi))``. The OS divides by
+           ``sqrt(bs_ij)``, so a non-positive overlap makes ``os()`` NaN.
+
+        Checked on the raw ``S``, before ``_psd``, so it reports how much work
+        the projection is doing. The eigenvalues of ``S`` alone cannot predict
+        this: they do not depend on ``Phi``, which is what amplifies the
+        cancellation into the overlap.
+
+        Not called automatically -- it needs ``params``, and a concrete branch
+        in the hot path would break ``jax.jit``. Call it once per model.
+
+        :returns: dict with ``min_bs``, ``min_cos``, ``worst_pair``, ``margin``
+                  and ``eta`` (per-pulsar relative negative Frobenius mass).
+        :raises ValueError: if a Phi differs, or if any ``bs_ij <= 0``.
+        """
+        import numpy as np
+
+        phis = [np.asarray(gw.Phi.getN(params)) for gw in self.gws]
+        bad = [i for i, ph in enumerate(phis[1:], start=1)
+               if ph.shape != phis[0].shape
+               or not np.allclose(ph, phis[0], rtol=1e-12, atol=0)]
+        if bad:
+            raise ValueError(
+                f"the GW Phi of pulsar(s) {bad} differs from pulsar 0's, but the OS "
+                "uses pulsar 0's Phi for every pair. Give every gw GP the same "
+                "template and the same Tspan.")
+
+        sPhi = np.sqrt(phis[0])
+        S = np.array([np.asarray(k(params)[1]) for k in self._kernelsolves_raw])
+        D = sPhi[None, :, None] * (0.5 * (S + np.swapaxes(S, 1, 2))) * sPhi[None, None, :]
+
+        bs = np.asarray(_pair_overlaps(D))
+        nrm = np.sqrt(np.abs(np.diag(bs)))
+        cos = bs / np.outer(nrm, nrm)
+
+        # eta_i is the relative negative Frobenius mass of D_i: zero for a PSD
+        # S_i, otherwise the size of the perturbation that can flip a pair.
+        w = np.linalg.eigvalsh(D)
+        eta = (np.sqrt((np.minimum(w, 0.0) ** 2).sum(axis=1))
+               / np.sqrt((w ** 2).sum(axis=1)))
+
+        i, j = np.triu_indices(len(D), 1)
+        cij, bij, esum = cos[i, j], bs[i, j], eta[i] + eta[j]
+        ratio = np.where(esum > 0.0, cij / np.where(esum > 0.0, esum, 1.0), np.inf)
+        worst = int(np.argmin(ratio))
+        pair = (int(i[worst]), int(j[worst]))
+
+        if bij.min() <= 0.0:
+            k = int(np.argmin(bij))
+            raise ValueError(
+                f"{int((bij <= 0).sum())} of {len(bij)} pulsar pairs have a "
+                f"non-positive overlap bs_ij = tr(D_i D_j); worst is pair "
+                f"{(int(i[k]), int(j[k]))} at {bij[k]:.3e}. The OS divides by "
+                "sqrt(bs_ij), so os() is NaN without the _psd projection. An "
+                f"indefinite S (negative Frobenius mass up to {eta.max():.2e}) has "
+                f"flipped a nearly orthogonal pair (overlap down to {cij.min():.2e}).")
+
+        if ratio[worst] < margin:
+            warnings.warn(
+                f"OS: pair {pair} has a normalised overlap {cij[worst]:.2e}, only "
+                f"{ratio[worst]:.2f} error-lengths from zero (that pair's negative "
+                f"Frobenius mass is {esum[worst]:.2e}). The sign of bs_ij is not "
+                "resolved, so sigma_ij for this pair is unreliable and a small "
+                "parameter change can make os() NaN. Steeper gw_gamma makes this "
+                "worse.", RuntimeWarning, stacklevel=2)
+
+        return {'min_bs': float(bij.min()), 'min_cos': float(cij.min()),
+                'worst_pair': pair, 'margin': float(ratio[worst]),
+                'eta': eta, 'phi_consistent': True}
 
     @functools.cached_property
     def params(self):
         return self.os_rhosigma.params
+
+    def _build_kernelsolves(self):
+        """Unprojected kernel solves, built eagerly (see ``invalidate``)."""
+        return [psl.N.make_kernelsolve(psl.y, gw.F)
+                for psl, gw in zip(self.psls, self.gws)]
 
     @functools.cached_property
     def kernelsolves(self):
@@ -140,13 +266,19 @@ class OS:
         whole nested kernel, including the constant GPs (SVD timing model, fixed
         ECORR) that ``psl.N.F``/``psl.N.P_var`` do not describe.
 
-        S is returned RAW. The consumers that factorise it (Q, opQ, sample,
-        sample_rhosigma_lowrank) call ``_psd`` themselves; os_rhosigma and
-        everything built on it use S as the kernel produced it. See ``_psd``
-        for why the projection is deliberately not done here.
+        ``S`` is PSD-projected here, once, so every consumer shares it: the
+        point estimate and the null it is calibrated against must be normalised
+        by the same ``bs``. ``validate`` reads ``_kernelsolves_raw`` instead, so
+        it still sees what the projection repaired.
         """
-        return [psl.N.make_kernelsolve(psl.y, gw.F)
-                for psl, gw in zip(self.psls, self.gws)]
+        def wrap(k):
+            def kernelsolve(params):
+                kv, km = k(params)
+                return kv, _psd(km)
+            kernelsolve.params = k.params
+            return kernelsolve
+
+        return [wrap(k) for k in self._kernelsolves_raw]
 
     @functools.cached_property
     def Q(self):
@@ -162,10 +294,8 @@ class OS:
         def get_Q(params, orf=hd_orfa):
             sPhi = matrix.jnp.sqrt(_require_1d_phi(Phivar(params), 'Q'))
 
-            # _psd here rather than in kernelsolves: these are the sites that
-            # factorise S, so the ridge only has to lift the exact zeros the
-            # projection leaves behind
-            Ss = [_psd(k(params)[1]) for k in kernelsolves]
+            # _psd here, not in kernelsolves: this is a site that factorises S
+            Ss = [k(params)[1] for k in kernelsolves]
             As = [matrix.jnp.linalg.cholesky(S + _ridge(S) * matrix.jnp.eye(S.shape[0]))
                   for S in Ss]
 
@@ -177,7 +307,7 @@ class OS:
             # Ds are symmetric, so tr(Ds[i] @ Ds[j]) == sum(Ds[i] * Ds[j]) (O(m^2), no m x m temporary)
             bs = [matrix.jnp.sum(Ds[i] * Ds[j]) for (i,j) in self.pairs]
 
-            orfs = orf(matrix.jnparray(self.angles))
+            orfs = orf(self.angles)
             # the loop below adds both Bij and Bij.T, hence the 2 here
             denom = 2.0 * matrix.jnp.sqrt(matrix.jnp.sum(orfs**2 * matrix.jnparray(bs)))
 
@@ -206,8 +336,7 @@ class OS:
         def get_opQ(params, orf=hd_orfa):
             sPhi = matrix.jnp.sqrt(_require_1d_phi(Phivar(params), 'opQ'))
 
-            # _psd here, not in kernelsolves: these are the sites that factorise S
-            Ss = [_psd(k(params)[1]) for k in kernelsolves]
+            Ss = [k(params)[1] for k in kernelsolves]
             As = [matrix.jnp.linalg.cholesky(S + _ridge(S) * matrix.jnp.eye(S.shape[0]))
                   for S in Ss]
 
@@ -217,7 +346,7 @@ class OS:
             Ds = [sPhi[:,matrix.jnp.newaxis] * S * sPhi[matrix.jnp.newaxis,:] for S in Ss]
             bs = [matrix.jnp.sum(Ds[i] * Ds[j]) for (i,j) in self.pairs]  # Ds symmetric: tr(A@B)==sum(A*B)
 
-            orfs = orf(matrix.jnparray(self.angles))
+            orfs = orf(self.angles)
             # the loop below applies both orderings, hence the 2 here
             denom = 2.0 * matrix.jnp.sqrt(matrix.jnp.sum(orfs**2 * matrix.jnparray(bs)))
 
@@ -248,8 +377,7 @@ class OS:
         def get_sample(key, params, orf=hd_orfa):
             sPhi = matrix.jnp.sqrt(_require_1d_phi(Phivar(params), 'sample'))
 
-            # _psd here, not in kernelsolves: these are the sites that factorise S
-            Ss = [_psd(k(params)[1]) for k in kernelsolves]
+            Ss = [k(params)[1] for k in kernelsolves]
             As = [matrix.jnp.linalg.cholesky(S + _ridge(S) * matrix.jnp.eye(S.shape[0]))
                   for S in Ss]
 
@@ -269,7 +397,7 @@ class OS:
             rhos = gwnorm * (matrix.jnparray(ts) / matrix.jnparray(bs))
             sigmas = gwnorm / matrix.jnp.sqrt(matrix.jnparray(bs))
 
-            orfs = orf(matrix.jnparray(self.angles))
+            orfs = orf(self.angles)
 
             os = matrix.jnp.sum(rhos * orfs / sigmas**2) / matrix.jnp.sum(orfs**2 / sigmas**2)
             os_sigma = 1.0 / matrix.jnp.sqrt(matrix.jnp.sum(orfs**2 / sigmas**2))
@@ -285,7 +413,7 @@ class OS:
         Phi = _require_1d_phi(self.psls[0].gw.Phi.getN(params), 'sample_rhosigma_lowrank')
         sPhi = matrix.jnp.sqrt(Phi)
 
-        Ss = [_psd(k(params)[1]) for k in self.kernelsolves]
+        Ss = [k(params)[1] for k in self.kernelsolves]
         As = [matrix.jnp.linalg.cholesky(S + _ridge(S) * matrix.jnp.eye(S.shape[0]))
               for S in Ss]
 
@@ -306,7 +434,7 @@ class OS:
             rhos = gwnorm * (matrix.jnparray(ts) / matrix.jnparray(bs))
             sigmas = gwnorm / matrix.jnp.sqrt(matrix.jnparray(bs))
 
-            orfs = orf(matrix.jnparray(self.angles))
+            orfs = orf(self.angles)
 
             os = matrix.jnp.sum(rhos * orfs / sigmas**2) / matrix.jnp.sum(orfs**2 / sigmas**2)
             os_sigma = 1.0 / matrix.jnp.sqrt(matrix.jnp.sum(orfs**2 / sigmas**2))
@@ -356,7 +484,7 @@ class OS:
               for Nmat, Fmat, Pmat in zip(Nmats, Fmats, Pmats)]
         K1s = [K.make_solve_1d() for K in Ks]
 
-        TtKmTs = [_psd(Tmat.T @ K.solve_2d(Tmat)[0]) for K, Tmat in zip(Ks, Tmats)]
+        TtKmTs = [_psd(Tmat.T @ K.solve_2d(Tmat)[0]) for K, Tmat in zip(Ks, Tmats)]   # not from kernelsolves
         PsTtKmFsPs = [sPhi[:,matrix.jnp.newaxis] * (Tmat.T @ K.solve_2d(Fmat)[0]) * matrix.jnp.sqrt(Pmat)[matrix.jnp.newaxis,:]
                       for K, Tmat, Fmat, Pmat in zip(Ks, Tmats, Fmats, Pmats)]
         PsTts = [sPhi[:,matrix.jnp.newaxis] * Tmat.T for Tmat in Tmats]
@@ -383,7 +511,7 @@ class OS:
             rhos = gwnorm * (matrix.jnparray(ts) / matrix.jnparray(bs))
             sigmas = gwnorm / matrix.jnp.sqrt(matrix.jnparray(bs))
 
-            orfs = orf(matrix.jnparray(self.angles))
+            orfs = orf(self.angles)
 
             os = matrix.jnp.sum(rhos * orfs / sigmas**2) / matrix.jnp.sum(orfs**2 / sigmas**2)
             os_sigma = 1.0 / matrix.jnp.sqrt(matrix.jnp.sum(orfs**2 / sigmas**2))
@@ -442,7 +570,7 @@ class OS:
     @functools.cached_property
     def os(self):
         os_rhosigma = self.os_rhosigma    # getos will close on os_rhosigma
-        gwpar, angles = self.gwpar, matrix.jnparray(self.angles)
+        gwpar, angles = self.gwpar, self.angles
 
         def get_os(params, orf=hd_orfa):
             rhos, sigmas = os_rhosigma(params)
@@ -470,7 +598,7 @@ class OS:
         calling ``os`` once per ORF does not.
         """
         os_rhosigma = self.os_rhosigma    # get_mcos will close on os_rhosigma
-        gwpar, angles = self.gwpar, matrix.jnparray(self.angles)
+        gwpar, angles = self.gwpar, self.angles
 
         def get_mcos(params, orfs=(hd_orfa,)):
             rhos, sigmas = os_rhosigma(params)
@@ -554,7 +682,7 @@ class OS:
     @functools.cached_property
     def shift(self):
         os_rhosigma_complex = self.os_rhosigma_complex    # getos will close on os_rhosigma
-        gwpar, pairs, angles = self.gwpar, self.pairs, matrix.jnparray(self.angles)
+        gwpar, pairs, angles = self.gwpar, self.pairs, self.angles
 
         def get_shift(params, phases, orf=hd_orfa):
             rhos_complex, sigmas = os_rhosigma_complex(params)
@@ -624,8 +752,32 @@ def eig2cdf(osxs, eigs, cutoff=1e-6, limit=100, epsabs=1e-6):
     # quadax.quadgk is a JAX-transformable analog of scipy.integrate.quad,
     # so we can vmap over osxs and keep everything in jax
     def cdf(osx):
-        integral = quadax.quadgk(imhof, [0.0, matrix.jnp.inf], args=(osx, eigs),
-                                 epsabs=epsabs, max_ninter=limit)[0]
-        return 0.5 - integral / matrix.jnp.pi
+        integral, info = quadax.quadgk(imhof, [0.0, matrix.jnp.inf], args=(osx, eigs),
+                                       epsabs=epsabs, max_ninter=limit)
+        return 0.5 - integral / matrix.jnp.pi, info.status, info.err
 
-    return jax.vmap(cdf)(matrix.jnparray(osxs))
+    vals, status, err = jax.vmap(cdf)(matrix.jnparray(osxs))
+
+    # the integrand decays only as u^(-1-n/4), so for few eigenvalues quadgk
+    # gives up (status 4) and returns a value with err ~ 0.2. Discarding the
+    # status let that through as a CDF above 1, i.e. a NEGATIVE p-value:
+    # eig2cdf([25, 36, 49], [1.0]) returned [1.0044, 1.0006, 0.9992].
+    # Warn on the OBSERVABLE symptom -- a CDF outside [0, 1], i.e. a negative
+    # p-value -- not on quadgk's self-reported status or error estimate. On the
+    # chi^2(1) reference case quadgk reports status != 0 and err = 3.8e-2 at
+    # every epsabs from 1e-3 to 1e-12 while the answer is correct to 2.2e-3, so
+    # both of those cry wolf on the package's own documented example and would
+    # fail anyone running under -W error on a perfectly good result.
+    import numpy as _np
+    raw = _np.asarray(vals)
+    bad = (raw < -1e-6) | (raw > 1.0 + 1e-6)
+    if bad.any():
+        warnings.warn(
+            f"eig2cdf: the quadrature did not converge for {int(bad.sum())} of "
+            f"{bad.size} value(s): the CDF came out at {float(raw[bad][0]):.6f}, outside [0, 1]. "
+            "The result is clipped to [0, 1] but is not trustworthy -- this happens "
+            "when few eigenvalues survive `cutoff`, where the integrand has a heavy "
+            "tail. Keep more eigenvalues, or use a Monte Carlo of x^T Q x.",
+            RuntimeWarning, stacklevel=2)
+
+    return matrix.jnp.clip(vals, 0.0, 1.0)
