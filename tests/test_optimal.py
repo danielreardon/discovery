@@ -6,8 +6,9 @@ explicit dense T^T C^-1 T. The identities trace(Q) == 0 and 2*sum(eig^2) == 1
 hold for ANY S -- they check the assembly code, not S itself.
 """
 
-import warnings
+import functools
 
+import jax
 import numpy as np
 import pytest
 
@@ -71,12 +72,11 @@ def test_hd_matches_signals_hd_orf():
 # ---------------------------------------------------------------- _psd
 
 def test_psd_clips_negative_eigenvalues():
-    """Clip at round-off scale -- the size actually seen on real data.
+    """Clip at the round-off scale, and leave the positive spectrum alone.
 
-    Measured on the 83-pulsar MPTA array: 81 of 83 pulsars have a negative
-    eigenvalue, all between -4.4e-17 and -4.3e-14 of the largest. An earlier
-    version of this test used -5e-7 and called that "the measured
-    indefiniteness", which is ~7 orders of magnitude too large.
+    How negative S gets is strongly array-dependent -- benign here, far larger on
+    a heterogeneous array, where the error is amplified through an
+    ill-conditioned Sigma solve rather than being plain cancellation.
     """
     rng = np.random.default_rng(0)
     V = np.linalg.qr(rng.normal(size=(8, 8)))[0]
@@ -98,13 +98,10 @@ def test_psd_is_a_noop_on_psd_input():
 
 
 def test_psd_enables_cholesky():
-    """What _psd is actually FOR: making cholesky(S + ridge) defined.
+    """One of the two things _psd is for: making cholesky(S + ridge) defined.
 
-    It is NOT for keeping bs = tr(D_i D_j) non-negative -- that contraction is
-    over ngw^2 modes and is immune to a round-off eigenvalue (measured min bs
-    = 1.7e-21 on the real array, with the negative part contributing at most
-    1.3e-13 of it). An earlier test asserted the bs property and was vacuous:
-    its own raw inputs never produced a negative bs, so it reduced to 0 >= 0.
+    The other is keeping bs = tr(D_i D_j) non-negative; see
+    test_psd_prevents_negative_bs.
     """
     rng = np.random.default_rng(2)
     V = np.linalg.qr(rng.normal(size=(8, 8)))[0]
@@ -121,35 +118,47 @@ def test_psd_enables_cholesky():
     assert np.all(np.isfinite(L))
 
 
-def test_psd_warns_on_a_clip_too_large_to_be_roundoff():
-    """A genuinely broken S must not be silently repaired.
-
-    Clipping without a warning turns a loud NaN into a plausible number: with S
-    perturbed by 164% the projection returned snr = -0.234162 against a true
-    -0.234078, indistinguishable from correct.
-    """
+def test_psd_is_pure_and_jax_traceable():
+    """_psd must not branch on a traced value; reporting lives in OS.validate."""
     rng = np.random.default_rng(3)
-    V = np.linalg.qr(rng.normal(size=(8, 8)))[0]
-    w = np.logspace(0, -3, 8) * 1e8
-    w[-1] = -0.3 * w[0]                       # 30% negative: not cancellation
-    S = V @ np.diag(w) @ V.T
+    A = rng.normal(size=(6, 6))
+    S = A @ A.T
+    jax.jit(_psd)(S)
+    jax.vmap(_psd)(np.stack([S, S]))
+    jax.grad(lambda M: _psd(M).sum())(S)
 
-    with pytest.warns(RuntimeWarning, match='negative eigenvalue'):
-        _psd(S)
 
-    # and round-off-scale indefiniteness must stay silent
-    w2 = w.copy(); w2[-1] = -4e-14 * w[0]
-    with warnings.catch_warnings():
-        warnings.simplefilter('error')
-        _psd(V @ np.diag(w2) @ V.T)
+def test_psd_prevents_negative_bs():
+    """The failure _psd exists to prevent, in the regime where it happens.
+
+    bs = tr(D_i D_j) is NOT immune to an indefinite S: it goes negative once the
+    two pulsars are anti-aligned in the mode Phi weights most, and steep Phi puts
+    that weight exactly on the round-off-dominated low-frequency mode. More modes
+    makes this worse, not better.
+    """
+    ncomp, k = 5, 10
+    f = np.repeat(np.arange(1, ncomp + 1), 2).astype(float)
+    sPhi = np.sqrt(f ** -8.8 / (1.0 ** -8.8))          # steep: weight on f1
+
+    rng = np.random.default_rng(5)
+    raw = []
+    for _ in range(40):
+        d = np.repeat(np.logspace(-6, 0, ncomp), 2) * 1e9   # info grows with f
+        d[0] = d[1] = 1e-6 * 1e9 * rng.choice([-1.0, 1.0])  # f1 is round-off
+        raw.append(np.diag(d))
+
+    def nneg(Ss):
+        return sum(np.sum((sPhi[:, None] * Ss[i] * sPhi[None, :])
+                          * (sPhi[:, None] * Ss[j] * sPhi[None, :])) <= 0
+                   for i in range(len(Ss)) for j in range(i + 1, len(Ss)))
+
+    assert nneg(raw) > 0                                    # the bug
+    assert nneg([np.asarray(_psd(S)) for S in raw]) == 0     # the fix
 
 
 def test_ridge_is_scale_invariant():
-    """_ridge must be purely relative.
-
-    An absolute floor (1e-12 * maximum(scale, 1.0)) is unreachable for real data
-    but destroys the scale invariance of opQ / sample / sample_rhosigma_lowrank:
-    under S -> lambda S a lowrank draw moved 0.822 -> 5519.
+    """_ridge must be purely relative, so opQ / sample / sample_rhosigma_lowrank
+    are invariant under a change of time units.
     """
     rng = np.random.default_rng(4)
     A = rng.normal(size=(6, 6))
@@ -174,6 +183,9 @@ def test_eig2cdf_matches_chi2():
     xs = np.array([0.5, 1.0, 2.0, 4.0])
     got = np.asarray(eig2cdf(xs, np.array([1.0]), epsabs=1e-12))
     assert got == pytest.approx(chi2.cdf(xs, 1), abs=5e-3)
+    # a CDF is a CDF: never outside [0, 1], never decreasing
+    assert np.all((got >= 0.0) & (got <= 1.0))
+    assert np.all(np.diff(got) >= -1e-9)
 
 
 def test_eig2cdf_matches_montecarlo_mixed_signs():
@@ -277,11 +289,16 @@ def os_spread(os_model):
 
     spread = OS.__new__(OS)
     spread.__dict__.update({k: v for k, v in o.__dict__.items()
-                            if k in ('psls', 'gws', 'gwpar', 'pairs')})
+                            if k in ('psls', 'gws', 'gwpar', 'pairs',
+                                     '_kernelsolves_raw')})
     spread.pos = [matrix.jnparray(v) for v in
                   ([0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.6, 0.0, 0.8])]
-    spread.angles = [float(np.dot(spread.pos[i], spread.pos[j])) for i, j in spread.pairs]
-    assert len(set(np.round(spread.angles, 6))) == len(spread.angles)
+    # an array, matching what OS.__init__ now guarantees -- it materialises
+    # self.angles once so that os/mcos/shift cannot cache a tracer
+    spread.angles = matrix.jnparray([float(np.dot(spread.pos[i], spread.pos[j]))
+                                     for i, j in spread.pairs])
+    _a = np.round(np.asarray(spread.angles), 6).tolist()
+    assert len(set(_a)) == len(_a)
     return spread, params
 
 
@@ -317,11 +334,21 @@ def test_kernelsolve_matches_bruteforce(os_model):
 
 
 def test_kernelsolve_S_is_psd(os_model):
+    """kernelsolves projects, so its S is PSD to machine precision.
+
+    The RAW solve is only PSD up to cancellation -- asserting `>= 0.0` on it
+    passed by fixture luck (the real-data fixture gives -6.3e-16) and
+    contradicted _psd's own docstring.
+    """
     o, params, _, _ = os_model
-    for k in o.kernelsolves:
+    for k, raw in zip(o.kernelsolves, o._kernelsolves_raw):
         S = np.asarray(k(params)[1])
         assert np.allclose(S, S.T, atol=0)
         assert np.linalg.eigvalsh(S).min() >= 0.0
+
+        R = np.asarray(raw(params)[1])
+        R = 0.5 * (R + R.T)
+        assert np.linalg.eigvalsh(R).min() >= -1e-10 * np.abs(np.linalg.eigvalsh(R)).max()
 
 
 def test_pair_normalisations_positive(os_model):
@@ -408,11 +435,28 @@ def test_Q_null_moments_are_not_a_validation(os_model):
     assert np.trace(Q) == pytest.approx(0.0, abs=1e-10)
     assert 2.0 * np.sum(eigs ** 2) == pytest.approx(1.0, rel=1e-6)
 
-    # the same identities on a deliberately wrong S -- they still hold
+    # the same two identities on a Q ASSEMBLED FROM GARBAGE S: they still hold,
+    # which is the point -- they test the assembly code, not S.
+    ngw = Q.shape[0] // len(o.psls)
     rng = np.random.default_rng(11)
-    bad = [rng.normal(size=(Q.shape[0] // len(o.psls),) * 2) for _ in o.psls]
-    bad = [0.5 * (b + b.T) for b in bad]
-    assert all(np.linalg.eigvalsh(b).min() < 0 for b in bad)   # genuinely indefinite
+    bad = [rng.normal(size=(ngw, ngw)) for _ in o.psls]
+    bad = [b @ b.T for b in bad]                      # PSD but unrelated to the data
+    orfs = np.asarray(hd_orfa(matrix.jnparray(o.angles)))
+    sPhi = np.ones(ngw)
+
+    Ds = [sPhi[:, None] * b * sPhi[None, :] for b in bad]
+    bs = np.array([np.sum(Ds[i] * Ds[j]) for i, j in o.pairs])
+    denom = 2.0 * np.sqrt(np.sum(orfs ** 2 * bs))
+    As = [np.linalg.cholesky(b) for b in bad]
+    Qbad = np.zeros_like(Q)
+    for w, (i, j) in zip(orfs, o.pairs):
+        Bij = w * (As[i].T @ As[j])
+        Qbad[i * ngw:(i + 1) * ngw, j * ngw:(j + 1) * ngw] += Bij
+        Qbad[j * ngw:(j + 1) * ngw, i * ngw:(i + 1) * ngw] += Bij.T
+    Qbad /= denom
+
+    assert np.trace(Qbad) == pytest.approx(0.0, abs=1e-10)
+    assert 2.0 * np.sum(np.linalg.eigvalsh(Qbad) ** 2) == pytest.approx(1.0, rel=1e-6)
 
 
 def test_Q_and_opQ_agree(os_model):
@@ -465,14 +509,45 @@ def test_shift_zero_phase_reproduces_os(os_model):
 
 
 def test_shift_null_is_wider_than_cos_only(os_model):
-    """A quadrature contribution must actually be present in the shift null."""
+    """The quadrature term must widen the null relative to the buggy version.
+
+    The old code cast the complex rho through matrix.jnparray (float64), so it
+    computed sum Re(rho) cos(dphi) instead of sum Re(rho e^{i dphi}). That is
+    finite and non-zero, so a finiteness assertion passed for the buggy code
+    too. Emulate the bug and compare the two nulls directly.
+    """
     o, params, _, _ = os_model
-    nf = np.asarray(o.os_rhosigma_complex(params)[0]).shape[1]
+    rhos_c, sigmas = o.os_rhosigma_complex(params)
+    rhos_c = np.asarray(rhos_c)
+    nf = rhos_c.shape[1]
+    gwnorm = 10 ** (2.0 * params[o.gwpar])
+    sig = gwnorm * np.asarray(sigmas)
+    orfs = np.asarray(hd_orfa(matrix.jnparray(o.angles)))
+    w = orfs ** 2 / sig ** 2
+
+    def snr_from(rhos):
+        rhos = gwnorm * rhos
+        os_ = np.sum(rhos * orfs / sig ** 2) / np.sum(w)
+        return os_ / (1.0 / np.sqrt(np.sum(w)))
+
     rng = np.random.default_rng(17)
-    snrs = [o.shift(params, [rng.uniform(0, 2 * np.pi, nf) for _ in o.psls])['snr']
-            for _ in range(200)]
-    assert np.all(np.isfinite(snrs))
-    assert np.std(snrs) > 0
+    correct, cos_only = [], []
+    for _ in range(300):
+        ph = np.array([rng.uniform(0, 2 * np.pi, nf) for _ in o.psls])
+        dphi = np.array([ph[i] - ph[j] for i, j in o.pairs])
+        correct.append(snr_from(np.sum(np.real(rhos_c * np.exp(1j * dphi)), axis=1)))
+        cos_only.append(snr_from(np.sum(rhos_c.real * np.cos(dphi), axis=1)))
+
+    assert np.all(np.isfinite(correct))
+    # the buggy null is narrower -- that is what overstated the significance
+    assert np.std(cos_only) < np.std(correct)
+
+    # and the shipped shift() matches the correct branch, not the buggy one
+    ph = rng.uniform(0, 2 * np.pi, (len(o.psls), nf))
+    got = o.shift(params, [row for row in ph])['snr']
+    dphi = np.array([ph[i] - ph[j] for i, j in o.pairs])
+    assert got == pytest.approx(snr_from(np.sum(np.real(rhos_c * np.exp(1j * dphi)), axis=1)),
+                                rel=1e-8)
 
 
 def test_invalidate_picks_up_new_residuals(os_model):
@@ -589,8 +664,8 @@ def test_Q_S_matches_kernelsolve(ng_os):
 def test_Q_uses_the_full_nested_kernel(ng_os):
     """Negative guard: S must NOT match the white-noise-plus-outer-layer form.
 
-    This is the one that fails if the hand-rolled Woodbury reduction is ever
-    reintroduced. On this fixture the wrong S is off by 5.7%-21.7%.
+    This fails if the hand-rolled Woodbury reduction is ever reintroduced. On
+    this fixture the wrong S is off by 315%-1037% in relative Frobenius norm.
     """
     psl, gw = ng_os.psls[0], ng_os.gws[0]
     inner = getattr(psl.N, 'N', None)
@@ -663,3 +738,225 @@ def test_two_d_gw_phi_is_rejected():
             fn()
     # the documented fallback must actually work
     assert np.isfinite(float(o.os(p)['snr']))
+
+
+# ------------------------------------------------- _ridge, validate, jit safety
+
+def test_ridge_is_never_zero():
+    """A zero ridge makes jnp.linalg.cholesky return NaN silently.
+
+    _psd clips an all-negative S to exactly zero, so max|diag S| == 0 is
+    reachable -- not just for a hypothetical no-information pulsar.
+    """
+    assert float(_ridge(np.zeros((4, 4)))) > 0.0
+
+    rng = np.random.default_rng(6)
+    V = np.linalg.qr(rng.normal(size=(6, 6)))[0]
+    allneg = V @ np.diag(-np.logspace(0, -3, 6)) @ V.T
+    clipped = np.asarray(_psd(allneg))
+    assert np.abs(clipped).max() == pytest.approx(0.0, abs=1e-30)
+    assert float(_ridge(clipped)) > 0.0
+    L = np.asarray(np.linalg.cholesky(clipped + float(_ridge(clipped)) * np.eye(6)))
+    assert np.all(np.isfinite(L))
+
+    # off-diagonal-only S: the diagonal is the wrong scale proxy on its own
+    assert float(_ridge(np.array([[0.0, 1.0], [1.0, 0.0]]))) > 0.0
+
+
+def test_Q_and_sample_are_jit_traceable(os_model):
+    """Q/opQ/sample must stay traceable -- vmapping sample over keys is the
+    natural way to build a null distribution in a jax package."""
+    o, params, _, _ = os_model
+    o.os(params)          # warm matrix's lazy caches outside the trace
+    jax.jit(lambda p: o.Q(p))(params)
+    jax.jit(lambda p: o.os(p)['snr'])(params)
+    keys = jax.random.split(jax.random.PRNGKey(0), 4)
+    out = jax.vmap(lambda kk: o.sample(kk, params))(keys)
+    assert np.all(np.isfinite(np.asarray(out)))
+
+
+def test_validate_reports_a_healthy_array(os_model):
+    o, params, _, _ = os_model
+    info = o.validate(params)
+    assert info['phi_consistent'] is True
+    assert info['min_bs'] > 0.0                    # no pair overlap has flipped
+    assert info['min_cos'] > 0.0
+    assert info['eta'].shape == (len(o.psls),)
+    # inf when every S is PSD: no negative mass means no error length
+    assert info['margin'] > 1.0
+
+
+def test_validate_raises_when_a_pair_overlap_is_non_positive(os_model):
+    """The criterion must key on the failure itself, not on a proxy.
+
+    An indefinite S and a nearly orthogonal pair together make bs_ij negative;
+    the OS divides by sqrt(bs_ij), so os() is NaN. The eigenvalues of S alone
+    cannot predict this -- they carry no Phi.
+    """
+    o, params, _, _ = os_model
+    n = np.asarray(o._kernelsolves_raw[0](params)[1]).shape[0]
+
+    def planted(S):
+        k = lambda prm, S=S: (np.zeros(n), S)
+        k.params = []
+        return k
+
+    # pulsar 0 carries its power on mode 0 with a small NEGATIVE eigenvalue on
+    # mode 1; pulsar 1 carries its power on mode 1. The overlap is then
+    # A*E - N*B < 0: nearly orthogonal, and flipped by the negative eigenvalue.
+    e0, e1 = np.zeros(n), np.zeros(n)
+    e0[0], e1[1] = 1.0, 1.0
+    S0 = 1.0 * np.outer(e0, e0) - 1e-6 * np.outer(e1, e1)
+    S1 = 1.0 * np.outer(e1, e1) + 1e-12 * np.outer(e0, e0)
+
+    raw = o._kernelsolves_raw
+    try:
+        o._kernelsolves_raw = [planted(S0), planted(S1)] + list(raw[2:])
+        with pytest.raises(ValueError, match='non-positive overlap'):
+            o.validate(params)
+    finally:
+        o._kernelsolves_raw = raw
+
+
+def test_validate_rejects_inconsistent_gw_phi(os_model):
+    """The OS uses pulsar 0's Phi for every pair, so they must all match.
+
+    A same-rank/different-Tspan gw GP was accepted silently and shifted snr by
+    27%.
+    """
+    o, params, _, _ = os_model
+
+    class _FakePhi:
+        def __init__(self, inner, scale):
+            self._inner, self._scale = inner, scale
+            self.getN = lambda pars: self._scale * np.asarray(inner.getN(pars))
+            self.getN.params = inner.getN.params
+
+    class _FakeGw:
+        def __init__(self, gw, scale):
+            self.F, self.pos, self.gpcommon = gw.F, gw.pos, gw.gpcommon
+            self.Phi = _FakePhi(gw.Phi, scale)
+
+    saved = o.gws
+    try:
+        o.gws = [saved[0]] + [_FakeGw(g, 2.0) for g in saved[1:]]
+        with pytest.raises(ValueError, match='differs from pulsar 0'):
+            o.validate(params)
+    finally:
+        o.gws = saved
+
+
+def test_invalidate_covers_every_cached_property(os_model):
+    """Every cached_property must actually be cleared, and the raw solves rebuilt.
+
+    This used to assert only that the SOURCE of invalidate() contained the
+    strings 'cached_property' and 'vars(type(self))' -- which a no-op whose
+    docstring happened to mention them would satisfy. Exercise the behaviour.
+    """
+    o, params, _, _ = os_model
+    cached = {n for n, v in vars(OS).items() if isinstance(v, functools.cached_property)}
+    assert cached                                  # sanity: there are some
+
+    for name in cached:
+        getattr(o, name)                           # populate every one
+    assert cached <= set(o.__dict__), sorted(cached - set(o.__dict__))
+
+    raw_before = o._kernelsolves_raw
+    o.invalidate()
+
+    assert not (cached & set(o.__dict__)), sorted(cached & set(o.__dict__))
+    assert o._kernelsolves_raw is not raw_before   # rebuilt, not merely kept
+    # and the object still works afterwards
+    assert np.isfinite(float(o.os(params)['snr']))
+
+
+# ------------------------------------------------------- eig2cdf convergence
+
+def test_eig2cdf_warns_and_clips_when_quadrature_fails():
+    """Discarding quadgk's status let CDF > 1 through, i.e. a NEGATIVE p-value.
+
+    eig2cdf([25, 36, 49], [1.0]) returned [1.0044, 1.0006, 0.9992] with
+    quadgk status 4 and err ~ 0.2.
+    """
+    pytest.importorskip('quadax')
+    xs = np.array([25.0, 36.0, 49.0])
+    with pytest.warns(RuntimeWarning, match='did not converge'):
+        got = np.asarray(eig2cdf(xs, np.array([1.0])))
+    assert np.all((got >= 0.0) & (got <= 1.0))
+
+
+# ----------------------------------------------- previously untested samplers
+
+def test_sample_draws_a_finite_snr(os_model):
+    o, params, _, _ = os_model
+    vals = [float(o.sample(jax.random.PRNGKey(i), params)) for i in range(20)]
+    assert np.all(np.isfinite(vals))
+    assert np.std(vals) > 0
+
+
+def test_sample_null_has_unit_variance(os_model):
+    """x^T Q x has unit null variance, so sample() must too."""
+    o, params, _, _ = os_model
+    keys = jax.random.split(jax.random.PRNGKey(1), 4000)
+    vals = np.asarray(jax.vmap(lambda kk: o.sample(kk, params))(keys))
+    assert np.all(np.isfinite(vals))
+    assert vals.mean() == pytest.approx(0.0, abs=0.08)
+    assert vals.std() == pytest.approx(1.0, abs=0.08)
+
+
+def test_sample_rhosigma_lowrank_matches_Q(os_model):
+    o, params, _, _ = os_model
+    Q = np.asarray(o.Q(params))
+    f = o.sample_rhosigma_lowrank(params)
+    rng = np.random.default_rng(8)
+    x = rng.normal(size=Q.shape[0])
+    assert float(f(x)) == pytest.approx(float(x @ Q @ x), rel=1e-4)
+
+
+def test_sample_rhosigma_runs_or_refuses_clearly(os_model):
+    """It must either work or raise NotImplementedError -- never return garbage."""
+    o, params, _, _ = os_model
+    try:
+        f = o.sample_rhosigma(params)
+    except NotImplementedError as e:
+        assert 'nested kernel' in str(e) or '2-D prior' in str(e)
+        return
+    rng = np.random.default_rng(9)
+    assert np.isfinite(float(f(rng.normal(size=f.cnt))))
+
+
+def test_scramble_changes_the_answer(os_spread):
+    """scramble must actually use the positions it is handed."""
+    o, params = os_spread
+    true = o.scramble(params, o.pos)['snr']
+    assert true == pytest.approx(o.os(params)['snr'], rel=1e-8)
+
+    shuffled = [o.pos[i] for i in (1, 2, 0)]
+    assert o.scramble(params, shuffled)['snr'] != pytest.approx(true, rel=1e-6)
+
+
+def test_two_d_phi_rejected_by_every_1d_consumer(os_model):
+    """_require_1d_phi guards six entry points; all must refuse a 2-D Phi."""
+    o, params, _, _ = os_model
+    saved = o.psls[0].gw.Phi.getN
+
+    class _Phi2D:
+        def __init__(self, inner):
+            self._inner = inner
+            self.params = inner.params
+        def __call__(self, pars):
+            v = np.asarray(self._inner(pars))
+            return np.diag(v)
+
+    try:
+        o.psls[0].gw.Phi.getN = _Phi2D(saved)
+        o.invalidate()
+        for name, call in [('Q', lambda: o.Q(params)),
+                           ('opQ', lambda: o.opQ(params)),
+                           ('sample', lambda: o.sample(jax.random.PRNGKey(0), params)),
+                           ('lowrank', lambda: o.sample_rhosigma_lowrank(params))]:
+            with pytest.raises(NotImplementedError, match='1-D'):
+                call()
+    finally:
+        o.psls[0].gw.Phi.getN = saved
+        o.invalidate()
