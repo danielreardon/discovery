@@ -15,7 +15,7 @@ import pytest
 import discovery as ds
 from discovery import matrix
 from discovery.optimal import (OS, hd_orfa, dipole_orfa, monopole_orfa,
-                               _psd, _ridge, eig2cdf)
+                               _psd, _ridge, eig2cdf, _DSTYPES)
 
 
 # ---------------------------------------------------------------- ORFs
@@ -439,6 +439,183 @@ def test_mcos_accepts_monopole(os_spread):
     assert two['os'].shape == (2,)
     assert np.all(np.isfinite(np.asarray(two['os'])))
     assert np.all(np.asarray(two['os_sigma']) > 0)
+
+
+# --------------------------------------------------- detection statistics
+
+def test_dfcc_reproduces_the_traditional_os(os_spread):
+    """DFCC is the OS S/N written as a quadratic form -- an exact identity.
+
+    This is the check that the whitening is right: chi = A^-1 T^T K^-1 y with
+    S = A A^T, so chi^T Q chi must land on os()['snr'] to round-off.
+    """
+    o, params = os_spread
+    assert float(o.dstat(params, hd_orfa, 'dfcc')['snr']) == pytest.approx(
+        float(o.os(params)['snr']), rel=1e-10)
+
+
+@pytest.mark.parametrize('dstype', _DSTYPES)
+def test_every_dstype_has_unit_null_variance(os_spread, dstype):
+    """x^T Q x for standard normal x has mean tr(Q) and variance 2 tr(Q^2).
+
+    Every dstype is scaled to 2 tr(Q^2) == 1, which is what lets gx2cdf take
+    them all and what makes the numbers comparable between them.
+    """
+    o, params = os_spread
+    Q = np.asarray(o.Q(params, hd_orfa, dstype))
+    assert np.allclose(Q, Q.T, atol=1e-10 * np.abs(Q).max())
+    assert 2.0 * np.sum(np.linalg.eigvalsh(Q) ** 2) == pytest.approx(1.0, rel=1e-6)
+
+
+def test_only_the_cross_only_dstypes_are_traceless(os_spread):
+    """DF and NP keep the auto blocks, so they are not zero-mean under the null.
+
+    That is not a defect -- gx2cdf reads the mean off the eigenvalues -- but it
+    means their S/N is not centred on zero and must not be read as one.
+    """
+    o, params = os_spread
+    tr = {d: np.trace(np.asarray(o.Q(params, hd_orfa, d))) for d in _DSTYPES}
+    assert tr['dfcc'] == pytest.approx(0.0, abs=1e-10)
+    assert tr['npmv'] == pytest.approx(0.0, abs=1e-10)
+    assert abs(tr['df']) > 1e-3
+    assert abs(tr['np']) > 1e-3
+
+
+def test_npmv_removes_the_auto_blocks_that_np_reintroduces(os_spread):
+    """The whole point of NPMV.
+
+    B has no auto blocks, but (I + B)^-1 B = B - B^2 + ... does, so NP quietly
+    reads the per-pulsar power the OS is built to exclude. NPMV zeroes them.
+    """
+    o, params = os_spread
+    npsr = len(o.psls)
+
+    def auto_mass(dstype):
+        Q = np.asarray(o.Q(params, hd_orfa, dstype))
+        ngw = Q.shape[0] // npsr
+        return sum(np.abs(Q[i*ngw:(i+1)*ngw, i*ngw:(i+1)*ngw]).sum() for i in range(npsr))
+
+    assert auto_mass('np') > 0.0
+    assert auto_mass('npmv') == 0.0
+    assert auto_mass('dfcc') == 0.0
+    assert auto_mass('df') > 0.0
+
+
+def test_np_reduces_to_df_when_the_deflection_is_negligible(os_spread):
+    """(I + B)^-1 B -> B as B -> 0, so the NP filter is the identity there.
+
+    The packaged pulsars have ||B||_F ~ 3e-17, so this fixture is deep in that
+    limit and the pairs must coincide. It is the analytic check on the filter;
+    test_dstypes_disagree_on_a_real_array covers the regime where it bites.
+    """
+    o, params = os_spread
+    val = {d: float(o.dstat(params, hd_orfa, d)['snr']) for d in _DSTYPES}
+    assert val['np'] == pytest.approx(val['df'], rel=1e-9)
+    assert val['npmv'] == pytest.approx(val['dfcc'], rel=1e-9)
+    assert val['df'] != pytest.approx(val['dfcc'], rel=1e-3)   # auto blocks still differ
+
+
+def test_dstypes_disagree_on_a_real_array(ng_os):
+    """A switch that silently returns the same number would be worse than none.
+
+    Needs ||B|| of order 1 -- here ~3.9 -- or the NP filter degenerates to the
+    identity and only the auto blocks distinguish the four.
+    """
+    vals = [float(ng_os.dstat(NG_PARAMS, hd_orfa, d)['snr']) for d in _DSTYPES]
+    assert len(set(np.round(vals, 6))) == len(_DSTYPES), vals
+
+
+def test_os_dstype_switch_reports_no_amplitude(os_spread):
+    """Only DFCC estimates A^2; the rest must say so rather than invent one."""
+    o, params = os_spread
+
+    keys = set(o.os(params, hd_orfa, 'dfcc'))
+    assert np.isfinite(float(o.os(params, hd_orfa, 'dfcc')['os']))
+
+    for dstype in ('df', 'np', 'npmv'):
+        out = o.os(params, hd_orfa, dstype)
+        assert set(out) == keys              # same keys, so callers need no branch
+        assert np.isnan(float(out['os'])) and np.isnan(float(out['os_sigma']))
+        assert np.isfinite(float(out['snr']))
+
+
+@pytest.mark.parametrize('dstype', _DSTYPES)
+def test_os_dict_stays_vmappable(os_spread, dstype):
+    """The noise-marginalised loop vmaps over the whole returned dict, so a
+    string leaf like a dstype label would break it."""
+    o, params = os_spread
+    batch = {k: matrix.jnparray([v, v]) for k, v in params.items()}
+
+    out = jax.vmap(lambda q: o.os(q, hd_orfa, dstype))(batch)
+    assert np.asarray(out['snr']).shape == (2,)
+
+
+def test_dstype_respects_the_orf(os_spread):
+    """The null and the estimate both depend on the ORF, for every dstype."""
+    o, params = os_spread
+    for dstype in _DSTYPES:
+        hd = float(o.dstat(params, hd_orfa, dstype)['snr'])
+        dp = float(o.dstat(params, dipole_orfa, dstype)['snr'])
+        assert hd != pytest.approx(dp, rel=1e-6), dstype
+
+
+def test_unknown_dstype_raises(os_spread):
+    o, params = os_spread
+    for call in (lambda: o.dstat(params, hd_orfa, 'nvmp'),
+                 lambda: o.Q(params, hd_orfa, 'NPVM'),
+                 lambda: o.os(params, hd_orfa, 'pfos')):
+        with pytest.raises(ValueError, match='unknown detection statistic'):
+            call()
+
+
+def test_dstype_is_case_insensitive(os_spread):
+    o, params = os_spread
+    assert float(o.dstat(params, hd_orfa, 'NPMV')['snr']) == pytest.approx(
+        float(o.dstat(params, hd_orfa, 'npmv')['snr']), rel=1e-12)
+
+
+@pytest.mark.parametrize('dstype', _DSTYPES)
+def test_gx2cdf_matches_the_sampled_null(os_spread, dstype):
+    """The p-value chain end to end: eigenvalues of Q -> Imhof -> CDF.
+
+    Drawn from Q's own eigenvalues, so this tests gx2cdf against the definition
+    of the statistic rather than against a second implementation of it.
+    """
+    o, params = os_spread
+    w = np.linalg.eigvalsh(np.asarray(o.Q(params, hd_orfa, dstype)))
+
+    rng = np.random.default_rng(5)
+    q = (rng.normal(size=(60000, len(w))) ** 2) @ w
+    xs = np.percentile(q, [25, 50, 75, 90, 99])
+
+    mc = np.array([(q <= x).mean() for x in xs])
+    gx2 = np.asarray(o.gx2cdf(params, xs, orf=hd_orfa, dstype=dstype))
+    assert np.max(np.abs(mc - gx2)) < 0.01      # 60k draws: MC noise alone is ~4e-3
+
+
+def test_eig2cdf_warns_when_the_p_value_underflows():
+    """p == 0 must not be silent -- it reads as an infinitely significant detection.
+
+    Far enough into the tail the CDF rounds to exactly 1.0, which is a different
+    failure from the non-convergence above: the quadrature is fine, it has just
+    run out of double precision.
+    """
+    pytest.importorskip('quadax', exc_type=ImportError)
+    eigs = np.linspace(-1.0, 1.0, 40)
+    eigs = eigs / np.sqrt(2.0 * np.sum(eigs ** 2))
+
+    # a batch, not one hand-picked x: out here the quadrature error dominates the
+    # answer, so which particular x rounds to 1 is not stable
+    xs = np.array([10.0, 20.0, 40.0, 60.0, 80.0, 120.0, 160.0, 240.0])
+    with pytest.warns(RuntimeWarning, match='not as p == 0'):
+        cdf = np.asarray(eig2cdf(xs, eigs))
+    assert (cdf == 1.0).any()
+
+    # and not on an ordinary value
+    import warnings as _w
+    with _w.catch_warnings():
+        _w.simplefilter('error')
+        eig2cdf(np.array([0.5]), eigs)
 
 
 def test_mcos_refuses_collinear_orfs(os_model):
