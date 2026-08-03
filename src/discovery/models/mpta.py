@@ -315,6 +315,8 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
 def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                  chrom_poly=False, fix_chrom_alpha=True, hd=False, hd_fixed_gamma=False,
                  hd_components=None,  # HD Fourier bins; None -> common_components (i.e. tied to max_cadence_days)
+                 os_analysis=False,  # put the HD spectrum (gw_log10_A/gw_gamma) into a PER-PULSAR GP instead of a globalgp, so discovery.optimal.OS can see it. For OS runs only -- NOT for Bayesian sampling, which wants the correlated globalgp.
+                 fd=False, fd_nodes=16, fd_spacing='quantile', fd_selection=None,  # marginalised piecewise-linear frequency-dependent delay; MUST be set to match the stage-1 runs, as it cannot be auto-detected (see below)
                  use_commongp=False,
                  freespec=False, freespec_components=30,  # free-spectrum CURN (per-bin log10_rho) instead of the power law; ~30 components keeps the parameter space manageable for a steep process
                  red_fixed_dict=None,  # {psrname: (log10_A, gamma)}: FIX each pulsar's red noise at these values (e.g. the power-law common-run posteriors) so the free-spectrum bins test excess over the same null the band power was defined against, rather than competing with co-sampled red noise for the same variance
@@ -341,6 +343,35 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
     # cgmaxiter/clip) and not yet wired into common_search -- validate before relying
     # on it. Requires a non-callable chromatic basis (fix_chrom_alpha=True) and does
     # not support the marginalised chromatic polynomial.
+    # os_analysis needs the 'gw' GP to sit in each PER-PULSAR likelihood (the OS
+    # reads psl.gw, psl.N.F and psl.N.P_var); the commongp path stacks the sampled
+    # GPs out of the per-pulsar likelihoods, so psl.gw would never be set.
+    if os_analysis and use_commongp:
+        print("Warning: os_analysis=True is incompatible with use_commongp=True (the OS "
+              "needs the per-pulsar 'gw' GP inside each pulsar likelihood, but the commongp "
+              "path stacks it out). Falling back to the GlobalLikelihood path.")
+        use_commongp = False
+    if os_analysis and not hd:
+        print("Warning: os_analysis=True has no effect with hd=False -- there is no HD "
+              "process to carry. Ignoring it.")
+        os_analysis = False
+
+    # fd (marginalised piecewise-linear frequency-dependent delay) is the ONE
+    # per-pulsar model component that cannot be auto-detected from chain_dfs. Every
+    # other component is inferred with has_param(), but the fd GP is a ConstantGP
+    # with a NoiseMatrix1D_novar prior -- fully marginalised, ZERO sampled
+    # hyperparameters -- so an fd-enabled stage-1 chain contains no fd columns to
+    # match on. It must therefore be passed explicitly, set to whatever the stage-1
+    # runs used. Getting it wrong is silent: the common model would marginalise over
+    # a different basis than the single-pulsar fits did, with no missing-parameter
+    # error to catch it (there are no parameters to miss).
+    if fd:
+        print(f"fd=True: marginalising a piecewise-linear frequency-dependent delay "
+              f"({fd_nodes} nodes, {fd_spacing} spacing"
+              f"{'' if fd_selection is None else ', per-group selection'}). This must match "
+              f"the stage-1 single-pulsar runs -- it is not auto-detected, because the GP is "
+              f"fully marginalised and leaves no parameters in the chains.")
+
     commongp_path = use_commongp and fix_chrom_alpha
     if use_commongp and not fix_chrom_alpha:
         print("Warning: use_commongp=True requires fix_chrom_alpha=True (the stacked "
@@ -363,6 +394,20 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
         Tspan = signals.getspan(psrs)
     common_components = int(Tspan / (max_cadence_days * 86400))
     common_knots = 2 * common_components + 1
+    # Bin count for the HD process, shared by the globalgp and the os_analysis
+    # per-pulsar GP so the two carry the same spectral parametrisation.
+    hd_nc = common_components if hd_components is None else int(hd_components)
+
+    if os_analysis:
+        print(f"os_analysis=True: the HD spectrum (gw_log10_A"
+              f"{'' if hd_fixed_gamma else '/gw_gamma'}, {hd_nc} Fourier bins) is carried by a "
+              f"PER-PULSAR GP named 'gw' instead of a cross-pulsar globalgp.\n"
+              f"  FOR OPTIMAL-STATISTIC RUNS ONLY -- this is NOT the Bayesian model. The "
+              f"inter-pulsar HD correlations are deliberately absent, because the OS is what "
+              f"measures them; the GP exists so the HD amplitude and spectral index enter "
+              f"psl.N and psl.gw and can normalise the OS covariance.\n"
+              f"  The parameter names are unchanged, so a chain from a standard hd=True "
+              f"Bayesian run supplies them directly.")
 
     psls = []
     per_psr_stack_gps = []  # commongp path: per-pulsar stacked sampled GPs
@@ -404,6 +449,30 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             curn = signals.makegp_fftcov(psr, signals.powerlaw, common_knots, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
         # Sampled common GPs that are STACKABLE into the commongp (curn, red_fixed).
         common_gps = curn if isinstance(curn, list) else [curn]
+
+        if os_analysis:
+            # The HD process as a PER-PULSAR GP named 'gw', keeping the same
+            # parameter names (gw_log10_A, and gw_gamma unless fixed) as the
+            # globalgp it stands in for -- so a chain from a standard hd=True
+            # Bayesian run feeds it directly, with no column renaming anywhere.
+            #
+            # It is UNCORRELATED between pulsars by design: the OS estimates the
+            # cross-correlations itself and only needs the spectrum to normalise its
+            # covariance. What this buys is that the HD power now enters psl.N (the
+            # OS noise model) and psl.gw (its template) -- with the globalgp neither
+            # happens, so the OS silently normalised by CURN and left the HD power
+            # out of the covariance entirely.
+            #
+            # Always a FOURIER powerlaw GP even when fftInt=True: optimal.OS does
+            # sPhi = sqrt(psl.gw.Phi.getN(params)) and forms sPhi[:,None]*S*sPhi[None,:],
+            # which requires a 1-D (diagonal) PSD. makegp_fftcov's prior is a dense
+            # 2-D covariance over time-domain knots and would break that elementwise
+            # scaling silently.
+            hd_prior = signals.powerlaw_gwb() if hd_fixed_gamma else signals.powerlaw
+            hd_common = ['gw_log10_A'] if hd_fixed_gamma else ['gw_log10_A', 'gw_gamma']
+            common_gps = common_gps + [
+                signals.makegp_fourier(psr, hd_prior, hd_nc, Tspan,
+                                       common=hd_common, name='gw')]
 
         red_flag = has_param(df, "red_noise")
         if red_fixed_dict is not None and psr.name in red_fixed_dict:
@@ -456,6 +525,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                                        red=False, red2=False, dm=False, chrom=False, chrom_alpha=chrom_alpha, chrom_poly=False, sw=False, sw_powerlaw=sw_powerlaw,
                                        band=False, band_alpha=False,
                                        chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
+                                       fd=fd, fd_nodes=fd_nodes, fd_spacing=fd_spacing, fd_selection=fd_selection,
                                        extra_gps=(sw_gps + pe_delays))
 
             per_psr_stack_gps.append(matrix.CompoundGP(stack_gps + common_gps))
@@ -469,6 +539,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                                     dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_alpha=chrom_alpha, chrom_poly=chrom_poly, sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw,
                                     band=has_param(df, "band_gp"), band_alpha=has_param(df, "bandalpha_gp"),
                                     chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
+                                    fd=fd, fd_nodes=fd_nodes, fd_spacing=fd_spacing, fd_selection=fd_selection,
                                     extra_gps=(common_gps + pe_delays))
 
             print("Including pulsar", psr.name, "with model parameters:\n", m.logL.params)
@@ -480,7 +551,12 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
     # (ephemeris / Planet-Nine) power are separated by angular correlation rather
     # than absorbed into one another. Parameters: gw_log10_A, gw_gamma.
     globalgp = None
-    if hd:
+    if hd and os_analysis:
+        # The HD process is already present, per-pulsar and uncorrelated, as the
+        # 'gw' GP built in the loop above. Building the globalgp as well would
+        # double-count its power.
+        pass
+    elif hd:
         # hd_fixed_gamma: fix the HD spectral index to 13/3 (signals.powerlaw_gwb)
         # so only gw_log10_A is sampled -- isolates the HD amplitude<->PEBBLE
         # covariance from the A-gamma degeneracy. Default: free gw_gamma.
@@ -493,8 +569,8 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
         # Cholesky is ~57% of the per-step cost at 14-day cadence. Fewer GWB
         # frequencies than intrinsic red-noise frequencies is standard NANOGrav /
         # EPTA practice; validate with a bin-count ladder on (gw_log10_A, gw_gamma).
-        # None reproduces the previous behaviour exactly.
-        hd_nc = common_components if hd_components is None else int(hd_components)
+        # None reproduces the previous behaviour exactly. (hd_nc is computed above,
+        # shared with the os_analysis per-pulsar GP.)
         globalgp = signals.makeglobalgp_fourier(
             psrs, hd_spectrum, signals.hd_orf, hd_nc, Tspan, name='gw')
 
