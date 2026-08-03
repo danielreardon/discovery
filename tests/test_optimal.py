@@ -128,6 +128,19 @@ def test_psd_is_pure_and_jax_traceable():
     jax.grad(lambda M: _psd(M).sum())(S)
 
 
+def test_psd_gradient_survives_repeated_eigenvalues():
+    """What the custom_jvp is for: eigh's own VJP divides by (w_i - w_j).
+
+    A@A.T has distinct eigenvalues and differentiates fine either way, so it
+    cannot guard this. On an exactly degenerate S plain eigh gives all-NaN.
+    """
+    for S in (2.0 * np.eye(4), np.diag([1.0, 1.0, 2.0, 3.0])):
+        g = np.asarray(jax.grad(lambda M: _psd(M).sum())(S))
+        assert np.all(np.isfinite(g))
+        # S is already PSD, so _psd is the identity there and d(sum)/dS is all ones
+        assert np.allclose(g, np.ones_like(g))
+
+
 def test_psd_prevents_negative_bs():
     """The failure _psd exists to prevent, in the regime where it happens.
 
@@ -302,6 +315,30 @@ def os_spread(os_model):
     return spread, params
 
 
+@pytest.fixture(scope='module')
+def os_novar_timing():
+    """No constant GP, so sample_rhosigma gets past its nested-kernel guard."""
+    import glob, os as _os
+
+    here = _os.path.dirname(_os.path.abspath(__file__))
+    files = sorted(glob.glob(_os.path.join(here, 'data', '*.feather')))
+    if len(files) < 3:
+        pytest.skip('need >= 3 pulsar feather files in tests/data')
+
+    psrs = [ds.Pulsar.read_feather(f) for f in files]
+    Tspan = ds.getspan(psrs)
+    psls = [ds.PulsarLikelihood([p.residuals, ds.makenoise_measurement(p, p.noisedict),
+                                 ds.makegp_fourier(p, ds.powerlaw, 5, T=Tspan,
+                                                   common=['gw_log10_A', 'gw_gamma'],
+                                                   name='gw')])
+            for p in psrs]
+    o = OS(ds.GlobalLikelihood(psls))
+    np.random.seed(20260801)
+    params = dict(ds.sample_uniform(o.params))
+    params['gw_log10_A'], params['gw_gamma'] = -14.5, 4.33
+    return o, params
+
+
 def _diag(nm, params):
     """Diagonal of a NoiseMatrix, variable (getN) or constant (.N)."""
     P = np.asarray(nm.getN(params) if hasattr(nm, 'getN') else nm.N)
@@ -399,6 +436,21 @@ def test_mcos_accepts_monopole(os_spread):
     assert two['os'].shape == (2,)
     assert np.all(np.isfinite(np.asarray(two['os'])))
     assert np.all(np.asarray(two['os_sigma']) > 0)
+
+
+def test_mcos_refuses_collinear_orfs(os_model):
+    """Zero-separation pulsars make every ORF the same column.
+
+    The GLS then returns silent NaNs. A pseudo-inverse is not the fix: it splits
+    the one real amplitude evenly over the degenerate components and reports a
+    plausible detection instead.
+    """
+    o, params, _, _ = os_model      # all three pulsars at [0, 0, 1]
+    with pytest.raises(ValueError, match='collinear'):
+        o.mcos(params, orfs=(hd_orfa, monopole_orfa, dipole_orfa))
+    # named so the caller can tell which component to drop
+    with pytest.raises(ValueError, match='monopole_orfa'):
+        o.mcos(params, orfs=(hd_orfa, monopole_orfa))
 
 
 def test_Q_identities_and_snr(os_model):
@@ -709,8 +761,8 @@ def test_two_d_gw_phi_is_rejected():
     """A 2-D GW Phi (makegp_fftcov) must raise, not be elementwise-sqrted.
 
     Reachable from a shipped model: models/mpta.py builds curn with
-    makegp_fftcov, and curn becomes psl.gw. The elementwise sqrt silently
-    produced an (n,n,n) array instead of failing.
+    makegp_fftcov, and likelihood.py aliases a GP named 'curn' to psl.gw. The
+    elementwise sqrt silently produced an (n,n,n) array instead of failing.
     """
     import os as _os
     here = _os.path.dirname(_os.path.abspath(__file__))
@@ -733,7 +785,8 @@ def test_two_d_gw_phi_is_rejected():
 
     assert np.asarray(o.psls[0].gw.Phi.getN(p)).ndim == 2, 'fixture is not 2-D'
     for fn in (lambda: o.Q(p), lambda: o.opQ(p),
-               lambda: o.gx2cdf(p, np.array([1.0]))):
+               lambda: o.gx2cdf(p, np.array([1.0])),
+               lambda: o.validate(p)):
         with pytest.raises(NotImplementedError, match='diagonal'):
             fn()
     # the documented fallback must actually work
@@ -765,9 +818,14 @@ def test_ridge_is_never_zero():
 
 def test_Q_and_sample_are_jit_traceable(os_model):
     """Q/opQ/sample must stay traceable -- vmapping sample over keys is the
-    natural way to build a null distribution in a jax package."""
-    o, params, _, _ = os_model
-    o.os(params)          # warm matrix's lazy caches outside the trace
+    natural way to build a null distribution in a jax package.
+
+    The OS is rebuilt cold: any prior call would cache the kernel solves outside
+    the trace and hide the failure this guards (a tracer cached on the object,
+    then UnexpectedTracerError on every later call).
+    """
+    _, params, psls, _ = os_model
+    o = OS(ds.GlobalLikelihood(psls))
     jax.jit(lambda p: o.Q(p))(params)
     jax.jit(lambda p: o.os(p)['snr'])(params)
     keys = jax.random.split(jax.random.PRNGKey(0), 4)
@@ -816,6 +874,43 @@ def test_validate_raises_when_a_pair_overlap_is_non_positive(os_model):
             o.validate(params)
     finally:
         o._kernelsolves_raw = raw
+
+
+def test_psd_projection_is_shared_by_every_consumer(os_model):
+    """_psd belongs in kernelsolves, not at the Cholesky sites.
+
+    os_rhosigma is the consumer with no Cholesky, so moving the projection to
+    the factorisation sites leaves it reading a raw indefinite S and returning
+    NaN sigmas. Same planted pair as the validate test above.
+    """
+    o, params, _, _ = os_model
+    n = np.asarray(o._kernelsolves_raw[0](params)[1]).shape[0]
+
+    def planted(S):
+        k = lambda prm, S=S: (np.zeros(n), S)
+        k.params = []
+        return k
+
+    e0, e1 = np.zeros(n), np.zeros(n)
+    e0[0], e1[1] = 1.0, 1.0
+    S0 = np.outer(e0, e0) - 1e-6 * np.outer(e1, e1)
+    S1 = np.outer(e1, e1) + 1e-12 * np.outer(e0, e0)
+
+    raw = o._kernelsolves_raw
+    try:
+        o.invalidate()      # rebuilds _kernelsolves_raw, so plant AFTER it
+        o._kernelsolves_raw = [planted(S0), planted(S1)] + list(raw[2:])
+
+        # structural: what kernelsolves hands every consumer must already be PSD
+        S = np.asarray(o.kernelsolves[0](params)[1])
+        assert np.linalg.eigvalsh(0.5 * (S + S.T)).min() >= 0.0
+
+        # behavioural: the Cholesky-free path must still get finite sigmas
+        _, sigmas = o.os_rhosigma(params)
+        assert np.all(np.asarray(sigmas) > 0.0)
+    finally:
+        o._kernelsolves_raw = raw
+        o.invalidate()
 
 
 def test_validate_rejects_inconsistent_gw_phi(os_model):
@@ -913,16 +1008,21 @@ def test_sample_rhosigma_lowrank_matches_Q(os_model):
     assert float(f(x)) == pytest.approx(float(x @ Q @ x), rel=1e-4)
 
 
-def test_sample_rhosigma_runs_or_refuses_clearly(os_model):
-    """It must either work or raise NotImplementedError -- never return garbage."""
+def test_sample_rhosigma_refuses_clearly(os_model, os_novar_timing):
+    """Every restriction must surface as NotImplementedError, not a raw TypeError.
+
+    Both of sample_rhosigma's refusals are reachable from the packaged pulsars,
+    and its numeric path is not: makenoise_measurement leaves the white noise
+    variable even when handed a noisedict, so white_noise_matrix stays a
+    callable. That path is covered by sample and sample_rhosigma_lowrank.
+    """
     o, params, _, _ = os_model
-    try:
-        f = o.sample_rhosigma(params)
-    except NotImplementedError as e:
-        assert 'nested kernel' in str(e) or '2-D prior' in str(e)
-        return
-    rng = np.random.default_rng(9)
-    assert np.isfinite(float(f(rng.normal(size=f.cnt))))
+    with pytest.raises(NotImplementedError, match='nested kernel'):
+        o.sample_rhosigma(params)
+
+    o2, params2 = os_novar_timing
+    with pytest.raises(NotImplementedError, match='constant white noise'):
+        o2.sample_rhosigma(params2)
 
 
 def test_scramble_changes_the_answer(os_spread):
@@ -933,6 +1033,28 @@ def test_scramble_changes_the_answer(os_spread):
 
     shuffled = [o.pos[i] for i in (1, 2, 0)]
     assert o.scramble(params, shuffled)['snr'] != pytest.approx(true, rel=1e-6)
+
+
+def test_scramble_normalises_positions(os_spread):
+    """A non-unit position must not silently change the answer.
+
+    The ORFs clip cos(theta) to [-1, 1], so a scaled position lands on the
+    z >= 1 branch and the pair becomes a zero-separation auto-term. That flips
+    the sign of the snr on many draws, with no warning.
+    """
+    o, params = os_spread
+    true = o.scramble(params, o.pos)['snr']
+    scaled = [3.0 * p for p in o.pos]
+    assert o.scramble(params, scaled)['snr'] == pytest.approx(true, rel=1e-10)
+
+
+@pytest.mark.parametrize('shape', [(4, 3), (2, 3), (3, 2)])
+def test_scramble_rejects_the_wrong_position_shape(os_spread, shape):
+    """pos[i] is jax indexing, which clamps out-of-range indices instead of
+    raising, so a short array silently reuses a pulsar's position."""
+    o, params = os_spread
+    with pytest.raises(ValueError, match='unit position vector'):
+        o.scramble(params, np.ones(shape))
 
 
 def test_two_d_phi_rejected_by_every_1d_consumer(os_model):
