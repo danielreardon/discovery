@@ -21,7 +21,8 @@ classifiers = [
 requires-python = ">=3.9"
 dynamic = ["version"]
 dependencies = [
-    "jax[cpu]~=0.4",
+    # >=0.4.24 for jnp.linalg.cholesky(upper=...), used in OS.os_rhosigma
+    "jax[cpu]>=0.4.24",
     "scipy",
     "numpy",
     "pandas",
@@ -54,6 +55,7 @@ test = [
     "pytest-mock<3.14.1",
     "pytest-runner",
     "pytest==8.3.3",
+    "quadax",       # else the six gx2cdf/eig2cdf tests skip in CI
     "pytest-github-actions-annotate-failures",
     "shellcheck-py==0.10.0.1"
 ]
