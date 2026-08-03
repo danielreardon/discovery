@@ -206,7 +206,8 @@ class OS:
                 "uses pulsar 0's Phi for every pair. Give every gw GP the same "
                 "template and the same Tspan.")
 
-        sPhi = np.sqrt(phis[0])
+        # after the Phi-consistency check above, which is well defined for a 2-D Phi
+        sPhi = np.sqrt(_require_1d_phi(phis[0], 'validate'))
         S = np.array([np.asarray(k(params)[1]) for k in self._kernelsolves_raw])
         D = sPhi[None, :, None] * (0.5 * (S + np.swapaxes(S, 1, 2))) * sPhi[None, None, :]
 
@@ -294,7 +295,6 @@ class OS:
         def get_Q(params, orf=hd_orfa):
             sPhi = matrix.jnp.sqrt(_require_1d_phi(Phivar(params), 'Q'))
 
-            # _psd here, not in kernelsolves: this is a site that factorises S
             Ss = [k(params)[1] for k in kernelsolves]
             As = [matrix.jnp.linalg.cholesky(S + _ridge(S) * matrix.jnp.eye(S.shape[0]))
                   for S in Ss]
@@ -480,6 +480,15 @@ class OS:
                     "describe, and this sampler would drop them. Use OS.sample or "
                     "OS.sample_rhosigma_lowrank, which go through make_kernelsolve.")
 
+        # (3) a variable white noise leaves white_noise_matrix a callable, which the
+        # hand-built Woodbury below feeds to abs() -- a bare TypeError from matrix.py
+        bad = [i for i, Nmat in enumerate(Nmats) if callable(Nmat)]
+        if bad:
+            raise NotImplementedError(
+                f"OS.sample_rhosigma needs a constant white noise, but pulsar(s) {bad} "
+                "still have free efac/equad parameters. Use OS.sample or "
+                "OS.sample_rhosigma_lowrank, which go through make_kernelsolve.")
+
         Ks = [matrix.WoodburyKernel_novar(matrix.NoiseMatrix1D_novar(Nmat), Fmat, matrix.NoiseMatrix1D_novar(Pmat))
               for Nmat, Fmat, Pmat in zip(Nmats, Fmats, Pmats)]
         K1s = [K.make_solve_1d() for K in Ks]
@@ -606,8 +615,23 @@ class OS:
             gwnorm = 10**(2.0 * params[gwpar])
             rhos, sigmas = gwnorm * rhos, gwnorm * sigmas
 
-            # design matrix M_{pk} = orf_k(angle_p); weights w_p = 1/sigma_p^2
-            M = matrix.jnp.stack([orf(angles) for orf in orfs], axis=1)
+            # design matrix M_{pk} = orf_k(angle_p); weights w_p = 1/sigma_p^2.
+            # angles is concrete, so the rank check below also runs under jit/vmap.
+            with jax.ensure_compile_time_eval():
+                M = matrix.jnp.stack([orf(angles) for orf in orfs], axis=1)
+                rank = int(matrix.jnp.linalg.matrix_rank(M))
+
+            # a singular Fisher gives NaN amplitudes with no warning, and a
+            # pseudo-inverse would be worse: it splits one amplitude evenly over
+            # the degenerate components and returns a plausible detection
+            if rank < M.shape[1]:
+                names = [getattr(orf, '__name__', str(orf)) for orf in orfs]
+                raise ValueError(
+                    f"the ORFs {names} are collinear over these {M.shape[0]} pulsar "
+                    f"pairs (design matrix has rank {rank} < {M.shape[1]}), so the GLS "
+                    "normal matrix is singular. Drop a component, or use pulsars whose "
+                    "angular separations tell the ORFs apart.")
+
             w = 1.0 / sigmas**2
 
             MtW = M.T * w[matrix.jnp.newaxis, :]
@@ -627,9 +651,18 @@ class OS:
     @functools.cached_property
     def scramble(self):
         os_rhosigma = self.os_rhosigma    # getos will close on os_rhosigma
-        gwpar, pairs = self.gwpar, self.pairs
+        gwpar, pairs, npsr = self.gwpar, self.pairs, len(self.pos)
 
         def get_scramble(params, pos, orf=hd_orfa):
+            # the ORFs clip cos(theta) to [-1, 1], so a non-unit position quietly
+            # turns a pair into a zero-separation auto-term; and pos[i] is jax
+            # indexing, which clamps rather than raising if pos is too short
+            pos = matrix.jnparray(pos)
+            if pos.shape != (npsr, 3):
+                raise ValueError(f"scramble needs one unit position vector per pulsar, "
+                                 f"i.e. shape ({npsr}, 3), got {pos.shape}.")
+            pos = pos / matrix.jnp.linalg.norm(pos, axis=-1, keepdims=True)
+
             rhos, sigmas = os_rhosigma(params)
 
             gwnorm = 10**(2.0 * params[gwpar])
