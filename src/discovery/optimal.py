@@ -407,9 +407,10 @@ class OS:
             Q, chi = whitened(params, orf, dstype)
             snr = chi @ Q @ chi
 
+            # same keys as os(), and no dstype: a string leaf would make the dict
+            # unusable under vmap, which is how the noise-marginalised loop calls it
             nan = matrix.jnp.nan * snr
-            return {'os': nan, 'os_sigma': nan, 'snr': snr,
-                    'log10_A': params[gwpar], 'dstype': dstype}
+            return {'os': nan, 'os_sigma': nan, 'snr': snr, 'log10_A': params[gwpar]}
         get_dstat.params = self._whitened.params
 
         return get_dstat
@@ -695,8 +696,7 @@ class OS:
             os_sigma = 1.0 / matrix.jnp.sqrt(matrix.jnp.sum(orfs**2 / sigmas**2))
             snr = os / os_sigma
 
-            return {'os': os, 'os_sigma': os_sigma, 'snr': snr,
-                    'log10_A': params[gwpar], 'dstype': 'dfcc'} # , 'rhos': rhos, 'sigmas': sigmas}
+            return {'os': os, 'os_sigma': os_sigma, 'snr': snr, 'log10_A': params[gwpar]} # , 'rhos': rhos, 'sigmas': sigmas}
 
         get_os.params = os_rhosigma.params
 

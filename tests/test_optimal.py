@@ -529,14 +529,25 @@ def test_os_dstype_switch_reports_no_amplitude(os_spread):
     """Only DFCC estimates A^2; the rest must say so rather than invent one."""
     o, params = os_spread
 
-    dfcc = o.os(params, hd_orfa, 'dfcc')
-    assert dfcc['dstype'] == 'dfcc' and np.isfinite(float(dfcc['os']))
+    keys = set(o.os(params, hd_orfa, 'dfcc'))
+    assert np.isfinite(float(o.os(params, hd_orfa, 'dfcc')['os']))
 
     for dstype in ('df', 'np', 'npmv'):
         out = o.os(params, hd_orfa, dstype)
-        assert out['dstype'] == dstype
+        assert set(out) == keys              # same keys, so callers need no branch
         assert np.isnan(float(out['os'])) and np.isnan(float(out['os_sigma']))
         assert np.isfinite(float(out['snr']))
+
+
+@pytest.mark.parametrize('dstype', _DSTYPES)
+def test_os_dict_stays_vmappable(os_spread, dstype):
+    """The noise-marginalised loop vmaps over the whole returned dict, so a
+    string leaf like a dstype label would break it."""
+    o, params = os_spread
+    batch = {k: matrix.jnparray([v, v]) for k, v in params.items()}
+
+    out = jax.vmap(lambda q: o.os(q, hd_orfa, dstype))(batch)
+    assert np.asarray(out['snr']).shape == (2,)
 
 
 def test_dstype_respects_the_orf(os_spread):
