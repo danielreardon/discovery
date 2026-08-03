@@ -233,7 +233,7 @@ Compute the cumulative distribution function using the generalized chi-squared (
    xs = np.linspace(0, 5, 100)
 
    # Compute CDF
-   cdf_values = os_obj.gx2cdf(params, xs, cutoff=1e-6, limit=100, epsabs=1e-6)
+   cdf_values = os_obj.gx2cdf(params, xs, orf=ds.hd_orfa, cutoff=1e-6, limit=100, epsabs=1e-6)
 
    # Plot (requires matplotlib)
    import matplotlib.pyplot as plt
@@ -246,10 +246,13 @@ Compute the cumulative distribution function using the generalized chi-squared (
 
 Parameters:
 
-- ``cutoff``: If float, exclude eigenvalues smaller than this; if int, keep only the largest ``cutoff`` eigenvalues
-- ``limit``, ``epsabs``: Passed to ``scipy.integrate.quad``
+- ``orf``: The ORF whose null distribution to build. Keyword-only, and it must match the ORF used for the point estimate
+- ``cutoff``: If float, exclude eigenvalues smaller than this *fraction of the largest*; if int, keep only the largest ``cutoff`` eigenvalues
+- ``limit``, ``epsabs``: Passed to ``quadax.quadgk``
 
-Note: ``gx2cdf`` currently cannot be JIT-compiled or vmapped.
+Note: ``gx2cdf`` needs the ``optimal`` extra (``pip install 'discovery[optimal]'``) for ``quadax``.
+It cannot be JIT-compiled or vmapped: the ``cutoff`` selects eigenvalues with a boolean mask,
+whose result shape is not known at trace time.
 
 Complete Example
 ----------------
