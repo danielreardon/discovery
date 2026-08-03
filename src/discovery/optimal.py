@@ -114,6 +114,21 @@ def _ridge(S):
     return matrix.jnp.where(scale > 0.0, 1e-12 * scale, tiny)
 
 
+# Detection statistics of van Haasteren et al. 2025 (arXiv:2509.06489), all
+# quadratic forms chi^T Q chi on the same whitened data. DFCC is the traditional
+# OS S/N; DF adds the auto-correlation blocks; NP applies the Neyman-Pearson
+# filter (I + B)^-1 B, which reintroduces auto-correlation through the inverse;
+# NPMV strips those blocks back out.
+_DSTYPES = ('dfcc', 'df', 'np', 'npmv')
+
+
+def _check_dstype(dstype):
+    ds = str(dstype).lower()
+    if ds not in _DSTYPES:
+        raise ValueError(f"unknown detection statistic {dstype!r}, expected one of {_DSTYPES}.")
+    return ds
+
+
 def _require_1d_phi(Phi, name):
     """Reject a 2-D GW Phi where an elementwise sqrt(Phi) is assumed."""
     if matrix.jnp.asarray(Phi).ndim > 1:
@@ -282,34 +297,37 @@ class OS:
         return [wrap(k) for k in self._kernelsolves_raw]
 
     @functools.cached_property
-    def Q(self):
-        """``get_Q(params, orf) -> Q`` such that ``x^T Q x`` is the OS S/N.
+    def _whitened(self):
+        """``get(params, orf, dstype) -> (Q, chi)`` with ``chi^T Q chi`` the statistic.
 
-        The null distribution of ``x^T Q x`` for standard-normal ``x`` is the
-        generalized chi-squared that ``gx2cdf`` integrates.
+        ``chi_a = A_a^-1 T^T K^-1 y`` where ``S_a = A_a A_a^T``, so ``chi`` is
+        standard normal under the null and every dstype is a different quadratic
+        form on the same data. Each ``Q`` is scaled to unit null variance
+        (``2 tr Q^2 == 1``), which is what makes ``gx2cdf`` comparable across them.
+
+        The whitening is only fixed up to a per-pulsar rotation, but each dstype
+        is invariant under one, so the Cholesky factor serves for all of them.
         """
         kernelsolves = self.kernelsolves
 
         Phivar = self.psls[0].gw.Phi.getN
 
-        def get_Q(params, orf=hd_orfa):
+        def get(params, orf=hd_orfa, dstype='dfcc'):
+            dstype = _check_dstype(dstype)
             sPhi = matrix.jnp.sqrt(_require_1d_phi(Phivar(params), 'Q'))
 
-            Ss = [k(params)[1] for k in kernelsolves]
+            ks = [k(params) for k in kernelsolves]
+            Ss = [k[1] for k in ks]
             As = [matrix.jnp.linalg.cholesky(S + _ridge(S) * matrix.jnp.eye(S.shape[0]))
                   for S in Ss]
+            chi = matrix.jnp.concatenate(
+                [jax.scipy.linalg.solve_triangular(A, k[0], lower=True) for A, k in zip(As, ks)])
 
-            ngw = Ss[0].shape[0]
-            cnt = len(Ss) * ngw
-            inds = [slice(i * ngw, (i + 1) * ngw) for i in range(len(Ss))]
-
-            Ds = [sPhi[:,matrix.jnp.newaxis] * S * sPhi[matrix.jnp.newaxis,:] for S in Ss]
-            # Ds are symmetric, so tr(Ds[i] @ Ds[j]) == sum(Ds[i] * Ds[j]) (O(m^2), no m x m temporary)
-            bs = [matrix.jnp.sum(Ds[i] * Ds[j]) for (i,j) in self.pairs]
+            npsr, ngw = len(Ss), Ss[0].shape[0]
+            cnt = npsr * ngw
+            inds = [slice(i * ngw, (i + 1) * ngw) for i in range(npsr)]
 
             orfs = orf(self.angles)
-            # the loop below adds both Bij and Bij.T, hence the 2 here
-            denom = 2.0 * matrix.jnp.sqrt(matrix.jnp.sum(orfs**2 * matrix.jnparray(bs)))
 
             Q = matrix.jnpzeros((cnt, cnt))
 
@@ -321,14 +339,87 @@ class OS:
                 Q = Q.at[inds[i], inds[j]].add(Bij)
                 Q = Q.at[inds[j], inds[i]].add(Bij.T)
 
-            return Q / denom
+            if dstype == 'dfcc':
+                Ds = [sPhi[:,matrix.jnp.newaxis] * S * sPhi[matrix.jnp.newaxis,:] for S in Ss]
+                # Ds are symmetric, so tr(Ds[i] @ Ds[j]) == sum(Ds[i] * Ds[j]) (O(m^2), no m x m temporary)
+                bs = [matrix.jnp.sum(Ds[i] * Ds[j]) for (i,j) in self.pairs]
+
+                # the loop above adds both Bij and Bij.T, hence the 2 here
+                denom = 2.0 * matrix.jnp.sqrt(matrix.jnp.sum(orfs**2 * matrix.jnparray(bs)))
+
+                return Q / denom, chi
+
+            # the other three need the auto blocks: the deflection B is the excess
+            # covariance of the GW model over the null, and I + B is what the
+            # Neyman-Pearson filter inverts
+            wauto = orf(matrix.jnparray([1.0]))[0]
+            for i in range(npsr):
+                Q = Q.at[inds[i], inds[i]].add(wauto * (A_scaled[i].T @ A_scaled[i]))
+
+            if dstype in ('np', 'npmv'):
+                Q = matrix.jnp.linalg.solve(matrix.jnp.eye(cnt) + Q, Q)
+                Q = 0.5 * (Q + Q.T)
+
+                if dstype == 'npmv':
+                    # (I + B)^-1 B has non-zero auto blocks even when B has none,
+                    # so NP reads pulsar power the OS deliberately excludes
+                    blk = matrix.jnp.repeat(matrix.jnp.arange(npsr), ngw)
+                    Q = matrix.jnp.where(blk[:, matrix.jnp.newaxis] != blk[matrix.jnp.newaxis, :],
+                                         Q, 0.0)
+
+            return Q / matrix.jnp.sqrt(2.0 * matrix.jnp.sum(Q * Q)), chi
+        get.params = self.os_rhosigma.params
+
+        return get
+
+    @functools.cached_property
+    def Q(self):
+        """``get_Q(params, orf, dstype) -> Q`` such that ``x^T Q x`` is the statistic.
+
+        The null distribution of ``x^T Q x`` for standard-normal ``x`` is the
+        generalized chi-squared that ``gx2cdf`` integrates. See ``_DSTYPES``.
+        """
+        whitened = self._whitened
+
+        def get_Q(params, orf=hd_orfa, dstype='dfcc'):
+            return whitened(params, orf, dstype)[0]
         get_Q.params = self.os_rhosigma.params
 
         return get_Q
 
     @functools.cached_property
+    def dstat(self):
+        """``get_dstat(params, orf, dstype) -> dict`` for one detection statistic.
+
+        ``snr`` is the statistic itself, scaled to unit variance under the null,
+        so it is directly comparable across dstypes and feeds ``gx2cdf``.
+
+        Only DFCC estimates an amplitude. DF and NP are not zero-mean under the
+        null, and all three of DF/NP/NPMV are quadratic forms with no ``A^2``
+        reading, so ``os`` and ``os_sigma`` come back NaN for them.
+
+        This goes through the dense ``Q``, so it costs O((npsr*ngw)^3) against
+        the O(npsr^2 ngw^2) of ``os``.
+        """
+        whitened, gwpar = self._whitened, self.gwpar
+
+        def get_dstat(params, orf=hd_orfa, dstype='dfcc'):
+            Q, chi = whitened(params, orf, dstype)
+            snr = chi @ Q @ chi
+
+            nan = matrix.jnp.nan * snr
+            return {'os': nan, 'os_sigma': nan, 'snr': snr,
+                    'log10_A': params[gwpar], 'dstype': dstype}
+        get_dstat.params = self._whitened.params
+
+        return get_dstat
+
+    @functools.cached_property
     def opQ(self):
-        """``get_opQ(params, orf) -> op``, the matrix-free form of ``Q``."""
+        """``get_opQ(params, orf) -> op``, the matrix-free form of ``Q``.
+
+        DFCC only: NP and NPMV invert ``I + B``, which needs the whole matrix.
+        """
         kernelsolves = self.kernelsolves
 
         Phivar = self.psls[0].gw.Phi.getN
@@ -578,10 +669,21 @@ class OS:
 
     @functools.cached_property
     def os(self):
+        """``get_os(params, orf, dstype) -> dict`` with ``os`` (A^2), ``os_sigma`` and ``snr``.
+
+        ``dstype`` selects the detection statistic; the default DFCC is the
+        traditional OS. The other three return the same keys with ``os`` and
+        ``os_sigma`` NaN, since only DFCC estimates an amplitude -- see ``dstat``,
+        which they delegate to.
+        """
         os_rhosigma = self.os_rhosigma    # getos will close on os_rhosigma
         gwpar, angles = self.gwpar, self.angles
+        dstat = self.dstat
 
-        def get_os(params, orf=hd_orfa):
+        def get_os(params, orf=hd_orfa, dstype='dfcc'):
+            if _check_dstype(dstype) != 'dfcc':
+                return dstat(params, orf, dstype)
+
             rhos, sigmas = os_rhosigma(params)
 
             gwnorm = 10**(2.0 * params[gwpar])
@@ -593,7 +695,8 @@ class OS:
             os_sigma = 1.0 / matrix.jnp.sqrt(matrix.jnp.sum(orfs**2 / sigmas**2))
             snr = os / os_sigma
 
-            return {'os': os, 'os_sigma': os_sigma, 'snr': snr, 'log10_A': params[gwpar]} # , 'rhos': rhos, 'sigmas': sigmas}
+            return {'os': os, 'os_sigma': os_sigma, 'snr': snr,
+                    'log10_A': params[gwpar], 'dstype': 'dfcc'} # , 'rhos': rhos, 'sigmas': sigmas}
 
         get_os.params = os_rhosigma.params
 
@@ -739,18 +842,20 @@ class OS:
 
         return get_shift
 
-    def gx2cdf(self, params, osxs, *, orf=hd_orfa, cutoff=1e-6, limit=100, epsabs=1e-6):
+    def gx2cdf(self, params, osxs, *, orf=hd_orfa, dstype='dfcc',
+               cutoff=1e-6, limit=100, epsabs=1e-9):
         """Null CDF P(S/N <= osx) for each osx in ``osxs``; p-value is 1 - this.
 
         ``osxs`` are S/N values (``os['snr']``), not OS amplitudes, and ``orf``
-        must match the one used for the point estimate -- the null depends on it
-        (a dipole S/N read off the HD null is wrong by 3-4% in p).
+        and ``dstype`` must match the ones used for the point estimate -- the
+        null depends on both (a dipole S/N read off the HD null is wrong by 3-4%
+        in p, and the dstypes have quite different null spectra).
 
         ``orf`` is keyword-only on purpose: it was added after ``osxs``, so
         accepting it positionally would silently reinterpret an existing
         ``gx2cdf(params, osxs, 1e-3)`` cutoff as an ORF.
         """
-        eigx = matrix.jnp.linalg.eigh(self.Q(params, orf=orf))[0]
+        eigx = matrix.jnp.linalg.eigh(self.Q(params, orf=orf, dstype=dstype))[0]
 
         return eig2cdf(osxs, eigx, cutoff=cutoff, limit=limit, epsabs=epsabs)
 
@@ -766,8 +871,13 @@ def imhof(u, x, eigs):
     u0 = 0.5 * (matrix.jnp.sum(eigs, axis=0) - x)
     return matrix.jnp.where(u == 0.0, u0, matrix.jnp.sin(theta) / (u * rho))
 
-def eig2cdf(osxs, eigs, cutoff=1e-6, limit=100, epsabs=1e-6):
-    """Imhof CDF P(sum_j eig_j z_j^2 <= osx) for standard normal z."""
+def eig2cdf(osxs, eigs, cutoff=1e-6, limit=100, epsabs=1e-9):
+    """Imhof CDF P(sum_j eig_j z_j^2 <= osx) for standard normal z.
+
+    epsabs=1e-9 rather than 1e-6 because a detection p-value lives in the far
+    right tail: against an exact chi-squared reference, 1e-6 is good to ~1e-7 in
+    p (5.2 sigma) and 1e-9 to ~1e-9 (6.0 sigma), at no measurable cost.
+    """
     # imported here rather than at module scope so that quadax stays an optional
     # dependency: only gx2cdf needs it, and discovery/__init__ star-imports this
     # module, so a top-level import would make the whole package unimportable
@@ -811,6 +921,17 @@ def eig2cdf(osxs, eigs, cutoff=1e-6, limit=100, epsabs=1e-6):
             "The result is clipped to [0, 1] but is not trustworthy -- this happens "
             "when few eigenvalues survive `cutoff`, where the integrand has a heavy "
             "tail. Keep more eigenvalues, or use a Monte Carlo of x^T Q x.",
+            RuntimeWarning, stacklevel=2)
+
+    # a CDF of 1 - 1e-17 rounds to exactly 1.0, so the p-value silently becomes
+    # 0 rather than "smaller than the quadrature can resolve". Say so: p = 0 is
+    # otherwise indistinguishable from an infinitely significant detection.
+    exhausted = (raw >= 1.0) & ~bad
+    if exhausted.any():
+        warnings.warn(
+            f"eig2cdf: {int(exhausted.sum())} of {exhausted.size} value(s) sit further "
+            "into the tail than the quadrature resolves, so the CDF rounded to 1 and the "
+            f"p-value to 0. Read those as p < ~1e-9 at epsabs={epsabs:g}, not as p == 0.",
             RuntimeWarning, stacklevel=2)
 
     return matrix.jnp.clip(vals, 0.0, 1.0)
