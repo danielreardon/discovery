@@ -177,7 +177,10 @@ def test_ridge_is_scale_invariant():
     A = rng.normal(size=(6, 6))
     S = A @ A.T
     for lam in (1e-20, 1e-6, 1.0, 1e6, 1e20):
-        assert float(_ridge(lam * S)) == pytest.approx(lam * float(_ridge(S)), rel=1e-12)
+        # abs=0.0: approx's tolerance is max(rel*expected, abs), and the default
+        # abs=1e-12 swamps the whole comparison once lam*_ridge(S) falls below it
+        assert float(_ridge(lam * S)) == pytest.approx(lam * float(_ridge(S)),
+                                                       rel=1e-12, abs=0.0)
 
 
 # ---------------------------------------------------------------- eig2cdf
@@ -1011,10 +1014,10 @@ def test_sample_rhosigma_lowrank_matches_Q(os_model):
 def test_sample_rhosigma_refuses_clearly(os_model, os_novar_timing):
     """Every restriction must surface as NotImplementedError, not a raw TypeError.
 
-    Both of sample_rhosigma's refusals are reachable from the packaged pulsars,
-    and its numeric path is not: makenoise_measurement leaves the white noise
-    variable even when handed a noisedict, so white_noise_matrix stays a
-    callable. That path is covered by sample and sample_rhosigma_lowrank.
+    Both refusals are reachable from the packaged test pulsars: their noisedicts
+    key equad as log10_equad, not log10_t2equad, so makenoise_measurement's
+    all-keys-present check fails and the white noise stays variable. The
+    NANOGrav feathers do carry log10_t2equad and reach the numeric path.
     """
     o, params, _, _ = os_model
     with pytest.raises(NotImplementedError, match='nested kernel'):
