@@ -1,10 +1,4 @@
-"""Tests for discovery.optimal.
-
-The important one is test_kernelsolve_matches_bruteforce: the OS S matrix is
-built by a Woodbury reduction, and the only way to validate it is against an
-explicit dense T^T C^-1 T. The identities trace(Q) == 0 and 2*sum(eig^2) == 1
-hold for ANY S -- they check the assembly code, not S itself.
-"""
+"""Tests for discovery.optimal."""
 
 import functools
 
@@ -21,23 +15,14 @@ from discovery.optimal import (OS, hd_orfa, dipole_orfa, monopole_orfa,
 # ---------------------------------------------------------------- ORFs
 
 def test_orfs_are_elementwise():
-    """Each ORF must map an array of angles to an equal-shaped array.
-
-    A jnp.allclose-based autocorrelation guard silently collapsed monopole to a
-    0-d scalar, which broke Q/opQ/sample (iteration over a 0-d array) and mcos
-    (jnp.stack shape mismatch).
-    """
+    """Each ORF must map an array of angles to an equal-shaped array."""
     z = np.array([-1.0, -0.5, 0.0, 0.3, 0.9])
     for orf in (hd_orfa, dipole_orfa, monopole_orfa):
         assert np.shape(orf(z)) == z.shape, orf.__name__
 
 
 def test_orfs_finite_at_zero_separation():
-    """z == 1 must give the 1.0 autocorrelation limit, not nan.
-
-    hd_orfa used `... + 0.5 * allclose(z, 1)`, but 1.5*0*log(0) is already nan
-    and an additive term cannot repair it.
-    """
+    """z == 1 must give the 1.0 autocorrelation limit, not nan."""
     for orf in (hd_orfa, dipole_orfa, monopole_orfa):
         assert np.isfinite(orf(1.0)), orf.__name__
         assert np.all(np.isfinite(orf(np.array([0.3, 1.0, -0.5])))), orf.__name__
@@ -72,12 +57,7 @@ def test_hd_matches_signals_hd_orf():
 # ---------------------------------------------------------------- _psd
 
 def test_psd_clips_negative_eigenvalues():
-    """Clip at the round-off scale, and leave the positive spectrum alone.
-
-    How negative S gets is strongly array-dependent -- benign here, far larger on
-    a heterogeneous array, where the error is amplified through an
-    ill-conditioned Sigma solve rather than being plain cancellation.
-    """
+    """Clip at the round-off scale, and leave the positive spectrum alone."""
     rng = np.random.default_rng(0)
     V = np.linalg.qr(rng.normal(size=(8, 8)))[0]
     w = np.logspace(0, -3, 8) * 1e8
@@ -98,11 +78,7 @@ def test_psd_is_a_noop_on_psd_input():
 
 
 def test_psd_enables_cholesky():
-    """One of the two things _psd is for: making cholesky(S + ridge) defined.
-
-    The other is keeping bs = tr(D_i D_j) non-negative; see
-    test_psd_prevents_negative_bs.
-    """
+    """One of the two things _psd is for: making cholesky(S + ridge) defined."""
     rng = np.random.default_rng(2)
     V = np.linalg.qr(rng.normal(size=(8, 8)))[0]
     w = np.logspace(0, -3, 8) * 1e8
@@ -129,11 +105,7 @@ def test_psd_is_pure_and_jax_traceable():
 
 
 def test_psd_gradient_survives_repeated_eigenvalues():
-    """What the custom_jvp is for: eigh's own VJP divides by (w_i - w_j).
-
-    A@A.T has distinct eigenvalues and differentiates fine either way, so it
-    cannot guard this. On an exactly degenerate S plain eigh gives all-NaN.
-    """
+    """What the custom_jvp is for: eigh's own VJP divides by (w_i - w_j)."""
     for S in (2.0 * np.eye(4), np.diag([1.0, 1.0, 2.0, 3.0])):
         g = np.asarray(jax.grad(lambda M: _psd(M).sum())(S))
         assert np.all(np.isfinite(g))
@@ -142,13 +114,7 @@ def test_psd_gradient_survives_repeated_eigenvalues():
 
 
 def test_psd_prevents_negative_bs():
-    """The failure _psd exists to prevent, in the regime where it happens.
-
-    bs = tr(D_i D_j) is NOT immune to an indefinite S: it goes negative once the
-    two pulsars are anti-aligned in the mode Phi weights most, and steep Phi puts
-    that weight exactly on the round-off-dominated low-frequency mode. More modes
-    makes this worse, not better.
-    """
+    """_psd keeps bs = tr(D_i D_j) non-negative for an anti-aligned pair under a steep Phi."""
     ncomp, k = 5, 10
     f = np.repeat(np.arange(1, ncomp + 1), 2).astype(float)
     sPhi = np.sqrt(f ** -8.8 / (1.0 ** -8.8))          # steep: weight on f1
@@ -170,9 +136,7 @@ def test_psd_prevents_negative_bs():
 
 
 def test_ridge_is_scale_invariant():
-    """_ridge must be purely relative, so opQ / sample / sample_rhosigma_lowrank
-    are invariant under a change of time units.
-    """
+    """_ridge scales with max|diag S|, so it is invariant under S -> lambda S."""
     rng = np.random.default_rng(4)
     A = rng.normal(size=(6, 6))
     S = A @ A.T
@@ -213,12 +177,7 @@ def test_eig2cdf_matches_montecarlo_mixed_signs():
 
 
 def test_eig2cdf_integer_cutoff_keeps_largest_magnitude():
-    """An integer cutoff must keep the largest |eig|, both signs.
-
-    eigh returns ascending eigenvalues and Q is traceless, so `eigs[:cutoff]`
-    kept only the most negative ones and discarded the entire positive half,
-    giving CDF values above 1 and a step at 0.
-    """
+    """An integer cutoff must keep the largest |eig|, both signs."""
     pytest.importorskip('quadax')
     rng = np.random.default_rng(3)
     eigs = np.sort(np.concatenate([rng.normal(size=20), -rng.normal(size=20)]))
@@ -237,11 +196,7 @@ def test_eig2cdf_integer_cutoff_keeps_largest_magnitude():
 
 
 def test_eig2cdf_cutoff_one_is_a_count():
-    """cutoff=1 must mean 'one eigenvalue', not a relative threshold.
-
-    `cutoff > 1` sent an integer 1 into the relative-threshold branch, where
-    |eig| > 1.0*max|eig| selects nothing.
-    """
+    """cutoff=1 must mean 'one eigenvalue', not a relative threshold."""
     pytest.importorskip('quadax')
     got = np.asarray(eig2cdf(np.array([1.0]), np.array([1.0, 0.5, 0.25]), cutoff=1))
     assert np.all(np.isfinite(got))
@@ -252,12 +207,7 @@ def test_eig2cdf_cutoff_one_is_a_count():
 
 @pytest.fixture(scope='module')
 def os_model():
-    """A small OS built from the packaged test pulsars.
-
-    The timing-model prior is finite (``constant=1e-8``) so that an explicit
-    dense ``C`` stays invertible in float64 and brute force is meaningful; the
-    default 1e40 makes any dense comparison numerically hopeless.
-    """
+    """A small OS built from the packaged test pulsars."""
     import glob, os as _os
 
     here = _os.path.dirname(_os.path.abspath(__file__))
@@ -294,13 +244,7 @@ def os_model():
 
 @pytest.fixture(scope='module')
 def os_spread(os_model):
-    """The same model but with well-separated sky positions.
-
-    The packaged test pulsars are all at [0, 0, 1], so every pair has zero
-    separation and every ORF collapses to a constant -- which makes mcos's
-    design matrix singular and every Q identical. ORF-discrimination tests need
-    real angular structure.
-    """
+    """The same model but with well-separated sky positions."""
     o, params, psls, parts = os_model
 
     spread = OS.__new__(OS)
@@ -349,13 +293,7 @@ def _diag(nm, params):
 
 
 def test_kernelsolve_matches_bruteforce(os_model):
-    """S = T^T C^-1 T and kv = T^T C^-1 y against an explicit dense solve.
-
-    This is the only real check on the Woodbury reduction -- trace(Q) == 0 and
-    2*sum(eig^2) == 1 hold for any S. A previous version rebuilt the kernel from
-    (white noise, outer F, outer P), dropping the constant GPs (SVD timing
-    model), which made S wrong by a large factor.
-    """
+    """S = T^T C^-1 T and kv = T^T C^-1 y against an explicit dense solve."""
     o, params, psls, parts = os_model
 
     for psl, (noise, gps), gw, k in zip(psls, parts, o.gws, o.kernelsolves):
@@ -374,12 +312,7 @@ def test_kernelsolve_matches_bruteforce(os_model):
 
 
 def test_kernelsolve_S_is_psd(os_model):
-    """kernelsolves projects, so its S is PSD to machine precision.
-
-    The RAW solve is only PSD up to cancellation -- asserting `>= 0.0` on it
-    passed by fixture luck (the real-data fixture gives -6.3e-16) and
-    contradicted _psd's own docstring.
-    """
+    """kernelsolves projects, so its S is PSD to machine precision."""
     o, params, _, _ = os_model
     for k, raw in zip(o.kernelsolves, o._kernelsolves_raw):
         S = np.asarray(k(params)[1])
@@ -425,10 +358,7 @@ def test_mcos_reduces_to_os(os_model):
 
 
 def test_mcos_accepts_monopole(os_spread):
-    """The canonical HD + monopole + dipole fit must run.
-
-    monopole_orfa returning a 0-d scalar made jnp.stack raise here.
-    """
+    """The canonical HD + monopole + dipole fit must run."""
     o, params = os_spread
 
     out = o.mcos(params, orfs=(hd_orfa, monopole_orfa, dipole_orfa))
@@ -444,11 +374,7 @@ def test_mcos_accepts_monopole(os_spread):
 # --------------------------------------------------- detection statistics
 
 def test_dfcc_reproduces_the_traditional_os(os_spread):
-    """DFCC is the OS S/N written as a quadratic form -- an exact identity.
-
-    This is the check that the whitening is right: chi = A^-1 T^T K^-1 y with
-    S = A A^T, so chi^T Q chi must land on os()['snr'] to round-off.
-    """
+    """DFCC is the OS S/N written as a quadratic form -- an exact identity."""
     o, params = os_spread
     assert float(o.dstat(params, hd_orfa, 'dfcc')['snr']) == pytest.approx(
         float(o.os(params)['snr']), rel=1e-10)
@@ -456,11 +382,7 @@ def test_dfcc_reproduces_the_traditional_os(os_spread):
 
 @pytest.mark.parametrize('dstype', _DSTYPES)
 def test_every_dstype_has_unit_null_variance(os_spread, dstype):
-    """x^T Q x for standard normal x has mean tr(Q) and variance 2 tr(Q^2).
-
-    Every dstype is scaled to 2 tr(Q^2) == 1, which is what lets gx2cdf take
-    them all and what makes the numbers comparable between them.
-    """
+    """x^T Q x for standard normal x has mean tr(Q) and variance 2 tr(Q^2)."""
     o, params = os_spread
     Q = np.asarray(o.Q(params, hd_orfa, dstype))
     assert np.allclose(Q, Q.T, atol=1e-10 * np.abs(Q).max())
@@ -468,11 +390,7 @@ def test_every_dstype_has_unit_null_variance(os_spread, dstype):
 
 
 def test_only_the_cross_only_dstypes_are_traceless(os_spread):
-    """DF and NP keep the auto blocks, so they are not zero-mean under the null.
-
-    That is not a defect -- gx2cdf reads the mean off the eigenvalues -- but it
-    means their S/N is not centred on zero and must not be read as one.
-    """
+    """DF and NP keep the auto blocks, so they are not zero-mean under the null."""
     o, params = os_spread
     tr = {d: np.trace(np.asarray(o.Q(params, hd_orfa, d))) for d in _DSTYPES}
     assert tr['dfcc'] == pytest.approx(0.0, abs=1e-10)
@@ -482,11 +400,7 @@ def test_only_the_cross_only_dstypes_are_traceless(os_spread):
 
 
 def test_npmv_removes_the_auto_blocks_that_np_reintroduces(os_spread):
-    """The whole point of NPMV.
-
-    B has no auto blocks, but (I + B)^-1 B = B - B^2 + ... does, so NP quietly
-    reads the per-pulsar power the OS is built to exclude. NPMV zeroes them.
-    """
+    """The whole point of NPMV."""
     o, params = os_spread
     npsr = len(o.psls)
 
@@ -502,12 +416,7 @@ def test_npmv_removes_the_auto_blocks_that_np_reintroduces(os_spread):
 
 
 def test_np_reduces_to_df_when_the_deflection_is_negligible(os_spread):
-    """(I + B)^-1 B -> B as B -> 0, so the NP filter is the identity there.
-
-    The packaged pulsars have ||B||_F ~ 3e-17, so this fixture is deep in that
-    limit and the pairs must coincide. It is the analytic check on the filter;
-    test_dstypes_disagree_on_a_real_array covers the regime where it bites.
-    """
+    """(I + B)^-1 B -> B as B -> 0, so the NP filter is the identity there."""
     o, params = os_spread
     val = {d: float(o.dstat(params, hd_orfa, d)['snr']) for d in _DSTYPES}
     assert val['np'] == pytest.approx(val['df'], rel=1e-9)
@@ -516,11 +425,7 @@ def test_np_reduces_to_df_when_the_deflection_is_negligible(os_spread):
 
 
 def test_dstypes_disagree_on_a_real_array(ng_os):
-    """A switch that silently returns the same number would be worse than none.
-
-    Needs ||B|| of order 1 -- here ~3.9 -- or the NP filter degenerates to the
-    identity and only the auto blocks distinguish the four.
-    """
+    """A switch that silently returns the same number would be worse than none."""
     vals = [float(ng_os.dstat(NG_PARAMS, hd_orfa, d)['snr']) for d in _DSTYPES]
     assert len(set(np.round(vals, 6))) == len(_DSTYPES), vals
 
@@ -541,8 +446,7 @@ def test_os_dstype_switch_reports_no_amplitude(os_spread):
 
 @pytest.mark.parametrize('dstype', _DSTYPES)
 def test_os_dict_stays_vmappable(os_spread, dstype):
-    """The noise-marginalised loop vmaps over the whole returned dict, so a
-    string leaf like a dstype label would break it."""
+    """The dict returned by os() contains no string entries, so it survives vmap."""
     o, params = os_spread
     batch = {k: matrix.jnparray([v, v]) for k, v in params.items()}
 
@@ -576,11 +480,7 @@ def test_dstype_is_case_insensitive(os_spread):
 
 @pytest.mark.parametrize('dstype', _DSTYPES)
 def test_gx2cdf_matches_the_sampled_null(os_spread, dstype):
-    """The p-value chain end to end: eigenvalues of Q -> Imhof -> CDF.
-
-    Drawn from Q's own eigenvalues, so this tests gx2cdf against the definition
-    of the statistic rather than against a second implementation of it.
-    """
+    """The p-value chain end to end: eigenvalues of Q -> Imhof -> CDF."""
     o, params = os_spread
     w = np.linalg.eigvalsh(np.asarray(o.Q(params, hd_orfa, dstype)))
 
@@ -594,12 +494,7 @@ def test_gx2cdf_matches_the_sampled_null(os_spread, dstype):
 
 
 def test_eig2cdf_warns_when_the_p_value_underflows():
-    """p == 0 must not be silent -- it reads as an infinitely significant detection.
-
-    Far enough into the tail the CDF rounds to exactly 1.0, which is a different
-    failure from the non-convergence above: the quadrature is fine, it has just
-    run out of double precision.
-    """
+    """p == 0 must not be silent -- it reads as an infinitely significant detection."""
     pytest.importorskip('quadax', exc_type=ImportError)
     eigs = np.linspace(-1.0, 1.0, 40)
     eigs = eigs / np.sqrt(2.0 * np.sum(eigs ** 2))
@@ -619,12 +514,7 @@ def test_eig2cdf_warns_when_the_p_value_underflows():
 
 
 def test_mcos_refuses_collinear_orfs(os_model):
-    """Zero-separation pulsars make every ORF the same column.
-
-    The GLS then returns silent NaNs. A pseudo-inverse is not the fix: it splits
-    the one real amplitude evenly over the degenerate components and reports a
-    plausible detection instead.
-    """
+    """Zero-separation pulsars make every ORF the same column."""
     o, params, _, _ = os_model      # all three pulsars at [0, 0, 1]
     with pytest.raises(ValueError, match='collinear'):
         o.mcos(params, orfs=(hd_orfa, monopole_orfa, dipole_orfa))
@@ -649,18 +539,7 @@ def test_Q_identities_and_snr(os_model):
 
 
 def test_Q_null_moments_are_not_a_validation(os_model):
-    """trace(Q) == 0 and 2*sum(eig^2) == 1 are IDENTITIES, not checks.
-
-    Q is assembled purely from off-diagonal pair blocks and normalised by
-    2*sqrt(sum(orf^2 b)), and b_ij == ||A_i^T A_j||_F^2, so ||Q||_F^2 == 1/2 for
-    ANY S -- verified to hold even on pure random garbage S. They are asserted
-    here so that nobody mistakes them for a correctness test; the check that
-    does constrain S is test_kernelsolve_matches_bruteforce.
-
-    An earlier version of this test asserted the same two moments a second time
-    by Monte Carlo (mean 0, std 1 of x^T Q x), which is the identical identity
-    measured with sampling noise -- no extra information at 20000 draws.
-    """
+    """trace(Q) == 0 and 2*sum(eig^2) == 1 are IDENTITIES, not checks."""
     o, params, _, _ = os_model
     Q = np.asarray(o.Q(params))
     eigs = np.linalg.eigvalsh(Q)
@@ -721,12 +600,7 @@ def test_gx2cdf_forwards_orf(os_spread):
 
 
 def test_shift_preserves_imaginary_part(os_model):
-    """os_rhosigma_complex must return a complex rho.
-
-    Casting through matrix.jnparray forced float64, so `shift` computed
-    Re(ts)cos(dphi) instead of Re(ts e^{i dphi}) and the phase-shift null came
-    out ~0.8x too narrow -- overstating significance.
-    """
+    """os_rhosigma_complex must return a complex rho."""
     o, params, _, _ = os_model
     rhos_c, _ = o.os_rhosigma_complex(params)
     assert np.iscomplexobj(np.asarray(rhos_c))
@@ -741,13 +615,7 @@ def test_shift_zero_phase_reproduces_os(os_model):
 
 
 def test_shift_null_is_wider_than_cos_only(os_model):
-    """The quadrature term must widen the null relative to the buggy version.
-
-    The old code cast the complex rho through matrix.jnparray (float64), so it
-    computed sum Re(rho) cos(dphi) instead of sum Re(rho e^{i dphi}). That is
-    finite and non-zero, so a finiteness assertion passed for the buggy code
-    too. Emulate the bug and compare the two nulls directly.
-    """
+    """The shifted null is wider than one built from the real part of ts alone."""
     o, params, _, _ = os_model
     rhos_c, sigmas = o.os_rhosigma_complex(params)
     rhos_c = np.asarray(rhos_c)
@@ -846,8 +714,7 @@ GOLDEN_Q = dict(eig_min=-3.1146902057018455e-01, eig_max=3.6505695869859678e-01)
 
 @pytest.fixture(scope='module')
 def ng_os():
-    """Three real NANOGrav pulsars -- a physically sensible array, unlike the
-    packaged test pulsars (1710 s baseline, all at [0,0,1])."""
+    """Three real pulsars with distinct sky positions and realistic baselines."""
     import os as _os
     here = _os.path.dirname(_os.path.abspath(__file__))
     d = _os.path.join(here, '..', 'data')
@@ -894,11 +761,7 @@ def test_Q_S_matches_kernelsolve(ng_os):
 
 
 def test_Q_uses_the_full_nested_kernel(ng_os):
-    """Negative guard: S must NOT match the white-noise-plus-outer-layer form.
-
-    This fails if the hand-rolled Woodbury reduction is ever reintroduced. On
-    this fixture the wrong S is off by 315%-1037% in relative Frobenius norm.
-    """
+    """Negative guard: S must NOT match the white-noise-plus-outer-layer form."""
     psl, gw = ng_os.psls[0], ng_os.gws[0]
     inner = getattr(psl.N, 'N', None)
     if inner is None or isinstance(inner, matrix.NoiseMatrix):
@@ -931,19 +794,13 @@ def test_imhof_u0_limit():
 
 
 def test_gx2cdf_orf_is_keyword_only(ng_os):
-    """orf was added after osxs, so a positional third arg must not be read as
-    an ORF -- that would silently reinterpret an existing cutoff argument."""
+    """orf is keyword-only: a positional third argument must raise."""
     with pytest.raises(TypeError):
         ng_os.gx2cdf(NG_PARAMS, np.array([1.0]), 1e-3)
 
 
 def test_two_d_gw_phi_is_rejected():
-    """A 2-D GW Phi (makegp_fftcov) must raise, not be elementwise-sqrted.
-
-    Reachable from a shipped model: models/mpta.py builds curn with
-    makegp_fftcov, and likelihood.py aliases a GP named 'curn' to psl.gw. The
-    elementwise sqrt silently produced an (n,n,n) array instead of failing.
-    """
+    """A 2-D GW Phi (makegp_fftcov) must raise, not be elementwise-sqrted."""
     import os as _os
     here = _os.path.dirname(_os.path.abspath(__file__))
     d = _os.path.join(here, '..', 'data')
@@ -976,11 +833,7 @@ def test_two_d_gw_phi_is_rejected():
 # ------------------------------------------------- _ridge, validate, jit safety
 
 def test_ridge_is_never_zero():
-    """A zero ridge makes jnp.linalg.cholesky return NaN silently.
-
-    _psd clips an all-negative S to exactly zero, so max|diag S| == 0 is
-    reachable -- not just for a hypothetical no-information pulsar.
-    """
+    """A zero ridge makes jnp.linalg.cholesky return NaN silently."""
     assert float(_ridge(np.zeros((4, 4)))) > 0.0
 
     rng = np.random.default_rng(6)
@@ -997,13 +850,7 @@ def test_ridge_is_never_zero():
 
 
 def test_Q_and_sample_are_jit_traceable(os_model):
-    """Q/opQ/sample must stay traceable -- vmapping sample over keys is the
-    natural way to build a null distribution in a jax package.
-
-    The OS is rebuilt cold: any prior call would cache the kernel solves outside
-    the trace and hide the failure this guards (a tracer cached on the object,
-    then UnexpectedTracerError on every later call).
-    """
+    """Q, opQ and sample stay traceable under jit and vmap on a cold OS."""
     _, params, psls, _ = os_model
     o = OS(ds.GlobalLikelihood(psls))
     jax.jit(lambda p: o.Q(p))(params)
@@ -1025,12 +872,7 @@ def test_validate_reports_a_healthy_array(os_model):
 
 
 def test_validate_raises_when_a_pair_overlap_is_non_positive(os_model):
-    """The criterion must key on the failure itself, not on a proxy.
-
-    An indefinite S and a nearly orthogonal pair together make bs_ij negative;
-    the OS divides by sqrt(bs_ij), so os() is NaN. The eigenvalues of S alone
-    cannot predict this -- they carry no Phi.
-    """
+    """The criterion must key on the failure itself, not on a proxy."""
     o, params, _, _ = os_model
     n = np.asarray(o._kernelsolves_raw[0](params)[1]).shape[0]
 
@@ -1057,12 +899,7 @@ def test_validate_raises_when_a_pair_overlap_is_non_positive(os_model):
 
 
 def test_psd_projection_is_shared_by_every_consumer(os_model):
-    """_psd belongs in kernelsolves, not at the Cholesky sites.
-
-    os_rhosigma is the consumer with no Cholesky, so moving the projection to
-    the factorisation sites leaves it reading a raw indefinite S and returning
-    NaN sigmas. Same planted pair as the validate test above.
-    """
+    """_psd belongs in kernelsolves, not at the Cholesky sites."""
     o, params, _, _ = os_model
     n = np.asarray(o._kernelsolves_raw[0](params)[1]).shape[0]
 
@@ -1094,11 +931,7 @@ def test_psd_projection_is_shared_by_every_consumer(os_model):
 
 
 def test_validate_rejects_inconsistent_gw_phi(os_model):
-    """The OS uses pulsar 0's Phi for every pair, so they must all match.
-
-    A same-rank/different-Tspan gw GP was accepted silently and shifted snr by
-    27%.
-    """
+    """The OS uses pulsar 0's Phi for every pair, so they must all match."""
     o, params, _, _ = os_model
 
     class _FakePhi:
@@ -1122,12 +955,7 @@ def test_validate_rejects_inconsistent_gw_phi(os_model):
 
 
 def test_invalidate_covers_every_cached_property(os_model):
-    """Every cached_property must actually be cleared, and the raw solves rebuilt.
-
-    This used to assert only that the SOURCE of invalidate() contained the
-    strings 'cached_property' and 'vars(type(self))' -- which a no-op whose
-    docstring happened to mention them would satisfy. Exercise the behaviour.
-    """
+    """Every cached_property must actually be cleared, and the raw solves rebuilt."""
     o, params, _, _ = os_model
     cached = {n for n, v in vars(OS).items() if isinstance(v, functools.cached_property)}
     assert cached                                  # sanity: there are some
@@ -1148,11 +976,7 @@ def test_invalidate_covers_every_cached_property(os_model):
 # ------------------------------------------------------- eig2cdf convergence
 
 def test_eig2cdf_warns_and_clips_when_quadrature_fails():
-    """Discarding quadgk's status let CDF > 1 through, i.e. a NEGATIVE p-value.
-
-    eig2cdf([25, 36, 49], [1.0]) returned [1.0044, 1.0006, 0.9992] with
-    quadgk status 4 and err ~ 0.2.
-    """
+    """Discarding quadgk's status let CDF > 1 through, i.e. a NEGATIVE p-value."""
     pytest.importorskip('quadax')
     xs = np.array([25.0, 36.0, 49.0])
     with pytest.warns(RuntimeWarning, match='did not converge'):
@@ -1189,13 +1013,7 @@ def test_sample_rhosigma_lowrank_matches_Q(os_model):
 
 
 def test_sample_rhosigma_refuses_clearly(os_model, os_novar_timing):
-    """Every restriction must surface as NotImplementedError, not a raw TypeError.
-
-    Both refusals are reachable from the packaged test pulsars: their noisedicts
-    key equad as log10_equad, not log10_t2equad, so makenoise_measurement's
-    all-keys-present check fails and the white noise stays variable. The
-    NANOGrav feathers do carry log10_t2equad and reach the numeric path.
-    """
+    """Every restriction must surface as NotImplementedError, not a raw TypeError."""
     o, params, _, _ = os_model
     with pytest.raises(NotImplementedError, match='nested kernel'):
         o.sample_rhosigma(params)
@@ -1216,12 +1034,7 @@ def test_scramble_changes_the_answer(os_spread):
 
 
 def test_scramble_normalises_positions(os_spread):
-    """A non-unit position must not silently change the answer.
-
-    The ORFs clip cos(theta) to [-1, 1], so a scaled position lands on the
-    z >= 1 branch and the pair becomes a zero-separation auto-term. That flips
-    the sign of the snr on many draws, with no warning.
-    """
+    """A non-unit position must not silently change the answer."""
     o, params = os_spread
     true = o.scramble(params, o.pos)['snr']
     scaled = [3.0 * p for p in o.pos]
@@ -1230,8 +1043,7 @@ def test_scramble_normalises_positions(os_spread):
 
 @pytest.mark.parametrize('shape', [(4, 3), (2, 3), (3, 2)])
 def test_scramble_rejects_the_wrong_position_shape(os_spread, shape):
-    """pos[i] is jax indexing, which clamps out-of-range indices instead of
-    raising, so a short array silently reuses a pulsar's position."""
+    """A position array of the wrong shape raises rather than being clamped."""
     o, params = os_spread
     with pytest.raises(ValueError, match='unit position vector'):
         o.scramble(params, np.ones(shape))
