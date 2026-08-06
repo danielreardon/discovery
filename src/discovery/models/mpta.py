@@ -414,8 +414,9 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
     for psr, df in zip(psrs, chain_dfs):
         if not any(psr.name in col for col in df.columns):
             raise ValueError("Chain data frames do not match pulsar names")
-        # noisedict set to median of each column
-        noisedict = {col: np.median(df[col]) for col in df.columns if col.startswith(psr.name)}
+        # per-pulsar noise from the max-likelihood row of the chain
+        ml_idx = df['logl'].idxmax()
+        noisedict = {col: df.loc[ml_idx, col] for col in df.columns if col.startswith(psr.name)}
         # Fix chromatic alpha
         if fix_chrom_alpha:
             chrom_alpha = noisedict.get(f"{psr.name}_chrom_gp_alpha", None)
