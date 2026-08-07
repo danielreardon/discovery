@@ -27,6 +27,8 @@ SCALAR_SPECS = {
     'TruncatedNormalWithOutliers': [-14.5, 0.6, -16.0, -13.0, 0.15, -20.0, -11.0,
                                     'TruncatedNormalWithOutliers'],
     'NormalWithNormalOutliers': [-14.5, 0.6, 0.15, 7.0, 'NormalWithNormalOutliers'],
+    'TruncatedNormalWithNormalOutliers': [-14.5, 0.6, -18.0, -11.0, 0.15, 7.0,
+                                          'TruncatedNormalWithNormalOutliers'],
 }
 
 RED_GROUP = {
@@ -134,7 +136,8 @@ def test_getsupport_reports_the_link_support_of_every_family():
                 'TruncatedNormal': (-16.0, -13.0), 'UniformWithOutliers': (-20.0, -11.0),
                 'NormalWithOutliers': (-np.inf, np.inf),
                 'TruncatedNormalWithOutliers': (-20.0, -11.0),
-                'NormalWithNormalOutliers': (-np.inf, np.inf)}
+                'NormalWithNormalOutliers': (-np.inf, np.inf),
+                'TruncatedNormalWithNormalOutliers': (-18.0, -11.0)}
 
     for name, spec in SCALAR_SPECS.items():
         assert prior.getsupport('mypar', {'mypar': spec}) == expected[name]
@@ -399,6 +402,46 @@ def test_a_joint_prior_rejects_a_box_holding_no_gaussian_mass():
         prior.makelogtransform(makefunc(['J0030+0451_red_noise_gamma',
                                          'J0030+0451_red_noise_log10_A']),
                                jointpriors={RED_KEY: spec})
+
+
+def test_a_gaussian_outlier_never_steps_at_the_core_boundary():
+    # a uniform outlier wider than the core steps; a gaussian one sharing the box
+    # and the mean does not, whatever the mixing fraction
+    for chi in (0.01, 0.5, 0.99):
+        spec = [-14.5, 0.6, -18.0, -11.0, chi, 7.0, 'TruncatedNormalWithNormalOutliers']
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            prior.makelogtransform(makefunc(['mypar']), priordict={'mypar': spec})
+
+
+def test_a_joint_prior_may_take_a_gaussian_outlier_component():
+    spec = dict(RED_GROUP, outlier={'chi': 0.2261, 'sigma': [7.0, 6.0]})
+    params = ['J0030+0451_red_noise_gamma', 'J0030+0451_red_noise_log10_A']
+    t = prior.makelogtransform(makefunc(params), jointpriors={RED_KEY: spec},
+                               prior_whiten=False)
+    logprior = jax.jit(t.logprior)
+
+    integral, _ = scipy.integrate.dblquad(
+        lambda a, b: float(np.exp(logprior(jnp.array([b, a])))), -30, 30, -30, 30, epsabs=1e-10)
+
+    assert integral == pytest.approx(1.0, abs=1e-6)
+
+    # the outlier shares the core's box, so the support is unchanged; bounds are
+    # in group order (log10_A, gamma) while params sort gamma first
+    (a_lo, a_hi), (g_lo, g_hi) = RED_GROUP['bounds']
+    for ys in ([6.0, -6.0], [-6.0, 6.0], [0.0, 0.0]):
+        x = t.to_dict(jnp.array(ys))
+        assert a_lo <= float(x['J0030+0451_red_noise_log10_A']) <= a_hi
+        assert g_lo <= float(x['J0030+0451_red_noise_gamma']) <= g_hi
+
+
+def test_a_joint_gaussian_outlier_rejects_a_bad_width():
+    for bad in ([0.0, 6.0], [7.0]):
+        spec = dict(RED_GROUP, outlier={'chi': 0.2, 'sigma': bad})
+        with pytest.raises(ValueError):
+            prior.makelogtransform(makefunc(['J0030+0451_red_noise_gamma',
+                                             'J0030+0451_red_noise_log10_A']),
+                                   jointpriors={RED_KEY: spec})
 
 
 def test_a_joint_prior_with_a_matching_outlier_box_stays_normalised():

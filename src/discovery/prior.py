@@ -367,6 +367,35 @@ register_family(
 )
 
 
+def _tnorm_norm_out_prepare(args):
+    mu, sd, a, b, chi, sd_out = args
+    logZ = _log_ndtr_diff_np((a - mu) / sd, (b - mu) / sd)
+    logZo = _log_ndtr_diff_np((a - mu) / sd_out, (b - mu) / sd_out)
+    lfg, lout = _mix_logweights(chi)
+    return (lfg - np.log(sd) - 0.5 * LOG2PI - logZ,
+            lout - np.log(sd_out) - 0.5 * LOG2PI - logZo)
+
+
+def _tnorm_norm_out_logpdf(x, args, extra):
+    mu, sd, a, b, chi, sd_out = args
+    z, zo = (x - mu) / sd, (x - mu) / sd_out
+    return jnp.logaddexp(-0.5 * z * z + extra[0], -0.5 * zo * zo + extra[1])
+
+
+# TruncatedNormalWithNormalOutliers:
+# [mean, std, minval, maxval, chi, outlierstd, 'TruncatedNormalWithNormalOutliers'].
+# Both components share the mean and the truncation box, so each is normalised over
+# it and the mixture has no step at the boundary.
+register_family(
+    'TruncatedNormalWithNormalOutliers', 6,
+    support=lambda args: (args[2], args[3]),
+    prepare=_tnorm_norm_out_prepare,
+    logpdf=_tnorm_norm_out_logpdf,
+    loc=lambda args: np.clip(args[0], args[2], args[3]),
+    scale=lambda args: args[1],
+)
+
+
 # --- prior specifications ---------------------------------------------------
 
 def parse_spec(spec):
@@ -771,12 +800,25 @@ def _build_tmvn_group(label, key, spec, idx, whiten):
 
     outlier = spec.get('outlier')
     linkbounds = bounds.copy()
-    if outlier is not None:
+    if outlier is not None and 'sigma' in outlier:
+        # diagonal Gaussian outlier, sharing the mean and the truncation box, so
+        # each component is normalised over the box and the mixture has no step
+        osigma = np.asarray(outlier['sigma'], dtype=float)
+        if osigma.shape != (d,):
+            raise ValueError(f'Joint prior {label}: outlier sigma must have {d} entries.')
+        if np.any(osigma <= 0.0):
+            raise ValueError(f'Joint prior {label}: outlier sigma must be positive.')
+        lfg, lout = _mix_logweights(outlier['chi'])
+        logZo = _log_ndtr_diff_np((bounds[:, 0] - mu) / osigma, (bounds[:, 1] - mu) / osigma)
+        oconst = float(lout - np.sum(np.log(osigma) + 0.5 * LOG2PI + logZo))
+        outlier = ('normal', float(lfg), oconst, matrix.jnparray(1.0 / osigma))
+    elif outlier is not None:
         obounds = np.asarray(outlier['bounds'], dtype=float)
         if obounds.shape != (d, 2):
             raise ValueError(f'Joint prior {label}: outlier bounds must have {d} entries.')
         lfg, lout = _mix_logweights(outlier['chi'])
-        outlier = (float(lfg), float(lout) - float(np.sum(np.log(obounds[:, 1] - obounds[:, 0]))),
+        outlier = ('uniform', float(lfg),
+                   float(lout) - float(np.sum(np.log(obounds[:, 1] - obounds[:, 0]))),
                    matrix.jnparray(obounds[:, 0]), matrix.jnparray(obounds[:, 1]))
         linkbounds[:, 0] = np.minimum(linkbounds[:, 0], obounds[:, 0])
         linkbounds[:, 1] = np.maximum(linkbounds[:, 1], obounds[:, 1])
@@ -791,7 +833,7 @@ def _build_tmvn_group(label, key, spec, idx, whiten):
             xface[axis] = edge
             w = siginv @ (xface - mu)
             _warn_mixture_step(f'Joint prior {label}',
-                               np.array([lfg - 0.5 * float(w @ w) + logdens_const]), outlier[1])
+                               np.array([lfg - 0.5 * float(w @ w) + logdens_const]), outlier[2])
 
     linkargs = tuple(matrix.jnparray(v) for v in
                      _tanh_link_params(linkbounds[:, 0], linkbounds[:, 1],
@@ -809,8 +851,14 @@ def _build_tmvn_group(label, key, spec, idx, whiten):
         core = -0.5 * jnp.sum(z * z, axis=-1) + logdens_const
         core = jnp.where(jnp.all(_inbox(x, jlo, jhi), axis=-1), core, -jnp.inf)
 
-        if outlier is not None:
-            lfg, lout, olo, ohi = outlier
+        if outlier is not None and outlier[0] == 'normal':
+            _, lfg, oconst, oscale = outlier
+            zo = (x - jmu) * oscale
+            out = -0.5 * jnp.sum(zo * zo, axis=-1) + oconst
+            out = jnp.where(jnp.all(_inbox(x, jlo, jhi), axis=-1), out, -jnp.inf)
+            core = jnp.logaddexp(lfg + core, out)
+        elif outlier is not None:
+            _, lfg, lout, olo, ohi = outlier
             out = jnp.where(jnp.all(_inbox(x, olo, ohi), axis=-1), lout, -jnp.inf)
             core = jnp.logaddexp(lfg + core, out)
 
@@ -1215,13 +1263,17 @@ def _rvs(name, args, size):
         mu, sd, a, b = args
         return scipy.stats.truncnorm.rvs((a - mu)/sd, (b - mu)/sd, loc=mu, scale=sd, size=size)
     elif name in ('UniformWithOutliers', 'NormalWithOutliers',
-                  'TruncatedNormalWithOutliers', 'NormalWithNormalOutliers'):
+                  'TruncatedNormalWithOutliers', 'NormalWithNormalOutliers',
+                  'TruncatedNormalWithNormalOutliers'):
         if name == 'UniformWithOutliers':
             core, chi, out = ('Uniform', args[:2]), args[2], ('Uniform', args[3:5])
         elif name == 'NormalWithOutliers':
             core, chi, out = ('Normal', args[:2]), args[2], ('Uniform', args[3:5])
         elif name == 'TruncatedNormalWithOutliers':
             core, chi, out = ('TruncatedNormal', args[:4]), args[4], ('Uniform', args[5:7])
+        elif name == 'TruncatedNormalWithNormalOutliers':
+            core, chi = ('TruncatedNormal', args[:4]), args[4]
+            out = ('TruncatedNormal', (args[0], args[5], args[2], args[3]))
         else:
             core, chi, out = ('Normal', args[:2]), args[2], ('Normal', (args[0], args[3]))
 
