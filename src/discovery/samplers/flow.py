@@ -99,7 +99,9 @@ def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val
             key = jax.random.key(int(jax.random.bits(key, shape=(), dtype=jnp.uint32)))
             flow_key, train_key = jax.random.split(key)
             if base_loc is None:
-                base = StandardNormal((len(logx.params),))
+                parlen = sum(int(p[p.index('(') + 1:p.index(')')]) if '(' in p else 1
+                             for p in logx.params)
+                base = StandardNormal((parlen,))
             else:
                 bl = jnp.asarray(base_loc, dtype=float)
                 base = Normal(loc=bl, scale=jnp.ones_like(bl))   # seed the start toward a region
@@ -244,7 +246,11 @@ def run_flow_multistart(mylogl, init_grid, rng_key, priordict={}, evidence_n=Non
                 if name not in valid:
                     raise KeyError(f"run_flow_multistart: '{name}' is not a model parameter.")
                 phys[name] = val
-            base_loc, label = np.asarray(logx.to_vec(phys)), overrides
+            ys = logx.to_vec(phys)
+            if not bool(jnp.all(jnp.isfinite(ys))):
+                raise ValueError(f"run_flow_multistart: start {i} maps to non-finite init values; "
+                                 f"check that overrides lie strictly within their priors: {overrides}")
+            base_loc, label = np.asarray(ys), overrides
 
         print(f"[flow-multistart] restart {i}/{len(init_grid) - 1}  seed = {label}")
         s = makesampler_flow(mylogl, priordict=priordict, base_loc=base_loc, **flow_kwargs)
