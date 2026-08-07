@@ -16,13 +16,20 @@ from .. import prior
 from ..pulsar import save_chain
 
 
-def makemodel_transformed(mylogl, transform=prior.makelogtransform_uniform, priordict={}):
-    logx = transform(mylogl, priordict=priordict)
+def makemodel_transformed(mylogl, transform=prior.makelogtransform_uniform, priordict={}, jointpriors={}):
+    if jointpriors:
+        logx = transform(mylogl, priordict=priordict, jointpriors=jointpriors)
+    else:
+        logx = transform(mylogl, priordict=priordict)
 
     parlen = sum(int(par[par.index('(')+1:par.index(')')]) if '(' in par else 1 for par in logx.params)
 
+    # width of the base distribution on the unconstrained vector, per coordinate: wide
+    # enough to be uninformative against each coordinate's own prior
+    base_scale = getattr(logx, 'base_scale', 10.0)
+
     def numpyro_model():
-        pars = numpyro.sample('pars', dist.Normal(0, 10).expand([parlen]))
+        pars = numpyro.sample('pars', dist.Normal(0.0, base_scale).expand([parlen]))
         logl = logx.logL(pars)
         numpyro.deterministic('log_likelihood', logl)
         numpyro.factor('logl', logx(pars))

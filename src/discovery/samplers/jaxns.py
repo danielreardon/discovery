@@ -19,7 +19,12 @@ def makemodel(mylogl, priordict={}):
     def prior_model():
         values = []
         for par in params:
-            low, high = prior.getprior_uniform(par, priordict)
+            try:
+                low, high = prior.getprior_uniform(par, priordict)
+            except ValueError as exc:
+                raise NotImplementedError(
+                    f"Nested sampling builds its prior as an explicit box, so it supports "
+                    f"uniform priors only: {exc}") from exc
             if '(' in par:
                 base = par.split('(')[0]
                 size = int(par[par.index('(') + 1: par.index(')')])
