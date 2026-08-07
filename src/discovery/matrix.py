@@ -336,10 +336,8 @@ def CompoundGP(gplist):
                                                for gp in gplist])
             Phi.params = sorted(set.union(*[set(gp.Phi.params) for gp in gplist]))
 
-            # Keep the per-GP block structure so Phi^-1 and log|Phi| can be built
-            # block-by-block instead of via a dense n^3/3 Cholesky plus an explicit
-            # 2n^3 inverse of the densified block-diagonal. See
-            # BlockDiagNoiseMatrix2D_var.
+            # Keep the per-GP block structure so Phi^-1 and log|Phi| are built
+            # block-by-block. See BlockDiagNoiseMatrix2D_var.
             _blocks = [(isinstance(gp.Phi, NoiseMatrix1D_var), gp.Phi.getN) for gp in gplist]
 
             multigp = VariableGP(BlockDiagNoiseMatrix2D_var(Phi, _blocks), F)
@@ -1914,20 +1912,15 @@ class WoodburyKernel_varP(VariableKernel):
         N_solve_1d = self.N.make_solve_1d()
 
         # ---- linear-delay fast path -------------------------------------------
-        # When y is affine in a small coefficient vector over a FIXED basis --
-        # y(params) = y0 - B c(params), which is exactly the PEBBLE case with
-        # ncoeff = 19 -- every N^-1-weighted projection of y collapses to build-time
-        # constants:
+        # When y is affine in a coefficient vector over a FIXED basis,
+        # y(params) = y0 - B c(params), every N^-1-weighted projection of y
+        # collapses to build-time constants:
         #     yt N^-1 y  = y0tNmy0 - 2 c.(Bt N^-1 y0) + c.(Bt N^-1 B).c
         #     Ft N^-1 y  = FtNmy0 - (Ft N^-1 B) c
         #     Tt N^-1 y  = TtNmy0 - (Tt N^-1 B) c
-        # so the (n_F, n_toa) `Ft` and (n_gp, n_toa) `Tt` never reach the device and
-        # the per-step N^-1 solve on an n_toa vector disappears. Across 83 MPTA
-        # pulsars that is ~5.5 GiB of device constants and ~11 GiB of host HLO
-        # literals (a closed-over array inlines at 2x its bytes, and XLA
-        # constant-folds transpose(constant) into a SECOND full-size literal).
-        # Replaces them with ncoeff-sized objects: BtNmB (19x19), FtNmB (n_F, 19),
-        # TtNmB (n_gp, 19) -- ~28 MB in total.
+        # so the (n_toa,)-sized `Ft` and `Tt` products are replaced by the
+        # ncoeff-sized BtNmB, FtNmB and TtNmB, and the per-step N^-1 solve on an
+        # n_toa vector disappears.
         linear = (getattr(y, 'linear_basis', None) is not None
                   and getattr(y, 'linear_coeffs', None) is not None
                   and getattr(y, 'linear_y0', None) is not None)

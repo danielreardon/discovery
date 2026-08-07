@@ -335,17 +335,10 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
 
     # The commongp/ArrayLikelihood path moves every SAMPLED Fourier/fftcov GP out of
     # the per-pulsar likelihoods into a single stacked common GP and uses the
-    # vectorised ArrayLikelihood. Opt-in (default False): it is FASTER on GPU
-    # (~1.3-2x for logL/grad, verified) but its .logL uses EQUAL-OR-MORE peak memory
-    # than GlobalLikelihood (the stacked/padded bases enlarge compile-time constant
-    # folding). The genuine memory win is ArrayLikelihood.cglogL (matrix-free), but
-    # that is numerically fragile (NaN on ~37% of prior draws at npsr=20 with default
-    # cgmaxiter/clip) and not yet wired into common_search -- validate before relying
-    # on it. Requires a non-callable chromatic basis (fix_chrom_alpha=True) and does
-    # not support the marginalised chromatic polynomial.
-    # os_analysis needs the 'gw' GP to sit in each PER-PULSAR likelihood (the OS
-    # reads psl.gw, psl.N.F and psl.N.P_var); the commongp path stacks the sampled
-    # GPs out of the per-pulsar likelihoods, so psl.gw would never be set.
+    # vectorised ArrayLikelihood. It requires a non-callable chromatic basis
+    # (fix_chrom_alpha=True) and supports neither the marginalised chromatic
+    # polynomial nor os_analysis: the OS reads psl.gw, psl.N.F and psl.N.P_var from
+    # each per-pulsar likelihood, and the commongp path stacks those GPs out of them.
     if os_analysis and use_commongp:
         print("Warning: os_analysis=True is incompatible with use_commongp=True (the OS "
               "needs the per-pulsar 'gw' GP inside each pulsar likelihood, but the commongp "
@@ -563,16 +556,11 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
         # so only gw_log10_A is sampled -- isolates the HD amplitude<->PEBBLE
         # covariance from the A-gamma degeneracy. Default: free gw_gamma.
         hd_spectrum = signals.powerlaw_gwb() if hd_fixed_gamma else signals.powerlaw
-        # hd_components decouples the HD Fourier bin count from max_cadence_days.
-        # common_components = int(Tspan/max_cadence_days) is set by what the
-        # per-pulsar DM/chromatic bases need; a gamma~13/3 GWB has essentially no
-        # support in the high bins, so tying the two makes the global term
-        # (n_psr*2*n_bins)^2 far larger than the physics requires -- and that dense
-        # Cholesky is ~57% of the per-step cost at 14-day cadence. Fewer GWB
-        # frequencies than intrinsic red-noise frequencies is standard NANOGrav /
-        # EPTA practice; validate with a bin-count ladder on (gw_log10_A, gw_gamma).
-        # None reproduces the previous behaviour exactly. (hd_nc is computed above,
-        # shared with the os_analysis per-pulsar GP.)
+        # hd_components sets the HD Fourier bin count independently of
+        # max_cadence_days, which fixes common_components for the per-pulsar
+        # DM/chromatic bases. The global term scales as (n_psr*2*n_bins)^2.
+        # None ties the HD bin count to common_components. (hd_nc is computed
+        # above, shared with the os_analysis per-pulsar GP.)
         globalgp = signals.makeglobalgp_fourier(
             psrs, hd_spectrum, signals.hd_orf, hd_nc, Tspan, name='gw')
 

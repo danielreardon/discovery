@@ -739,10 +739,8 @@ def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None, group
         raise ValueError(f"makegp_fd_piecewise: no usable frequency basis for {psr.name}.")
 
     # Stack the per-group blocks (disjoint TOA support, hence mutually orthogonal)
-    # and project the timing model out of the COMBINED basis exactly once. Doing
-    # it per group would be wrong: the projection gives every block full support,
-    # destroying the disjointness and leaving the groups nearly collinear
-    # (measured cross-block overlap 0.99, versus 3e-17 before projection).
+    # and project the timing model out of the COMBINED basis exactly once, which
+    # keeps the blocks disjoint.
     fmat = np.hstack(mats)
 
     if project_tm:
@@ -752,11 +750,8 @@ def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None, group
         fmat = fmat - Q_tm @ (Q_tm.T @ fmat)
 
     # Rank-revealing orthonormalisation: the projection above can annihilate
-    # directions (e.g. the flat and nu^-2 ones), so drop them rather than keeping
-    # numerically null columns. The 1e-8 cut is not merely cosmetic -- a direction
-    # retained at sv/sv0 ~ 1e-10 is normalised by that tiny value, which amplifies
-    # round-off and leaves the column measurably non-orthogonal to the timing
-    # model (1e-6 rather than 1e-13).
+    # directions (e.g. the flat and nu^-2 ones), which are dropped at a relative
+    # singular-value cut of 1e-8.
     U, S, _ = np.linalg.svd(fmat, full_matrices=False)
     fmat = U[:, S > 1e-8 * S[0]]
     if fmat.shape[1] == 0:

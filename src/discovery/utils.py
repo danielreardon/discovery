@@ -10,11 +10,9 @@ other for them:
    `regularize_FtNmF`, ...) so downstream code can switch numpy vs jax,
    single vs double precision, and cholesky vs LU factorization through one
    entry point. `config()` runs once at import. Downstream code reads these
-   as `utils.jnp`, `utils.jnparray`, etc.
-
-   This previously lived in `matrix.py`; it moved here so the metamath path
-   and the shared kernel primitives below no longer reach back into
-   `matrix.py` for the backend.
+   as `utils.jnp`, `utils.jnparray`, etc. Living here keeps the metamath path
+   and the shared kernel primitives below from reaching into `matrix.py` for
+   the backend.
 
 2. **Shared kernel primitives.** Marker base classes (`Kernel`, `GP`,
    `ConstantGP`, ...) used for `isinstance` dispatch, the `ExtSignal`
@@ -159,7 +157,7 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# Shared kernel primitives (formerly kernel_helpers.py)
+# Shared kernel primitives
 # ---------------------------------------------------------------------------
 
 class Kernel:

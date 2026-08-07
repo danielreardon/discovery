@@ -44,9 +44,7 @@ _METAMATH = {
     "NoiseMatrix12D_var":      mh.NoiseMatrix12D,
     # Vector noise has no separate metamath class -- metamath's NoiseMatrix
     # dispatches by ndim at runtime. The matrix.py `VectorNoiseMatrix12D_var`
-    # dispatcher must map here too: previously the monkeypatch swapped the leaf
-    # `VectorNoiseMatrix1D_var` *inside* the dispatcher; the factory intercepts
-    # only the call site, so the dispatcher itself must resolve to metamath.
+    # dispatcher maps here too, since the factory intercepts only the call site.
     "VectorNoiseMatrix1D_var":  mh.NoiseMatrix1D,
     "VectorNoiseMatrix12D_var": mh.NoiseMatrix12D,
 
@@ -90,8 +88,8 @@ def get_mode():
 # / `_var` classes. These entry points let call sites construct noise WITHOUT
 # the novar/var dispatch: pass an array or a callable and the right backend
 # class is chosen here. In matrix mode the choice is `callable(arg)`; in
-# metamath mode the single class handles both. `measurement_noise.py` uses
-# these so its logic no longer enumerates the variant classes.
+# metamath mode the single class handles both. `measurement_noise.py` builds
+# its noise through these rather than enumerating the variant classes.
 
 def NoiseMatrix1D(N):
     """Diagonal white-noise kernel; `N` is an array (fixed) or callable (var)."""
