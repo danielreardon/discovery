@@ -417,7 +417,8 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
         # per-pulsar noise from the max-likelihood row of the chain
         ml_idx = df['logl'].idxmax()
         noisedict = {col: df.loc[ml_idx, col] for col in df.columns if col.startswith(psr.name)}
-        # Fix chromatic alpha
+        # Fix chromatic alpha, or leave it sampled with a callable basis
+        chrom_alpha = None
         if fix_chrom_alpha:
             chrom_alpha = noisedict.get(f"{psr.name}_chrom_gp_alpha", None)
             print(f"Using chromatic alpha={chrom_alpha} for pulsar {psr.name}")
