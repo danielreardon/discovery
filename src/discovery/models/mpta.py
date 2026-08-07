@@ -499,9 +499,9 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                 mass_bodies=phys_ephem_mass_bodies)]
 
         if commongp_path:
-            # Build the STACKABLE sampled Fourier/fftcov GPs with the SAME makegp_*
-            # calls used today; the time-domain solar-wind GP (gpname 'sw_gp') is
-            # filtered out and kept per-pulsar (dense, not stackable).
+            # Build the STACKABLE sampled Fourier/fftcov GPs with the same makegp_*
+            # calls as the per-pulsar path; the time-domain solar-wind GP (gpname
+            # 'sw_gp') is filtered out and kept per-pulsar (dense, not stackable).
             gp_builder = make_psr_gps_fftint if fftInt else make_psr_gps_fourier
             psr_gps = gp_builder(psr, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False,
                                  red=red_flag, red2=has_param(df, "red_noise2"),

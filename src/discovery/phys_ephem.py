@@ -202,12 +202,10 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
     # R_SSB = sum(m_i r_i)/sum(m_i). Changing the adopted total minor-body mass
     # therefore rescales the entire (Jupiter-dominated) Sun->SSB wobble by
     # eta = -dM/M_tot, coherently: dx_Earth->SSB(t) = eta * r_Sun->SSB(t)|_ref.
-    # This is the physical origin of the otherwise "effective, unphysical
-    # Jupiter-mass" term seen when bridging ephemerides; its prior is the
-    # inter-ephemeris TNO+asteroid total-mass spread (~1-1.5e-7), NOT the
-    # Juno-tight GM_Jupiter prior. Degenerate with d_jupiter_mass at the ~85%
-    # level (they differ only by the Saturn-and-beyond fraction of the wobble);
-    # the correct, very different priors break the degeneracy.
+    # Its prior is the inter-ephemeris TNO+asteroid total-mass spread
+    # (minorbody_width, ~1-1.5e-7), not the GM_Jupiter prior. Partially
+    # degenerate with d_jupiter_mass, which differs only by the
+    # Saturn-and-beyond fraction of the wobble.
     if inc_minorbody:
         # r_Sun->SSB = R_SSB - r_Sun = -(Sun relative to SSB) = -sunssb.
         r_sun_ssb = -np.asarray(psr.sunssb)[:, :3]      # (ntoa, 3) light-seconds
@@ -234,10 +232,8 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
     G = np.concatenate(cols, axis=1)
 
     # Orthogonalise the planet mass/orbit columns against eta so eta carries the
-    # full (Jupiter-dominated) normalisation wobble and the planet terms only
-    # span its orthogonal complement -- removing the ~85% eta<->Jupiter
-    # degeneracy at the design-matrix level (cleaner sampling; eta is "pinned"
-    # to the normalisation, not double-counted by Jupiter mass/orbit).
+    # full normalisation wobble and the planet terms only span its orthogonal
+    # complement, so the wobble is not double-counted by Jupiter mass/orbit.
     if inc_minorbody and orthogonalize_minorbody:
         rng = _col_ranges(params)            # keys carry the (size) suffix
         base = {nm.split("(")[0]: cols for nm, cols in rng.items()}
@@ -290,10 +286,9 @@ def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=Tru
     # Declare that this delay is LINEAR in its parameters over a FIXED basis:
     # delay(params) == linear_basis @ linear_coeffs(params).
     # WoodburyKernel_varP.make_kernelterms_vary uses this to project N^-1 onto the
-    # 19-column basis once at build time instead of keeping the (n_toa)-shaped F.T
-    # and T.T on the device and re-solving N^-1 y every leapfrog step. Worth ~5.5 GiB
-    # of device constants across 83 pulsars. Any delay that sets these two
-    # attributes consistently gets the same treatment.
+    # 19-column basis once at build time rather than holding the (n_toa)-shaped F.T
+    # and T.T on the device and re-solving N^-1 y every leapfrog step. Any delay that
+    # sets these two attributes consistently gets the same treatment.
     delay_phys_ephem.linear_basis = G_np          # host/numpy, (n_toa, ncoeff)
     delay_phys_ephem.linear_coeffs = assemble_c   # params -> (ncoeff,)
 
