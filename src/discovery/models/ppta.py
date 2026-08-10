@@ -737,9 +737,9 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
             # Fourier frequency grid to log-space; sw_logf needs fftint=False.
             print("Warning: sw_logf=True is ignored with fftint=True (the FFT-covariance "
                   "solar GP uses a time-interpolation basis). Use fftint=False.")
-        model_components += make_psr_gps_fftint(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, chrom_alpha=chrom_alpha, chrom_poly=chrom_poly, sw=sw, sw_powerlaw=sw_powerlaw, band=band, band_alpha=band_alpha, fd_gp=fd_gp)
+        model_components += make_psr_gps_fftint(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, dm=dm, chrom=chrom, chrom_alpha=chrom_alpha, chrom_poly=chrom_poly, sw=sw, sw_powerlaw=sw_powerlaw, band=band, band_alpha=band_alpha, fd_gp=fd_gp)
     else:
-        model_components += make_psr_gps_fourier(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, chrom_alpha=chrom_alpha, chrom_poly=chrom_poly, sw=sw, sw_powerlaw=sw_powerlaw, sw_logf=sw_logf, band=band, band_alpha=band_alpha, fd_gp=fd_gp)
+        model_components += make_psr_gps_fourier(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, dm=dm, chrom=chrom, chrom_alpha=chrom_alpha, chrom_poly=chrom_poly, sw=sw, sw_powerlaw=sw_powerlaw, sw_logf=sw_logf, band=band, band_alpha=band_alpha, fd_gp=fd_gp)
 
 
     if extra_gps is not None:
