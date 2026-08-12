@@ -79,6 +79,23 @@ def makesampler_nuts(numpyro_model, num_warmup=512, num_samples=1024, num_chains
     }
     mcmcargs.update({name: value for name, value in kwargs.items() if name in mcmc_argnames})
 
+    # NUTS carries its position, gradient, step size and mass matrix at whatever precision
+    # jax_enable_x64 was set to when the state was created. In single precision the leapfrog
+    # update z + eps*p is a no-op once eps falls below the float32 spacing at |z|~1 (1.2e-7),
+    # so a chain that adapts to a small step freezes instead of merely slowing; and with
+    # log-posteriors of order 1e4-1e5 the Metropolis difference H_new - H_old cancels down to
+    # ~1e-2 nats of noise, corrupting acceptance and therefore step-size adaptation. Both are
+    # silent. Fail here instead: discovery enables x64 on import, so this can only trip if
+    # something disabled it afterwards.
+    if not jax.config.jax_enable_x64:
+        raise RuntimeError(
+            "makesampler_nuts: jax_enable_x64 is False, so the NUTS state would be float32. "
+            "The leapfrog update stalls below a 1.2e-7 step size and the Metropolis energy "
+            "difference carries ~1e-2 nats of rounding noise at these log-posterior "
+            "magnitudes. Call jax.config.update('jax_enable_x64', True) before building the "
+            "sampler (importing discovery does this; check nothing has re-disabled it)."
+        )
+
     sampler = infer.MCMC(infer.NUTS(numpyro_model, **nutsargs), **mcmcargs)
 
     def _to_df():
@@ -169,6 +186,63 @@ def _ensure_sampler_to_df(sampler):
     )
 
 
+def _state_dtypes(state):
+    """Dtypes of every array in a NUTS state, keyed by attribute path."""
+    out = {}
+
+    def walk(o, path):
+        if hasattr(o, "dtype") and hasattr(o, "shape"):
+            out[path] = o.dtype
+        elif isinstance(o, dict):
+            for k, v in o.items():
+                walk(v, f"{path}.{k}")
+        elif hasattr(o, "_fields"):
+            for k in o._fields:
+                walk(getattr(o, k), f"{path}.{k}")
+        elif isinstance(o, (tuple, list)):
+            for i, v in enumerate(o):
+                walk(v, f"{path}[{i}]")
+
+    walk(state, "state")
+    return out
+
+
+def _check_state_precision(state, path, verb):
+    """Refuse a single-precision NUTS state; see the note in makesampler_nuts."""
+    bad = sorted(k for k, d in _state_dtypes(state).items() if d == jnp.float32)
+    if bad:
+        raise RuntimeError(
+            f"NUTS state {verb} {path} is single precision in {len(bad)} array(s), e.g. "
+            f"{bad[:4]}. The leapfrog update stalls below a 1.2e-7 step size and the "
+            f"Metropolis energy difference carries ~1e-2 nats of rounding noise at these "
+            f"log-posterior magnitudes, so such a state cannot be sampled or resumed "
+            f"reliably. Delete the checkpoint directory and rerun with jax_enable_x64 set "
+            f"before the sampler is built."
+        )
+
+
+def _check_state_usable(state, path, min_step_size=1e-9):
+    """Refuse to resume a state whose adaptation has collapsed.
+
+    Warmup is not repeated on resume, so a step size driven to zero by a divergence or a
+    numerically singular prior is inherited permanently: the chain cannot re-adapt and will
+    burn its whole allocation without moving. Better to stop and have the cause fixed.
+    """
+    step = getattr(getattr(state, "adapt_state", None), "step_size", None)
+    if step is None:
+        return
+    step = float(step)
+    if not np.isfinite(step) or step < min_step_size:
+        raise RuntimeError(
+            f"NUTS state in {path} has step_size = {step:.3g}, at or below the usable floor "
+            f"({min_step_size:.0e}). Warmup is skipped on resume, so this state cannot "
+            f"re-adapt and the run would make no progress. Delete the checkpoint directory "
+            f"to force a fresh warmup, and fix the cause of the collapse first -- a step "
+            f"size this small means the sampler met a singularity or a non-differentiable "
+            f"boundary, not merely stiff curvature."
+        )
+
+
 def run_nuts_with_checkpoints(
     sampler,
     num_samples_per_checkpoint,
@@ -241,6 +315,9 @@ def run_nuts_with_checkpoints(
         with checkpoint_file.open("rb") as f:
             sampler.post_warmup_state = pickle.load(f)
 
+        _check_state_precision(sampler.post_warmup_state, checkpoint_file, "restored from")
+        _check_state_usable(sampler.post_warmup_state, checkpoint_file)
+
         if samples_file.is_file():
             df = pd.read_feather(samples_file)
             num_samples_saved = df.shape[0]
@@ -260,6 +337,7 @@ def run_nuts_with_checkpoints(
         # step-size and mass-matrix adaptation schedule must run contiguously), but saving
         # here means an interruption during the first sampling chunk never repeats warmup.
         sampler.warmup(rng_key, init_params=init_params)
+        _check_state_precision(sampler.post_warmup_state, checkpoint_file, "about to be written to")
         with checkpoint_file.open("wb") as f:
             pickle.dump(sampler.post_warmup_state, f)
         rng_key, _ = jax.random.split(rng_key)
@@ -284,6 +362,7 @@ def run_nuts_with_checkpoints(
 
         save_chain(df, samples_file)
 
+        _check_state_precision(sampler.last_state, checkpoint_file, "about to be written to")
         with checkpoint_file.open("wb") as f:
             pickle.dump(sampler.last_state, f)
 

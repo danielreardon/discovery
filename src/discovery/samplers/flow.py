@@ -73,6 +73,18 @@ def makesampler_flow(mylogl, priordict={}, flow_layers=16, knots=9, tanh_max_val
     from flowjax.distributions import StandardNormal, Normal
     from ..flow import VariationalFit, value_and_grad_ElboLoss
 
+    # The ELBO is a Monte-Carlo mean of log-posterior differences of order 1e4-1e5, and the
+    # evidence is an importance-sampling estimate over the same quantity. Single precision
+    # leaves ~1e-2 nats of rounding noise per term, which both slows ELBO convergence and
+    # biases logZ. discovery enables x64 on import; fail loudly if that has been undone.
+    if not jax.config.jax_enable_x64:
+        raise RuntimeError(
+            "makesampler_flow: jax_enable_x64 is False. The ELBO and the importance-sampling "
+            "evidence are built from log-posterior differences of order 1e4-1e5, which lose "
+            "~1e-2 nats to rounding in float32. Call "
+            "jax.config.update('jax_enable_x64', True) before building the sampler."
+        )
+
     logx = prior.makelogtransform_uniform(mylogl, priordict=priordict)
     loss = value_and_grad_ElboLoss(logx, num_samples=num_samples)
 

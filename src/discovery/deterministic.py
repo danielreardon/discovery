@@ -279,7 +279,7 @@ def makefourier_binary(pulsarterm=True):
     return fourier_binary
 
 
-def chromatic_exponential(psr, fref=1400.0, alpha=None):
+def chromatic_exponential(psr, fref=1400.0, alpha=None, sign=None):
     r"""
     Factory function for chromatic exponential delay model.
 
@@ -292,6 +292,15 @@ def chromatic_exponential(psr, fref=1400.0, alpha=None):
         Pulsar object containing toas and freqs attributes
     fref : float, optional
         Reference frequency in MHz for normalization (default: 1400.0)
+    sign : float or None, optional
+        Sign of the event. If None (default) it is sampled via ``sign_param``, which is
+        a DISCRETE parameter entering as ``jnp.sign(sign_param)``: the log-posterior is
+        then piecewise constant with zero gradient everywhere and a step at
+        ``sign_param = 0``, and ``sign(0) = 0`` annihilates the event at that point. No
+        gradient sampler can integrate that -- measured jumps of 12 to 68 nats force NUTS
+        to a step size of ~1e-4 to 2e-3, two orders below healthy. Set +1 or -1 to fix the
+        sign for a known event, which drops ``sign_param`` from the sampled parameters;
+        choose between the two branches by comparing evidence.
     alpha : float or None, optional
         Chromatic index. If None (default) it is a sampled parameter of the
         returned delay; set a value to hold it fixed (e.g. ``alpha=2`` for a
@@ -311,19 +320,33 @@ def chromatic_exponential(psr, fref=1400.0, alpha=None):
     """
     toas, fnorm = matrix.jnparray(psr.toas / const.day), matrix.jnparray(fref / psr.freqs)
 
-    def _core(t0, log10_Amp, log10_tau, sign_param, alpha):
+    def _core(t0, log10_Amp, log10_tau, sgn, alpha):
         dt = toas - t0
         tau = 10**log10_tau
         amp = 10**log10_Amp
-        return jnp.sign(sign_param) * amp * fnorm**alpha * jnp.where(dt >= 0, jnp.exp(-dt / tau), 0.0 )
+        # Double where: reverse-mode AD evaluates both branches, so exp(-dt/tau) is formed
+        # for dt < 0 too. For tau below the event's offset from the first TOA that overflows
+        # and the VJP computes 0 * inf = NaN, killing the gradient of t0 and log10_tau. The
+        # inner where keeps the untaken branch at exp(0).
+        dt_safe = jnp.where(dt >= 0, dt, 0.0)
+        return sgn * amp * fnorm**alpha * jnp.where(dt >= 0, jnp.exp(-dt_safe / tau), 0.0)
 
-    if alpha is None:
+    _s = None if sign is None else float(jnp.sign(sign))
+
+    if alpha is None and _s is None:
         def delay(t0, log10_Amp, log10_tau, sign_param, alpha):
-            return _core(t0, log10_Amp, log10_tau, sign_param, alpha)
-    else:
+            return _core(t0, log10_Amp, log10_tau, jnp.sign(sign_param), alpha)
+    elif alpha is None:
+        def delay(t0, log10_Amp, log10_tau, alpha):
+            return _core(t0, log10_Amp, log10_tau, _s, alpha)
+    elif _s is None:
         _a = float(alpha)
         def delay(t0, log10_Amp, log10_tau, sign_param):
-            return _core(t0, log10_Amp, log10_tau, sign_param, _a)
+            return _core(t0, log10_Amp, log10_tau, jnp.sign(sign_param), _a)
+    else:
+        _a = float(alpha)
+        def delay(t0, log10_Amp, log10_tau):
+            return _core(t0, log10_Amp, log10_tau, _s, _a)
 
     delay.__name__ = "chromatic_exponential_delay"
     return delay
@@ -376,7 +399,7 @@ def chromatic_annual(psr, fref=1400.0, alpha=None):
     return delay
 
 
-def chromatic_gaussian(psr, fref=1400.0, alpha=None):
+def chromatic_gaussian(psr, fref=1400.0, alpha=None, sign=None):
     r"""
     Factory function for chromatic Gaussian delay model.
 
@@ -389,6 +412,10 @@ def chromatic_gaussian(psr, fref=1400.0, alpha=None):
         Pulsar object containing toas and freqs attributes
     fref : float, optional
         Reference frequency in MHz for normalization (default: 1400.0)
+    sign : float or None, optional
+        Sign of the event. If None (default) it is sampled via ``sign_param``; see
+        :func:`chromatic_exponential` for why that is non-differentiable and should not be
+        used with a gradient sampler. Set +1 or -1 to fix it for a known event.
     alpha : float or None, optional
         Chromatic index. If None (default) it is a sampled parameter of the
         returned delay; set a value to hold it fixed (e.g. ``alpha=2`` for a
@@ -406,16 +433,25 @@ def chromatic_gaussian(psr, fref=1400.0, alpha=None):
     """
     toas, fnorm = matrix.jnparray(psr.toas / const.day), matrix.jnparray(fref / psr.freqs)
 
-    def _core(t0, log10_Amp, log10_sigma, sign_param, alpha):
-        return jnp.sign(sign_param) * 10**log10_Amp * jnp.exp(-(toas - t0)**2 / (2 * (10**log10_sigma)**2)) * fnorm**alpha
+    def _core(t0, log10_Amp, log10_sigma, sgn, alpha):
+        return sgn * 10**log10_Amp * jnp.exp(-(toas - t0)**2 / (2 * (10**log10_sigma)**2)) * fnorm**alpha
 
-    if alpha is None:
+    _s = None if sign is None else float(jnp.sign(sign))
+
+    if alpha is None and _s is None:
         def delay(t0, log10_Amp, log10_sigma, sign_param, alpha):
-            return _core(t0, log10_Amp, log10_sigma, sign_param, alpha)
-    else:
+            return _core(t0, log10_Amp, log10_sigma, jnp.sign(sign_param), alpha)
+    elif alpha is None:
+        def delay(t0, log10_Amp, log10_sigma, alpha):
+            return _core(t0, log10_Amp, log10_sigma, _s, alpha)
+    elif _s is None:
         _a = float(alpha)
         def delay(t0, log10_Amp, log10_sigma, sign_param):
-            return _core(t0, log10_Amp, log10_sigma, sign_param, _a)
+            return _core(t0, log10_Amp, log10_sigma, jnp.sign(sign_param), _a)
+    else:
+        _a = float(alpha)
+        def delay(t0, log10_Amp, log10_sigma):
+            return _core(t0, log10_Amp, log10_sigma, _s, _a)
 
     delay.__name__ = "chromatic_gaussian_delay"
     return delay

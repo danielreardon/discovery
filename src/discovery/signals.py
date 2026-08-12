@@ -1520,12 +1520,24 @@ def make_timeinterpbasis_solar(start_time=None, order=1):
         return t_coarse, dt_coarse, dt_DM[:, None] * Bmat
     return timeinterpbasis_solar
 
-def psd2cov(psdfunc, components, T, oversample=3, fmax_factor=1, cutoff=1):
+# Relative white floor added to every sampled PSD bin in psd2cov, as a fraction of the
+# PSD peak. The Toeplitz covariance psd2cov builds has cond(Phi) ~ (components/2)**gamma,
+# and NoiseMatrix2D_var.make_inv forms Phi^-1 explicitly, so for the ~500-knot bases a
+# 20-yr baseline produces at 30-day cadence the condition number crosses 1/eps64 near
+# gamma = 6.5: Phi loses positive definiteness by gamma = 7 and its inverse returns NaN.
+# At 1e-10 the floor holds cond(Phi) at ~4e9 independently of gamma while perturbing Phi
+# by 4e-9 in Frobenius norm, i.e. ~1e-7 of the integrated variance -- ten decades below
+# anything the data constrain. Override per call with nugget=, or set to 0 to disable.
+PSD_NUGGET = 1e-10
+
+def psd2cov(psdfunc, components, T, oversample=3, fmax_factor=1, cutoff=1, nugget=None):
     if not (isinstance(oversample, int) and isinstance(fmax_factor, int) and isinstance(cutoff, int)):
         raise ValueError('psd2cov: oversample, fmax_factor and cutoff must be integers.')
 
     if components % 2 == 0:
         raise ValueError('psd2cov: number of components must be odd.')
+
+    nugget = PSD_NUGGET if nugget is None else nugget
 
     scaled_components = (components - 1) * fmax_factor + 1
     n_freqs = int((scaled_components - 1) / 2 * oversample + 1)
@@ -1540,10 +1552,17 @@ def psd2cov(psdfunc, components, T, oversample=3, fmax_factor=1, cutoff=1):
         fs = matrix.jnparray(freqs)
 
     def covmat(*args):
+        psd = psdfunc(fs, 1.0, *args[2:])
+
+        if nugget:
+            # Additive, not jnp.maximum: a hard floor changes how many bins are clipped as
+            # gamma varies, which puts a kink in the gradient. Applied before the cutoff
+            # bins are prepended so those stay exactly zero. jnp.max is smooth here because
+            # a decreasing power law always peaks in the lowest retained bin.
+            psd = psd + nugget * jnp.max(psd)
+
         if cutoff is not None:
-            psd = jnp.concatenate([zs, psdfunc(fs, 1.0, *args[2:])])
-        else:
-            psd = psdfunc(fs, 1.0, *args[2:])
+            psd = jnp.concatenate([zs, psd])
 
         fullpsd = jnp.concatenate((psd, psd[-2:0:-1]))
         Cfreq = jnp.fft.ifft(fullpsd, norm='backward')

@@ -52,6 +52,18 @@ def makemodel(mylogl, priordict={}):
 
 
 def makesampler_nested(model, max_samples=1e6, num_live_points=None, init_efficiency_threshold=0.1, difficult_model=True, gradient_guided=False, parameter_estimation=True, **kwargs):
+    # Log-likelihoods here run to 1e4-1e5, and nested sampling accumulates the evidence by
+    # logsumexp over the whole shrinking sequence. In single precision each term carries
+    # ~1e-2 nats of rounding error, which biases logZ and therefore any model comparison
+    # built on it. discovery enables x64 on import; fail loudly if that has been undone.
+    if not jax.config.jax_enable_x64:
+        raise RuntimeError(
+            "makesampler_nested: jax_enable_x64 is False. Log-likelihoods of order 1e4-1e5 "
+            "lose ~1e-2 nats to rounding in float32, which biases the evidence and any "
+            "model comparison using it. Call "
+            "jax.config.update('jax_enable_x64', True) before building the sampler."
+        )
+
     ns = NestedSampler(
         model=model,
         init_efficiency_threshold=init_efficiency_threshold,
