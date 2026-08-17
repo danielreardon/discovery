@@ -215,3 +215,223 @@ def test_fd_gp_logL_finite_and_adds_no_parameters(psr):
     assert set(model.logL.params) == set(base.logL.params)
     p0 = ds.sample_uniform(model.logL.params)
     assert np.isfinite(float(model.logL(p0)))
+
+
+# --- Matern-3/2 prior over the node amplitudes ------------------------------
+
+NAME = 'fd_gp'
+
+
+@pytest.fixture
+def restore_priors():
+    from discovery import prior
+    saved = dict(prior.priordict_standard)
+    yield prior
+    prior.priordict_standard.clear()
+    prior.priordict_standard.update(saved)
+
+
+def _hypernames(psr, name=NAME):
+    return f'{psr.name}_{name}_log10_sigma', f'{psr.name}_{name}_log10_ell'
+
+
+def _edof(gp, params, Nvec):
+    """tr[F (Ft Nm F + Phi^-1)^-1 Ft Nm F], the directions the GP actually absorbs."""
+    F = np.asarray(gp.F)
+    FtNmF = F.T @ (F / Nvec[:, None])
+    Phi = np.asarray(gp.Phi.getN(params))
+    Pinv = np.linalg.inv(Phi) if Phi.ndim == 2 else np.diag(1.0 / Phi)
+    return float(np.trace(np.linalg.solve(FtNmF + Pinv, FtNmF)))
+
+
+def _Nvec(psr):
+    return np.asarray(psr.toaerrs, dtype=np.float64) ** 2
+
+
+def test_matern_keeps_one_column_per_node(psr, restore_priors):
+    """The basis is not orthonormalised, so amplitudes still map to nodes."""
+    gp = s.makegp_fd_piecewise_matern(psr, nodes=16)
+
+    assert gp.F.shape[1] == 16
+    assert len(gp.fd_nodes) == 16
+
+
+def test_matern_tolerates_a_rank_deficient_basis(psr, restore_priors):
+    """The timing-model projection annihilates directions; Phi is inverted, not F."""
+    gp = s.makegp_fd_piecewise_matern(psr, nodes=16)
+
+    assert np.linalg.matrix_rank(np.asarray(gp.F)) < gp.F.shape[1]
+    sig, ell = _hypernames(psr)
+    assert np.all(np.isfinite(gp.Phi.make_inv()({sig: -7.0, ell: -0.5})[0]))
+
+
+def test_matern_ell_prior_is_bounded_by_the_observed_band(psr, restore_priors):
+    """log10_ell runs from a tenth of the node span to three times it."""
+    gp = s.makegp_fd_piecewise_matern(psr, nodes=16)
+    sig, ell = _hypernames(psr)
+
+    lo, hi = restore_priors.getprior_uniform(ell)
+    span = np.log(gp.fd_nodes.max()) - np.log(gp.fd_nodes.min())
+    assert lo == pytest.approx(np.log10(0.1 * span))
+    assert hi == pytest.approx(np.log10(3.0 * span))
+    assert restore_priors.getprior_uniform(sig) == [-10.0, -4.0]
+
+
+def test_matern_prior_is_positive_definite_across_its_range(psr, restore_priors):
+    """Phi stays a valid covariance everywhere the sampler can go."""
+    gp = s.makegp_fd_piecewise_matern(psr, nodes=32)
+    sig, ell = _hypernames(psr)
+    lo, hi = restore_priors.getprior_uniform(ell)
+
+    for le in (lo, 0.5 * (lo + hi), hi):
+        w = np.linalg.eigvalsh(np.asarray(gp.Phi.getN({sig: -7.0, ell: le})))
+        assert w.min() > 0.0
+        assert w.max() / w.min() < 1e10
+
+
+def test_matern_jitter_bounds_the_condition_number(psr, restore_priors):
+    """Without the jitter the kernel approaches rank one as ell passes the band."""
+    sig, ell = _hypernames(psr)
+    nodes = 32
+    conds = {}
+    for jitter in (1e-12, 1e-8):
+        gp = s.makegp_fd_piecewise_matern(psr, nodes=nodes, jitter=jitter)
+        hi = restore_priors.getprior_uniform(ell)[1]
+        w = np.linalg.eigvalsh(np.asarray(gp.Phi.getN({sig: -7.0, ell: hi})))
+        conds[jitter] = w.max() / w.min()
+
+    # the largest eigenvalue of the flat-kernel limit grows with the node count,
+    # so the jitter caps the ratio near nodes/jitter rather than 1/jitter
+    assert conds[1e-8] < conds[1e-12]
+    assert conds[1e-8] < 10.0 * nodes / 1e-8
+
+
+def test_matern_inverse_and_gradients_are_finite_across_the_prior(psr, restore_priors):
+    """Phi^-1, log|Phi| and their gradients survive any draw from the prior."""
+    import jax
+    import jax.numpy as jnp
+
+    gp = s.makegp_fd_piecewise_matern(psr, nodes=16)
+    sig, ell = _hypernames(psr)
+    slo, shi = restore_priors.getprior_uniform(sig)
+    elo, ehi = restore_priors.getprior_uniform(ell)
+    inv = gp.Phi.make_inv()
+
+    rng = np.random.default_rng(0)
+    for _ in range(50):
+        p = {sig: rng.uniform(slo, shi), ell: rng.uniform(elo, ehi)}
+        Pinv, ld = inv(p)
+        assert np.isfinite(np.asarray(Pinv)).all()
+        assert np.isfinite(float(ld))
+
+    grad = jax.grad(lambda q: jnp.sum(inv(q)[0]) + inv(q)[1])
+    got = grad({sig: -7.0, ell: 0.5 * (elo + ehi)})
+    assert all(np.isfinite(float(v)) for v in got.values())
+
+
+def test_matern_blocks_are_independent_under_a_selection(psr, restore_priors):
+    """Disjoint selections give a block-diagonal Phi with shared hyperparameters."""
+    def two_bands(p):
+        return np.where(np.asarray(p.freqs) < np.median(p.freqs), 'lo', 'hi')
+
+    gp = s.makegp_fd_piecewise_matern(psr, nodes=8, selection=two_bands)
+    sig, ell = _hypernames(psr)
+    Phi = np.asarray(gp.Phi.getN({sig: -7.0, ell: -0.5}))
+
+    n = gp.F.shape[1] // 2
+    assert Phi.shape == (gp.F.shape[1], gp.F.shape[1])
+    assert np.all(Phi[:n, n:] == 0.0)
+    assert np.all(Phi[n:, :n] == 0.0)
+    assert sorted(gp.Phi.params) == sorted([sig, ell])
+
+
+def test_matern_effective_dof_rises_with_amplitude(psr, restore_priors):
+    """A small sigma leaves the directions in the data; a large one absorbs them."""
+    gp = s.makegp_fd_piecewise_matern(psr, nodes=16)
+    sig, ell = _hypernames(psr)
+    Nvec = _Nvec(psr)
+    mid = float(np.mean(restore_priors.getprior_uniform(ell)))
+
+    dofs = [_edof(gp, {sig: sv, ell: mid}, Nvec) for sv in (-10.0, -8.0, -6.0, -4.0)]
+
+    assert dofs[0] < 0.5
+    assert all(a <= b + 1e-8 for a, b in zip(dofs, dofs[1:]))
+    assert dofs[-1] <= np.linalg.matrix_rank(np.asarray(gp.F)) + 1e-6
+
+
+def test_the_improper_prior_spends_every_direction(psr, restore_priors):
+    """The improper GP marginalises its whole basis whatever the data say."""
+    gp = s.makegp_fd_piecewise(psr, nodes=16)
+    Nvec = _Nvec(psr)
+
+    F = np.asarray(gp.F)
+    FtNmF = F.T @ (F / Nvec[:, None])
+    Pinv = np.diag(1.0 / np.asarray(gp.Phi.N))
+    dof = float(np.trace(np.linalg.solve(FtNmF + Pinv, FtNmF)))
+
+    assert dof == pytest.approx(F.shape[1], abs=1e-6)
+
+
+@pytest.mark.parametrize("nodes", [16, 32, 64])
+def test_matern_effective_dof_is_stable_in_node_count(psr, restore_priors, nodes):
+    """Raising the node count refines the basis without buying free parameters."""
+    gp = s.makegp_fd_piecewise_matern(psr, nodes=nodes)
+    sig, ell = _hypernames(psr)
+    mid = float(np.mean(restore_priors.getprior_uniform(ell)))
+
+    assert _edof(gp, {sig: -7.0, ell: mid}, _Nvec(psr)) < 0.5 * nodes
+
+
+def test_matern_effective_dof_agrees_between_spacings(psr, restore_priors):
+    """At high node count the two node placements describe the same model."""
+    Nvec = _Nvec(psr)
+    dofs = {}
+    for spacing in ('quantile', 'log'):
+        gp = s.makegp_fd_piecewise_matern(psr, nodes=64, spacing=spacing)
+        sig, ell = _hypernames(psr)
+        mid = float(np.mean(restore_priors.getprior_uniform(ell)))
+        dofs[spacing] = _edof(gp, {sig: -7.0, ell: mid}, Nvec)
+
+    assert dofs['quantile'] == pytest.approx(dofs['log'], rel=0.25)
+
+
+def test_matern_warns_when_the_timing_model_fits_fd(psr, restore_priors, monkeypatch):
+    """FD columns carry the smooth band structure the projection would strip."""
+    monkeypatch.setattr(psr, 'fitpars', ['F0', 'F1', 'FD1', 'FD2'], raising=False)
+
+    with pytest.warns(UserWarning, match='FD'):
+        s.makegp_fd_piecewise_matern(psr, nodes=16)
+
+
+def test_matern_does_not_warn_without_fd(psr, restore_priors, monkeypatch):
+    """A par file with no FD terms needs no warning."""
+    import warnings as w
+
+    monkeypatch.setattr(psr, 'fitpars', ['F0', 'F1', 'DM1'], raising=False)
+
+    with w.catch_warnings():
+        w.simplefilter('error')
+        s.makegp_fd_piecewise_matern(psr, nodes=16)
+
+
+def test_matern_unknown_spacing_raises(psr, restore_priors):
+    """Node placement must be one of the two supported rules."""
+    with pytest.raises(ValueError, match='spacing'):
+        s.makegp_fd_piecewise_matern(psr, nodes=16, spacing='linear')
+
+
+@pytest.mark.integration
+def test_matern_drives_a_real_likelihood(psr, restore_priors):
+    """The GP composes into a pulsar likelihood with a finite gradient."""
+    import jax
+
+    from discovery import prior as _p
+
+    gp = s.makegp_fd_piecewise_matern(psr, nodes=16)
+    psl = ds.PulsarLikelihood([psr.residuals, ds.makenoise_measurement(psr), gp])
+
+    t = _p.makelogtransform_uniform(psl.logL)
+    ys = np.zeros(len(t.params))
+
+    assert np.isfinite(float(t(ys)))
+    assert np.isfinite(np.asarray(jax.grad(t)(ys))).all()

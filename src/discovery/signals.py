@@ -695,36 +695,7 @@ def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None, group
     argument to remove the overlap.
     """
     x = np.log(np.asarray(psr.freqs, dtype=np.float64))
-
-    everything = np.ones(len(x), dtype=bool)
-
-    if selection is None:
-        blocks = [(None, everything)]
-    elif isinstance(selection, (list, tuple)):
-        # user-defined set of selections: every label of every callable gets a
-        # block, and it is the caller's job to include a global one if wanted
-        # (e.g. a selection returning the same label for all TOAs).
-        blocks = []
-        for sel_fn in selection:
-            flags = np.asarray(sel_fn(psr))
-            blocks += [(str(g), flags == g) for g in sorted(set(flags.tolist()))]
-    else:
-        flags = np.asarray(selection(psr))
-        present = sorted(set(flags.tolist()))
-
-        if groups is None:
-            # every group gets its own basis: a global term would add nothing
-            # conceptually, since per-group terms already span any common
-            # structure (raise `nodes` for more resolution instead).
-            blocks = [(str(g), flags == g) for g in present]
-        else:
-            # only some groups get their own basis, so the rest -- and any
-            # structure common to all -- still need the global term.
-            for g in groups:
-                if g not in present:
-                    print(f"Warning: fd_piecewise group {g!r} not found among {psr.name}'s "
-                          f"selection labels; skipped.")
-            blocks = [(None, everything)] + [(str(g), flags == g) for g in groups if g in present]
+    blocks = _fd_piecewise_selection_blocks(psr, len(x), selection, groups)
 
     mats, group_nodes = [], {}
     for label, sel in blocks:
@@ -761,6 +732,167 @@ def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None, group
     gp = makegp_improper(psr, fmat, constant=constant, name=name)
     gp.fd_nodes = group_nodes[None] if selection is None else group_nodes
     return gp
+
+def _fd_piecewise_selection_blocks(psr, ntoa, selection, groups):
+    """Split the TOAs into ``(label, mask)`` blocks for a piecewise-frequency basis.
+
+    psr:       pulsar, passed to the selection callables
+    ntoa:      number of TOAs, for the global mask
+    selection: callable, or list of callables, returning a per-TOA label
+    groups:    labels that get their own block alongside a global one
+    """
+    everything = np.ones(ntoa, dtype=bool)
+
+    if selection is None:
+        return [(None, everything)]
+
+    if isinstance(selection, (list, tuple)):
+        # user-defined set of selections: every label of every callable gets a
+        # block, and it is the caller's job to include a global one if wanted
+        # (e.g. a selection returning the same label for all TOAs).
+        blocks = []
+        for sel_fn in selection:
+            flags = np.asarray(sel_fn(psr))
+            blocks += [(str(g), flags == g) for g in sorted(set(flags.tolist()))]
+        return blocks
+
+    flags = np.asarray(selection(psr))
+    present = sorted(set(flags.tolist()))
+
+    if groups is None:
+        # every group gets its own basis: a global term would add nothing
+        # conceptually, since per-group terms already span any common
+        # structure (raise `nodes` for more resolution instead).
+        return [(str(g), flags == g) for g in present]
+
+    # only some groups get their own basis, so the rest -- and any
+    # structure common to all -- still need the global term.
+    for g in groups:
+        if g not in present:
+            print(f"Warning: fd_piecewise group {g!r} not found among {psr.name}'s "
+                  f"selection labels; skipped.")
+
+    return [(None, everything)] + [(str(g), flags == g) for g in groups if g in present]
+
+
+_SQRT3 = float(np.sqrt(3.0))
+
+
+def makegp_fd_piecewise_matern(psr, nodes=16, spacing='quantile', selection=None, groups=None,
+                               project_tm=True, jitter=1e-8, name='fd_gp'):
+    """Piecewise-linear frequency-dependent delay under a Matern-3/2 prior.
+
+    Same hat-function basis as :func:`makegp_fd_piecewise`, but the node
+    amplitudes carry a proper Gaussian prior rather than being marginalised with
+    an improper one, so the data set how much band structure is absorbed instead
+    of those directions being removed unconditionally.
+
+    The prior covariance is a Matern-3/2 kernel in node log-frequency
+    ``q = log(nu)``::
+
+        Phi_ij = sigma**2 (1 + sqrt(3)|q_i - q_j|/ell) exp(-sqrt(3)|q_i - q_j|/ell)
+
+    evaluated at the node positions, so the basis must keep its
+    amplitude-to-node correspondence: unlike :func:`makegp_fd_piecewise` this
+    function does not orthonormalise. Rank deficiency left by the timing-model
+    projection is harmless, since the Woodbury form inverts Phi rather than F.
+    Amplitudes stay analytically marginalised.
+
+    Samples ``{psr}_{name}_log10_sigma`` (delay units) and
+    ``{psr}_{name}_log10_ell``, registering a per-pulsar prior for the latter
+    bounded by the pulsar's own frequency coverage. With ``selection`` active the
+    blocks are disjoint and Phi is block diagonal, with the hyperparameters
+    shared across blocks.
+
+    nodes:      frequency nodes per block
+    spacing:    'quantile' (equal TOA counts) or 'log' (equal in log-frequency)
+    selection:  callable, or list of callables, splitting the TOAs into blocks
+    groups:     labels that get their own block alongside a global one
+    project_tm: project the timing-model column subspace out of the basis
+    jitter:     relative diagonal added to Phi, capping its condition number near
+                nodes/jitter
+    name:       parameter-name stem
+    """
+    from . import prior as _prior
+
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    blocks = _fd_piecewise_selection_blocks(psr, len(x), selection, groups)
+
+    mats, qs, group_nodes = [], [], {}
+    for label, sel in blocks:
+        block = _fd_piecewise_block(psr, x, sel, nodes, spacing,
+                                    name if label is None else f'{name}_{label}')
+        if block is not None:
+            fmat_g, q = block
+            mats.append(fmat_g)
+            qs.append(q)
+            group_nodes[label] = np.exp(q)
+
+    if not mats:
+        raise ValueError(f"makegp_fd_piecewise_matern: no usable frequency basis for {psr.name}.")
+
+    fmat = np.hstack(mats)
+
+    if project_tm:
+        fdpars = [p for p in getattr(psr, 'fitpars', []) if re.fullmatch(r'FD\d+', str(p).upper())]
+        if fdpars:
+            warnings.warn(
+                f"{psr.name}: the timing model still fits {fdpars}, whose columns carry the "
+                f"low-order smooth part of the band structure. Projecting them out leaves that "
+                f"part improperly marginalised through the timing model, so the Matern prior "
+                f"only shapes what is left. Remove FD from the par file to measure it.")
+
+        Mmat = np.asarray(psr.Mmat, dtype=np.float64)
+        M_norm = Mmat / np.sqrt(np.sum(Mmat**2, axis=0))
+        Q_tm, _ = np.linalg.qr(M_norm)
+        fmat = fmat - Q_tm @ (Q_tm.T @ fmat)
+
+    signame, ellname = f'{psr.name}_{name}_log10_sigma', f'{psr.name}_{name}_log10_ell'
+    sizes = [len(q) for q in qs]
+
+    def _makeblock(q, n):
+        dist = matrix.jnparray(np.abs(q[:, None] - q[None, :]))
+        eye = matrix.jnparray(np.eye(n))
+
+        def getblock(params):
+            r = _SQRT3 * dist / (10.0 ** params[ellname])
+            return 10.0 ** (2.0 * params[signame]) * ((1.0 + r) * jnp.exp(-r) + jitter * eye)
+        getblock.params = [signame, ellname]
+
+        return getblock
+
+    blockfuncs = [_makeblock(q, n) for q, n in zip(qs, sizes)]
+    offsets = np.cumsum([0] + sizes)
+    total = int(offsets[-1])
+
+    def getphi(params):
+        phi = jnp.zeros((total, total))
+        for getblock, i0, n in zip(blockfuncs, offsets[:-1], sizes):
+            phi = phi.at[i0:i0+n, i0:i0+n].set(getblock(params))
+        return phi
+    getphi.params = [signame, ellname]
+
+    if len(blockfuncs) > 1:
+        Phi = matrix.BlockDiagNoiseMatrix2D_var(getphi, [(False, f) for f in blockfuncs])
+    else:
+        Phi = matrix.NoiseMatrix2D_var(getphi)
+
+    # ell below the node spacing is unresolvable by the basis; above the span the
+    # kernel is flat across it and Phi approaches rank one
+    span = float(max(q.max() - q.min() for q in qs))
+    _prior.priordict_standard.update({
+        f'{re.escape(psr.name)}_{name}_log10_sigma': [-10.0, -4.0],
+        f'{re.escape(psr.name)}_{name}_log10_ell': [float(np.log10(0.1 * span)),
+                                                    float(np.log10(3.0 * span))]})
+
+    gp = matrix.VariableGP(Phi, fmat)
+    gp.index = {f'{psr.name}_{name}_coefficients({fmat.shape[1]})': slice(0, fmat.shape[1])}
+    gp.name = psr.name
+    gp.gpname = name
+    gp.fd_nodes = group_nodes[None] if selection is None else group_nodes
+
+    return gp
+
 
 def _fd_piecewise_block(psr, x, sel, nodes, spacing, name):
     """Hat-function block for one TOA selection, zero outside it.
