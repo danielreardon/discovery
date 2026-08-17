@@ -36,9 +36,9 @@ def update_priordict_standard_mpta():
         '(.*_)?red_noise2_gamma.*':    [0, 7],
         '(.*_)?dm_gp_log10_A':      [-18, -11],
         '(.*_)?dm_gp_gamma':        [0, 7],
-        '(.*_)?chrom_gp_log10_A':   [-18, -11],
+        '(.*_)?chrom_gp_log10_A':   [-20, -11], # -20 minimum is "effectively zero" at alpha=10
         '(.*_)?chrom_gp_gamma':     [0, 7],
-        '(.*_)?chrom_gp_alpha':     [3.0, 14], # start at 3 to avoid confusion with DM
+        '(.*_)?chrom_gp_alpha':     [3.0, 10], # start at 3 to avoid confusion with DM.
         '(.*_)?sw_gp_log10_A':      [-10, -2],
         '(.*_)?sw_gp_gamma':        [0, 4],
         # SE kernel for time-domain SW GP
@@ -81,13 +81,13 @@ def update_priordict_standard_mpta():
         r'(.*_)?chrom_sphere_log10_Amp': [-10, -4],
         r'(.*_)?chrom_sphere_log10_tau': [1.0, 4.0],
         r'(.*_)?chrom_sphere_sign_param': [-1, 1],
-        r'(.*_)?chrom_sphere_alpha': [0, 14],
+        r'(.*_)?chrom_sphere_alpha': [0, 10],
         r'(.*_)?chrom_sphere_smooth': [10, 200],
         r'(.*_)?chrom_step_t0': [58525, 60900],
         r'(.*_)?chrom_step_log10_Amp': [-10, -4],
         r'(.*_)?chrom_step_log10_span': [1.0, 4.0],
         r'(.*_)?chrom_step_sign_param': [-1, 1],
-        r'(.*_)?chrom_step_alpha': [0, 14],
+        r'(.*_)?chrom_step_alpha': [0, 10],
         r'(.*_)?chrom_step_smooth': [10, 200], 
         r'(.*_)?timingmodel_coefficients\(\d+\)': [-20.0, 20.0],
         r'(.*_)?alpha_scaling\(\d+\)': [0.0, 100.0],
