@@ -435,3 +435,56 @@ def test_matern_drives_a_real_likelihood(psr, restore_priors):
 
     assert np.isfinite(float(t(ys)))
     assert np.isfinite(np.asarray(jax.grad(t)(ys))).all()
+
+
+# --- wiring into the mpta single-pulsar model -------------------------------
+
+def _mpta_model(psr, **kw):
+    from discovery.models import mpta
+
+    return mpta.single_pulsar_noise(psr, fftint=False, max_cadence_days=30, background=False,
+                                    red=True, dm=True, chrom=False, sw=False, **kw)
+
+
+def test_mpta_improper_fd_leaves_no_parameters(psr, restore_priors):
+    """The improper prior marginalises everything, so nothing reaches the chain."""
+    m = _mpta_model(psr, fd=True, fd_nodes=16, fd_prior='improper')
+
+    assert not [p for p in m.logL.params if 'fd_gp' in p]
+
+
+def test_mpta_matern_fd_samples_its_hyperparameters(psr, restore_priors):
+    """The Matern prior contributes log10_sigma and log10_ell to the model."""
+    m = _mpta_model(psr, fd=True, fd_nodes=16, fd_prior='matern')
+
+    assert sorted(p for p in m.logL.params if 'fd_gp' in p) == [
+        f'{psr.name}_fd_gp_log10_ell', f'{psr.name}_fd_gp_log10_sigma']
+
+
+def test_mpta_matern_fd_gives_a_finite_likelihood(psr, restore_priors):
+    """The GP composes into the mpta model with a finite posterior and gradient."""
+    import jax
+
+    from discovery import prior as _p
+
+    m = _mpta_model(psr, fd=True, fd_nodes=16, fd_prior='matern')
+    t = _p.makelogtransform_uniform(m.logL)
+    ys = np.zeros(len(t.params))
+
+    assert np.isfinite(float(t(ys)))
+    assert np.isfinite(np.asarray(jax.grad(t)(ys))).all()
+
+
+def test_mpta_fd_off_adds_nothing(psr, restore_priors):
+    """fd=False leaves the parameter list untouched by either prior."""
+    base = _mpta_model(psr, fd=False)
+    matern = _mpta_model(psr, fd=True, fd_nodes=16, fd_prior='matern')
+
+    assert not [p for p in base.logL.params if 'fd_gp' in p]
+    assert len(matern.logL.params) == len(base.logL.params) + 2
+
+
+def test_mpta_unknown_fd_prior_raises(psr, restore_priors):
+    """fd_prior must name one of the two implemented priors."""
+    with pytest.raises(ValueError, match='fd_prior'):
+        _mpta_model(psr, fd=True, fd_prior='bogus')
