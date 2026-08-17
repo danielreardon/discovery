@@ -954,14 +954,13 @@ def _fd_piecewise_block(psr, x, sel, nodes, spacing, name):
 
     return fmat, q
 
-def makegp_chrom_poly_svd(psr, fref=None, sigma_c=1e-3, name='chrom_gp', project=None):
+def makegp_chrom_poly_svd(psr, fref=None, constant=1e40, name='chrom_gp', project=None):
     """SVD-orthogonalised chromatic polynomial GP, marginalised analytically.
 
     Basis: ``U * (fref/freq)**alpha``, where ``U`` is the SVD-orthonormalised
     [1, t, t**2] temporal design matrix. The timing-model column subspace is
     projected out of the basis at runtime to remove the degeneracy with the
-    standard timing model GP. We assume a Gaussian prior (``sigma_c = 1e-3``) 
-    on the coefficients.
+    standard timing model GP.
 
     Shares ``alpha`` with a companion chromatic Fourier (or FFTint) GP via
     the parameter name ``{psr}_{name}_alpha``.
@@ -1011,7 +1010,7 @@ def makegp_chrom_poly_svd(psr, fref=None, sigma_c=1e-3, name='chrom_gp', project
         return F
     fmatfunc.params = [alpha_param]
 
-    Phi_const = matrix.jnparray((sigma_c ** 2) * np.ones(3))
+    Phi_const = matrix.jnparray(constant * np.ones(3))
     def getphi(params):
         return Phi_const
     getphi.params = []
