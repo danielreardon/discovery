@@ -641,12 +641,19 @@ def _mvn_box_logmass(mu, sigma, rho, bounds):
 _Group = namedtuple('_Group', 'name idx forward base_scale')
 
 
+# Specification keys whose string value selects a variant rather than naming a
+# hyperparameter, and which _walk_hypernames must therefore not collect.
+_SPEC_KEYWORDS = ('kind', 'space')
+
+
 def _walk_hypernames(value, found):
     """Collect the hyperparameter names naming numbers in a joint prior specification."""
     if isinstance(value, str):
         found.append(value)
     elif isinstance(value, dict):
-        for v in value.values():
+        for k, v in value.items():
+            if k in _SPEC_KEYWORDS:
+                continue
             _walk_hypernames(v, found)
     elif isinstance(value, (list, tuple)):
         for v in value:
@@ -900,21 +907,63 @@ def _build_mvn_group(label, key, spec, idx, instances, hyperoffsets):
         raise ValueError(f"Joint prior {label}: parametrisation must be 'noncentered' or "
                          f"'centered', got {parametrisation!r}.")
 
-    # per-instance additive shifts of the population mean, from a pulsar covariate
-    shifts = []
+    # Per-instance additive shifts from a pulsar covariate. 'latent' shifts the
+    # population mean before the link, so the coefficient is in latent units and the
+    # physical slope it induces varies with the mean. 'physical' shifts the parameter
+    # after the link, so the coefficient IS the slope in the parameter's own units,
+    # at the cost of moving the support: the link box then bounds the de-scaled
+    # quantity, and the parameter itself ranges over that box plus the shift. The two
+    # coincide under an identity link, which is why the key is required only when the
+    # coordinate is bounded.
+    shifts, xshifts = [], []
     for cov in spec.get('covariates', []):
         coord = int(cov['coord'])
+        space = cov.get('space')
+        if space is None:
+            if links[coord] != 'identity':
+                raise ValueError(
+                    f"Joint prior {label}: covariate on coordinate {coord} needs "
+                    f"'space': 'physical' or 'latent'. That coordinate is bounded, so "
+                    f"a shift of the latent mean is not a shift of the parameter: it "
+                    f"is attenuated by the link derivative and the physical slope it "
+                    f"induces then depends on where the mean sits.")
+            space = 'latent'
+        if space not in ('latent', 'physical'):
+            raise ValueError(f"Joint prior {label}: covariate space must be 'latent' or "
+                             f"'physical', got {space!r}.")
         values = np.array([float(cov['values'][inst]) for inst in instances])
         coeff_of = _resolve_vec([cov['coefficient']], hyperoffsets)
         onehot = matrix.jnparray(np.eye(d)[coord])
         jvalues = matrix.jnparray(values)
-        shifts.append(lambda xs, c=coeff_of, v=jvalues, o=onehot:
-                      (c(xs)[..., 0, None] * v)[..., None] * o)
+        term = (lambda xs, c=coeff_of, v=jvalues, o=onehot:
+                (c(xs)[..., 0, None] * v)[..., None] * o)
+        (shifts if space == 'latent' else xshifts).append(term)
 
     outlier = spec.get('outlier')
+    outlier_kind = None
     if outlier is not None:
-        ochol_of = _resolve_mat(outlier['chol'], hyperoffsets)
+        outlier_kind = outlier.get('kind', 'normal')
+        if outlier_kind not in ('normal', 'uniform'):
+            raise ValueError(f"Joint prior {label}: outlier kind must be 'normal' or "
+                             f"'uniform', got {outlier_kind!r}.")
         chi_of = _resolve_vec([outlier['chi']], hyperoffsets)
+
+        if outlier_kind == 'normal':
+            ochol_of = _resolve_mat(outlier['chol'], hyperoffsets)
+        else:
+            # a uniform outlier is the standard logistic in the latent space, which
+            # carries no width of its own: the box comes from the link
+            if 'chol' in outlier:
+                raise ValueError(f"Joint prior {label}: a 'uniform' outlier takes no "
+                                 f"'chol'. Its width is the link box of each coordinate; "
+                                 f"drop the entry or use kind 'normal'.")
+            bad = [j for j, l in enumerate(links) if l == 'identity']
+            if bad:
+                raise ValueError(
+                    f"Joint prior {label}: a 'uniform' outlier needs a bounded link on "
+                    f"every coordinate, but coordinate(s) {bad} are identity-linked and "
+                    f"so have no box to be uniform over. Give them a logistic link, or "
+                    f"use kind 'normal'.")
 
     def _population(xs):
         # the instance axis is opened so the mean broadcasts against the (n_inst, d)
@@ -945,19 +994,32 @@ def _build_mvn_group(label, key, spec, idx, instances, hyperoffsets):
 
         lp = logfg
         if outlier is not None:
-            ochol = ochol_of(xs)
-            wo = (z - mu) @ jnp.swapaxes(jnp.linalg.inv(ochol), -1, -2)
-            logout = -0.5 * jnp.sum(wo * wo, axis=-1) - _logdet(ochol) - 0.5 * d * LOG2PI
+            if outlier_kind == 'normal':
+                ochol = ochol_of(xs)
+                wo = (z - mu) @ jnp.swapaxes(jnp.linalg.inv(ochol), -1, -2)
+                logout = (-0.5 * jnp.sum(wo * wo, axis=-1) - _logdet(ochol)
+                          - 0.5 * d * LOG2PI)
+            else:
+                # x uniform on the link box of every coordinate is z standard
+                # logistic: the (hi - lo) of dx/dz cancels the 1/(hi - lo) of the
+                # uniform density, so no bound enters and no width is fitted
+                logout = -jnp.sum(jax.nn.softplus(-z) + jax.nn.softplus(z), axis=-1)
             if parametrisation == 'noncentered':
                 logout = logout + _logdet(chol)
             chi = chi_of(xs)[..., 0, None]
             lp = jnp.logaddexp(jnp.log1p(-chi) + logfg, jnp.log(chi) + logout)
 
         x = jnp.stack([linkpairs[j][0](z[..., j]) for j in range(d)], axis=-1)
+        # a physical-space covariate is constant given xs, so it changes neither the
+        # latent density nor the link Jacobian, only where the parameter sits
+        for xshift in xshifts:
+            x = x + xshift(xs)
 
         return x, jnp.sum(lp)
 
     def inverse(x, xs):
+        for xshift in xshifts:
+            x = x - xshift(xs)
         z = jnp.stack([linkpairs[j][1](x[..., j]) for j in range(d)], axis=-1)
         mu, chol = _population(xs)
 

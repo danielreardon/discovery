@@ -693,6 +693,251 @@ def test_an_upper_triangular_cholesky_entry_is_rejected():
         hier_transform(spec)
 
 
+# --- physical-space covariates -----------------------------------------------
+
+COV_VALUES = dict(zip((f'{p}_' for p in HIER_PSRS), (1.0, -2.0, 0.5)))
+
+
+def bounded_covariate_transform(space, coeff=0.5, mu=None):
+    spec = dict(HIER_SPEC, link=[('logistic', -18.0, -11.0), ('logistic', 0.0, 7.0)],
+                covariates=[{'coefficient': 'red_alpha', 'coord': 0,
+                             'values': COV_VALUES, 'space': space}])
+    priors = {'red_alpha': [coeff, coeff]}
+    if mu is not None:
+        priors['spin_log10_A_mu'] = [mu, mu]
+    return hier_transform(spec, priordict=priors)
+
+
+@pytest.mark.parametrize('mu', [-2.5, 0.0, 2.5])
+def test_a_physical_covariate_is_the_slope_wherever_the_mean_sits(mu):
+    # the defining property: d(parameter)/d(covariate) is the coefficient itself, the
+    # same number at every population mean, which a latent-space shift is not
+    coeff = 0.5
+    t = bounded_covariate_transform('physical', coeff=coeff, mu=mu)
+    ys = jnp.zeros(len(t.params))
+    got = t.to_dict(ys)
+
+    base = None
+    for psr, cov in zip(HIER_PSRS, (1.0, -2.0, 0.5)):
+        x = float(got[f'{psr}_red_noise_log10_A'])
+        if base is None:
+            base, base_cov = x, cov
+        assert x - base == pytest.approx(coeff * (cov - base_cov), abs=1e-9)
+
+
+def test_a_latent_covariate_slope_depends_on_the_mean_but_a_physical_one_does_not():
+    slopes = {}
+    for space in ('latent', 'physical'):
+        for mu in (0.0, 2.5):
+            got = bounded_covariate_transform(space, mu=mu).to_dict(
+                jnp.zeros(len(HIER_PARAMS) + 5))
+            xs = [float(got[f'{p}_red_noise_log10_A']) for p in HIER_PSRS]
+            # covariates 1.0 and -2.0 are three apart
+            slopes[space, mu] = (xs[0] - xs[1]) / 3.0
+
+    assert slopes['physical', 0.0] == pytest.approx(0.5, abs=1e-9)
+    assert slopes['physical', 2.5] == pytest.approx(0.5, abs=1e-9)
+    assert abs(slopes['latent', 0.0] - slopes['latent', 2.5]) > 0.1
+
+
+def test_a_physical_covariate_bounds_the_de_scaled_value_not_the_parameter():
+    coeff = 2.0
+    t = bounded_covariate_transform('physical', coeff=coeff)
+
+    rng = np.random.default_rng(31)
+    outside = 0
+    for _ in range(50):
+        got = t.to_dict(jnp.array(rng.normal(size=len(t.params)) * 4.0))
+        for psr, cov in zip(HIER_PSRS, (1.0, -2.0, 0.5)):
+            x = float(got[f'{psr}_red_noise_log10_A'])
+            assert -18.0 <= x - coeff * cov <= -11.0
+            outside += not (-18.0 <= x <= -11.0)
+
+    # a shift of +-2 dex must actually take the parameter out of the box sometimes,
+    # or this test would pass on a build that ignored the covariate
+    assert outside > 0
+
+
+def test_a_physical_covariate_round_trips_through_to_vec():
+    # the coefficient is sampled, not pinned: a pinned hyperparameter maps back to
+    # y = 0 whatever its value, which would hide a broken inverse
+    spec = dict(HIER_SPEC, link=[('logistic', -18.0, -11.0), ('logistic', 0.0, 7.0)],
+                covariates=[{'coefficient': 'red_alpha', 'coord': 0,
+                             'values': COV_VALUES, 'space': 'physical'}])
+    t = hier_transform(spec, priordict={'red_alpha': [-2.0, 2.0]})
+
+    rng = np.random.default_rng(32)
+    for _ in range(20):
+        ys = jnp.array(rng.normal(size=len(t.params)))
+        assert np.allclose(np.asarray(t.to_vec(t.to_dict(ys))), np.asarray(ys), atol=1e-9)
+
+
+def test_a_physical_covariate_leaves_the_latent_density_alone():
+    # the shift is constant given the hyperparameters, so it moves the parameter
+    # without touching the population's log-density or its link Jacobian
+    off = bounded_covariate_transform('latent', coeff=0.0)
+    on = bounded_covariate_transform('physical', coeff=0.75)
+
+    rng = np.random.default_rng(33)
+    for _ in range(10):
+        ys = jnp.array(rng.normal(size=len(off.params)))
+        assert float(on.logprior(ys)) == pytest.approx(float(off.logprior(ys)), abs=1e-9)
+
+
+def test_a_covariate_on_a_bounded_coordinate_demands_a_space():
+    spec = dict(HIER_SPEC, link=[('logistic', -18.0, -11.0), ('logistic', 0.0, 7.0)],
+                covariates=[{'coefficient': 'red_alpha', 'coord': 0,
+                             'values': COV_VALUES}])
+
+    with pytest.raises(ValueError, match="needs 'space'"):
+        hier_transform(spec, priordict={'red_alpha': [-2.0, 2.0]})
+
+
+def test_an_unknown_covariate_space_is_named_in_the_error():
+    spec = dict(HIER_SPEC, covariates=[{'coefficient': 'red_alpha', 'coord': 0,
+                                        'values': COV_VALUES, 'space': 'sky'}])
+
+    with pytest.raises(ValueError, match='covariate space'):
+        hier_transform(spec, priordict={'red_alpha': [-2.0, 2.0]})
+
+
+def test_an_identity_linked_covariate_needs_no_space_and_the_two_agree():
+    # HIER_SPEC's coordinate 0 is identity-linked, where a latent shift and a physical
+    # shift are the same operation, so the key stays optional there
+    bare = hier_transform(dict(HIER_SPEC, covariates=[
+        {'coefficient': 'red_alpha', 'coord': 0, 'values': COV_VALUES}]),
+        priordict={'red_alpha': [0.5, 0.5]})
+    named = hier_transform(dict(HIER_SPEC, covariates=[
+        {'coefficient': 'red_alpha', 'coord': 0, 'values': COV_VALUES,
+         'space': 'physical'}]), priordict={'red_alpha': [0.5, 0.5]})
+
+    rng = np.random.default_rng(34)
+    for _ in range(10):
+        ys = jnp.array(rng.normal(size=len(bare.params)))
+        for p in HIER_PARAMS:
+            assert float(named.to_dict(ys)[p]) == pytest.approx(
+                float(bare.to_dict(ys)[p]), abs=1e-9)
+
+
+# --- uniform (sampling-prior) outliers on a hierarchical group ---------------
+
+# both coordinates logistic-linked, so the box a uniform outlier is flat over exists
+BOXED_SPEC = dict(HIER_SPEC, link=[('logistic', -18.0, -11.0), ('logistic', 0.0, 7.0)])
+
+
+def uniform_outlier_transform(chi):
+    spec = dict(BOXED_SPEC, outlier={'chi': 'spin_Q', 'kind': 'uniform'})
+    return hier_transform(spec, priordict={'spin_Q': [chi, chi]})
+
+
+def test_a_uniform_outlier_is_exactly_flat_in_the_physical_parameter():
+    # chi = 1 is the pure outlier: the density of each member must be 1/(hi - lo) in
+    # every coordinate, whatever the population mean, Cholesky factor or latent point
+    t = uniform_outlier_transform(1.0)
+    members = [t.params.index(p) for p in HIER_PARAMS]
+    hyper = [i for i in range(len(t.params)) if i not in members]
+    widths = np.array([7.0 if p.endswith('log10_A') else 7.0 for p in HIER_PARAMS])
+
+    # the Jacobian of the members' physical values, taken from the transform itself
+    # rather than rebuilt, and at fixed hyperparameters: the claim is about the
+    # conditional density of the population given its hyperparameters
+    def members_of(ys):
+        got = t.to_dict(ys)
+        return jnp.stack([got[p] for p in HIER_PARAMS])
+
+    jac = jax.jit(jax.jacobian(members_of))
+
+    rng = np.random.default_rng(21)
+    for _ in range(20):
+        ys = jnp.array(rng.normal(size=len(t.params)) * 2.0)
+        h = np.asarray(ys)[hyper]
+        hyper_lp = float(np.sum(np.log(2.0) - 2.0 * np.logaddexp(h, -h)))
+        _, logjac = np.linalg.slogdet(np.asarray(jac(ys))[:, members])
+
+        # the group's log-density in y, minus the Jacobian, is the density in x
+        logpx = float(t.logprior(ys)) - hyper_lp - float(logjac)
+        assert logpx == pytest.approx(float(-np.sum(np.log(widths))), abs=1e-9)
+
+
+def test_a_uniform_outlier_at_zero_weight_leaves_the_population_untouched():
+    t, off = uniform_outlier_transform(1e-300), hier_transform(BOXED_SPEC)
+
+    rng = np.random.default_rng(22)
+    for _ in range(10):
+        ys = jnp.array(rng.normal(size=len(off.params)))
+        # spin_Q sits last, and is pinned, so the population members line up; a
+        # pinned hyperparameter still carries its own scalar log-prior at y = 0
+        full = jnp.concatenate([ys, jnp.zeros(1)])
+        assert float(t.logprior(full)) + np.log(2.0) == pytest.approx(
+            float(off.logprior(ys)), abs=1e-9)
+
+
+def test_a_uniform_outlier_needs_no_width_and_rejects_one():
+    spec = dict(BOXED_SPEC, outlier={'chi': 'spin_Q', 'kind': 'uniform',
+                                     'chol': [[7.0, 0.0], [0.0, 6.0]]})
+
+    with pytest.raises(ValueError, match="takes no 'chol'"):
+        hier_transform(spec)
+
+
+def test_a_uniform_outlier_refuses_an_unbounded_coordinate():
+    # HIER_SPEC leaves log10_A identity-linked, so it has no box to be uniform over
+    spec = dict(HIER_SPEC, outlier={'chi': 'spin_Q', 'kind': 'uniform'})
+
+    with pytest.raises(ValueError, match='bounded link on every coordinate'):
+        hier_transform(spec)
+
+
+def test_an_unknown_outlier_kind_is_named_in_the_error():
+    spec = dict(BOXED_SPEC, outlier={'chi': 'spin_Q', 'kind': 'cauchy'})
+
+    with pytest.raises(ValueError, match='outlier kind'):
+        hier_transform(spec)
+
+
+def test_a_covariate_space_is_not_read_as_a_hyperparameter_name():
+    t = bounded_covariate_transform('physical')
+
+    assert 'physical' not in t.params
+    assert 'red_alpha' in t.params
+
+
+def test_the_outlier_kind_is_not_read_as_a_hyperparameter_name():
+    t = uniform_outlier_transform(0.1)
+
+    assert 'uniform' not in t.params
+    assert set(t.params) == set(HIER_PARAMS) | {'spin_log10_A_mu', 'spin_gamma_mu',
+                                               'spin_L_amp', 'spin_L_12', 'spin_L_gamma',
+                                               'spin_Q'}
+
+
+def test_a_uniform_outlier_has_finite_gradients_where_it_is_sampled():
+    spec = dict(BOXED_SPEC, outlier={'chi': 'spin_Q', 'kind': 'uniform'})
+    t = hier_transform(spec)
+    grad = jax.jit(jax.grad(t.logprior))
+
+    rng = np.random.default_rng(23)
+    for _ in range(100):
+        ys = jnp.array(rng.normal(size=len(t.params)) * 3.0)
+        assert np.isfinite(float(t.logprior(ys)))
+        assert np.isfinite(np.asarray(grad(ys))).all()
+
+
+def test_a_uniform_outlier_maps_a_whole_chain_at_once():
+    spec = dict(BOXED_SPEC, outlier={'chi': 'spin_Q', 'kind': 'uniform'})
+    t = hier_transform(spec)
+
+    rng = np.random.default_rng(24)
+    chain = jnp.array(rng.normal(size=(8, len(t.params))))
+    df = t.to_df(chain)
+
+    assert len(df) == 8
+    assert np.isfinite(df.to_numpy()).all()
+    single = t.to_dict(chain[3])
+    for par in HIER_PARAMS:
+        assert float(df.iloc[3][par]) == pytest.approx(float(single[par]), abs=1e-12)
+
+
 def test_an_unknown_joint_family_is_named_in_the_error():
     with pytest.raises(KeyError, match='Unknown joint prior family'):
         prior.makelogtransform(makefunc(HIER_PARAMS),
