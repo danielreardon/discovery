@@ -65,10 +65,8 @@ def update_priordict_standard_mpta():
         'curn_gamma':               [0, 7],
         'gw_log10_A':             [-18, -11],
         'gw_gamma':               [0, 7],
-        # deterministic parameters
-        '(.*_)?chrom_exp_t0': [58525, 60900], # MPTA 6-yr range
-        '(.*_)?chrom_exp_log10_Amp': [-10, -4],
-        '(.*_)?chrom_exp_log10_tau': [0, 4],
+        # deterministic parameters. chrom_exp_t0, _log10_tau and _log10_Amp are set
+        # per-pulsar from the data by _set_chrom_exp_priors and have no entry here.
         '(.*_)?chrom_exp_sign_param': [-1, 1],
         '(.*_)?chrom_exp_alpha': [0, 7],
         '(.*_)?chrom_1yr_log10_Amp': [-10, -4],
@@ -192,6 +190,57 @@ def _set_band_priors(psr, band=False, band_alpha=False, bw_min_mhz=20.0):
     prior.priordict_standard.update(updates)
 
 
+def _set_chrom_exp_priors(psr, chrom_exponential=False, tau_min_days=10.0,
+                          log10_amp_max=-5.0):
+    """Set data-bounded per-pulsar priors for the chromatic exponential event.
+
+    The event epoch is bounded by the pulsar's own observing span and the decay
+    timescale runs from ``tau_min_days`` to that span, so the event always overlaps
+    data and cannot decay over an interval the data do not constrain.
+
+    The amplitude is capped at the peak-to-peak of the pulsar's residuals, an event
+    larger than which would be visible in the raw timing, or at ``log10_amp_max``
+    where that is tighter. An event far above the residual scale drives the
+    log-likelihood to ~1e8, which float32 resolves only to ~10 and which sends a
+    gradient-based variational fit to nan.
+
+    These three parameters have no entry in the MPTA prior dictionary; this helper
+    is their MPTA source. ``prior.priordict_standard`` still carries wide generic
+    fallbacks, which apply only if a model is built without calling this.
+
+    The per-pulsar keys are inserted AHEAD of the existing entries: ``_matchprior``
+    returns the first regex match in insertion order, and the generic
+    ``(.*_)?chrom_exp_*`` defaults are already present, so a key appended after them
+    would never be reached. (``_set_band_priors`` can append because the band
+    parameters have no generic default.)
+    """
+    if not chrom_exponential:
+        return {}
+    mjd = np.asarray(psr.toas) / 86400.0
+    tmin, tmax = float(mjd.min()), float(mjd.max())
+    span = max(tmax - tmin, 2.0 * tau_min_days)
+
+    resid = np.asarray(psr.residuals)
+    ptp = float(resid.max() - resid.min())
+    amp_hi = min(float(log10_amp_max), float(np.log10(ptp)))
+    try:
+        amp_lo = float(prior.getprior_uniform(f'{psr.name}_chrom_exp_log10_Amp')[0])
+    except (KeyError, ValueError):
+        amp_lo = -10.0
+
+    psr_key = re.escape(psr.name)
+    updates = {
+        f'{psr_key}_chrom_exp_t0': [tmin, tmax],
+        f'{psr_key}_chrom_exp_log10_tau': [float(np.log10(tau_min_days)),
+                                           float(np.log10(span))],
+        f'{psr_key}_chrom_exp_log10_Amp': [amp_lo, amp_hi],
+    }
+    rest = {k: v for k, v in prior.priordict_standard.items() if k not in updates}
+    prior.priordict_standard.clear()
+    prior.priordict_standard.update({**updates, **rest})
+    return updates
+
+
 def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_poly=False, sw=True, sw_powerlaw=False, sw_logf=False, band=False, band_alpha=False, fd_gp=None):
     psr_Tspan = signals.getspan(psr) if Tspan is None else Tspan
     psr_components = int(psr_Tspan / (max_cadence_days * 86400))
@@ -258,6 +307,7 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     if chrom_annual:
         model_components += [signals.makedelay(psr, deterministic.chromatic_annual(psr), name='chrom_1yr')]
     if chrom_exponential:
+        _set_chrom_exp_priors(psr, chrom_exponential=True)
         model_components += [signals.makedelay(psr, deterministic.chromatic_exponential(psr), name='chrom_exp')]
     if chrom_gaussian:
         model_components += [signals.makedelay(psr, deterministic.chromatic_gaussian(psr), name='chrom_gauss')]
@@ -325,6 +375,8 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                  phys_ephem_frame_3axis=True, phys_ephem_inc_frame_drift=True, phys_ephem_inc_mainbelt=True,
                  phys_ephem_inc_minorbody=True, phys_ephem_orthogonalize_minorbody=False,
                  phys_ephem_inc_jerk=True, phys_ephem_mainbelt_prior_scale=1.0,
+                 phys_ephem_mainbelt_block="mass",
+                 phys_ephem_belt_eta_convention="none",
                  phys_ephem_mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
     def has_param(df, param_string):
@@ -496,6 +548,8 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                 orthogonalize_minorbody=phys_ephem_orthogonalize_minorbody,
                 inc_jerk=phys_ephem_inc_jerk,
                 mainbelt_prior_scale=phys_ephem_mainbelt_prior_scale,
+                mainbelt_block=phys_ephem_mainbelt_block,
+                belt_eta_convention=phys_ephem_belt_eta_convention,
                 mass_bodies=phys_ephem_mass_bodies)]
 
         if commongp_path:

@@ -111,8 +111,22 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
                                  frame_drift_3axis=True, inc_frame_drift=True, inc_mainbelt=False,
                                  inc_minorbody=True, orthogonalize_minorbody=True,
                                  inc_jerk=False, mainbelt_prior_scale=1.0,
+                                 mainbelt_block="mass", belt_eta_convention="none",
                                  mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     """Build the static per-pulsar design matrix and the parameter spec.
+
+    ``belt_eta_convention`` decides which of the belt and eta claims the subspace both
+    can produce over a span shorter than the Jovian period: ``"eta_perp_belt"`` makes
+    eta a floor on the trans-Neptunian mass error, ``"belt_perp_eta"`` a ceiling, and
+    ``"none"`` (the default) leaves both spanning it. It only has an effect when
+    ``inc_minorbody`` and ``inc_mainbelt`` are both on.
+
+    ``mainbelt_block`` selects which belt basis the artifact supplies: ``"mass"``
+    reads ``mainbelt_*`` (modes of the mass-weighted trajectories, coefficient in
+    units of a fractional mass redistribution) and ``"moveable"`` reads
+    ``mainbelt_moveable_*`` (modes of the sigma_mu-weighted trajectories, coefficient
+    in units of a per-body 1-sigma mass uncertainty). Both name the sampled parameter
+    ``phys_ephem_mainbelt``; the artifact records which basis it carries.
 
     Returns
     -------
@@ -184,16 +198,20 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
     # 3.6-4.6 yr sit inside the MPTA band; priors come from the inter-ephemeris
     # GM spread (Pallas dominates).
     if inc_mainbelt:
-        if "mainbelt_basis" not in npz:
-            raise ValueError("inc_mainbelt=True but artifact has no main-belt block")
-        basis = _interp_partial(grid, npz["mainbelt_basis"], toas_mjd)  # (n_ast, ntoa, 3)
+        if mainbelt_block not in ("mass", "moveable"):
+            raise ValueError(f"unknown mainbelt_block {mainbelt_block!r}")
+        pre = "mainbelt_" if mainbelt_block == "mass" else "mainbelt_moveable_"
+        if pre + "basis" not in npz:
+            raise ValueError(f"inc_mainbelt=True with mainbelt_block="
+                             f"{mainbelt_block!r} but artifact has no {pre}basis")
+        basis = _interp_partial(grid, npz[pre + "basis"], toas_mjd)  # (n_mode, ntoa, 3)
         # mainbelt_prior_scale multiplies every mode's physical half-width by a
         # common factor (coefficients stay uniform on [-1, 1], so the SVD's
         # relative mode scaling is preserved). Use >1 to test whether a mode that
         # leans on the fiducial prior edge localises at a finite amplitude when
         # allowed more room, or simply tracks the boundary (= unconstrained
         # direction, prior doing the work).
-        widths = np.asarray(npz["mainbelt_widths"], float) * float(mainbelt_prior_scale)
+        widths = np.asarray(npz[pre + "widths"], float) * float(mainbelt_prior_scale)
         add_block(basis, widths, "phys_ephem_mainbelt", basis.shape[0])
 
     # --- minor-body (TNO-dominated) barycentre normalisation eta -------
@@ -231,17 +249,36 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
 
     G = np.concatenate(cols, axis=1)
 
-    # Orthogonalise the planet mass/orbit columns against eta so eta carries the
-    # full normalisation wobble and the planet terms only span its orthogonal
-    # complement, so the wobble is not double-counted by Jupiter mass/orbit.
+    # Every projection below is per pulsar and on the assembled TOA columns, which is
+    # the metric the sampler sees; columns orthogonalised on the artifact grid instead
+    # would not stay orthogonal after windowing to the data span and marginalising the
+    # timing model. Dropping a column's component along another rescales what its
+    # coefficient means, so the folded prior no longer maps to the artifact half-width
+    # for the affected blocks.
+    rng = _col_ranges(params)                # keys carry the (size) suffix
+    base = {nm.split("(")[0]: cols for nm, cols in rng.items()}
+    belt = base.get("phys_ephem_mainbelt", [])
+
+    # belt_eta_convention decides which of the belt and eta claims the subspace both
+    # can produce. "eta_perp_belt" projects eta orthogonal to the belt, so eta carries
+    # only what a belt redistribution cannot explain and its amplitude is a floor on
+    # the trans-Neptunian mass error. "belt_perp_eta" is the reverse and makes it a
+    # ceiling. "none" leaves both spanning the shared subspace.
+    if inc_minorbody and belt and belt_eta_convention == "eta_perp_belt":
+        j = base["phys_ephem_minorbody"][0]
+        B = G[:, belt]
+        c, *_ = np.linalg.lstsq(B, G[:, j], rcond=None)
+        G[:, j] -= B @ c
+
     if inc_minorbody and orthogonalize_minorbody:
-        rng = _col_ranges(params)            # keys carry the (size) suffix
-        base = {nm.split("(")[0]: cols for nm, cols in rng.items()}
         e = G[:, base["phys_ephem_minorbody"][0]]
         ee = float(e @ e)
         if ee > 0:
-            for nm in ("phys_ephem_jupiter_orbit", "phys_ephem_saturn_orbit",
-                       "phys_ephem_mass"):
+            names = ["phys_ephem_jupiter_orbit", "phys_ephem_saturn_orbit",
+                     "phys_ephem_mass"]
+            if belt_eta_convention == "belt_perp_eta":
+                names.append("phys_ephem_mainbelt")
+            for nm in names:
                 for j in base.get(nm, []):
                     G[:, j] -= (G[:, j] @ e / ee) * e
     return G, params
@@ -251,13 +288,16 @@ def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=Tru
                          inc_saturn=True, inc_masses=True, frame_drift_3axis=True,
                          inc_frame_drift=True, inc_mainbelt=False, inc_minorbody=True,
                          orthogonalize_minorbody=True, inc_jerk=False,
-                         mainbelt_prior_scale=1.0,
+                         mainbelt_prior_scale=1.0, mainbelt_block="mass",
+                         belt_eta_convention="none",
                          mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     """Factory for the PEBBLE deterministic delay component.
 
     Block toggles (``inc_jupiter``, ``inc_saturn``, ``inc_masses``,
     ``frame_drift_3axis``, ``inc_mainbelt``) select which perturbation blocks
     enter the model, e.g. frame + main belt only with everything else off.
+    ``mainbelt_block`` and ``belt_eta_convention`` are as in
+    :func:`physical_ephem_design_matrix`.
 
     Returns a callable ``delay(params) -> jnp.ndarray`` (length ntoa) with a
     ``.params`` attribute listing the global/common parameter names. The design
@@ -269,7 +309,8 @@ def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=Tru
         inc_frame_drift=inc_frame_drift,
         inc_mainbelt=inc_mainbelt, inc_minorbody=inc_minorbody,
         orthogonalize_minorbody=orthogonalize_minorbody, inc_jerk=inc_jerk,
-        mainbelt_prior_scale=mainbelt_prior_scale, mass_bodies=mass_bodies)
+        mainbelt_prior_scale=mainbelt_prior_scale, mainbelt_block=mainbelt_block,
+        belt_eta_convention=belt_eta_convention, mass_bodies=mass_bodies)
     G = jnp.asarray(G_np)
 
     def assemble_c(params):

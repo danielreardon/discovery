@@ -613,11 +613,34 @@ def makegp_improper(psr, fmat, constant=1.0e40, name='improperGP', variable=Fals
 
     return gp
 
+def normalise_tm_basis(psr, scale=1.0):
+    """Timing-model design matrix with unit-norm columns.
+
+    All-zero columns, which arise when a fitted par-file parameter has no TOAs
+    behind it, are dropped and reported. Dividing by their zero norm would give
+    NaNs, and they span nothing, so removing them leaves the column space
+    unchanged.
+    """
+    Mmat = np.asarray(scale * psr.Mmat, dtype=np.float64)
+    norms = np.sqrt(np.sum(Mmat**2, axis=0))
+    keep = norms > 0
+
+    ndrop = int((~keep).sum())
+    if ndrop:
+        idx = np.where(~keep)[0]
+        names = (list(np.asarray(psr.fitpars)[idx]) if hasattr(psr, 'fitpars')
+                 else list(idx))
+        print(f'Warning: {psr.name} has {ndrop} all-zero timing-model column(s), '
+              f'dropped: {names}')
+
+    return Mmat[:, keep] / norms[keep]
+
+
 def makegp_timing(psr, constant=None, variance=None, svd=False, scale=1.0, variable=False):
     if svd:
         fmat, _, _ = np.linalg.svd(scale * psr.Mmat, full_matrices=False)
     else:
-        fmat = np.array(psr.Mmat / np.sqrt(np.sum(psr.Mmat**2, axis=0)), dtype=np.float64)
+        fmat = normalise_tm_basis(psr, scale=scale)
 
     if variance is None:
         if constant is None:
@@ -715,9 +738,7 @@ def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None, group
     fmat = np.hstack(mats)
 
     if project_tm:
-        Mmat = np.asarray(psr.Mmat, dtype=np.float64)
-        M_norm = Mmat / np.sqrt(np.sum(Mmat**2, axis=0))
-        Q_tm, _ = np.linalg.qr(M_norm)
+        Q_tm, _ = np.linalg.qr(normalise_tm_basis(psr))
         fmat = fmat - Q_tm @ (Q_tm.T @ fmat)
 
     # Rank-revealing orthonormalisation: the projection above can annihilate
@@ -964,9 +985,7 @@ def makegp_chrom_poly_svd(psr, fref=None, sigma_c=1e-3, name='chrom_gp', project
     # Orthonormal basis spanning the timing-model column space.
     # Anything in this subspace is already marginalised by makegp_timing,
     # so we project it out of the chromatic polynomial basis.
-    Mmat = np.asarray(psr.Mmat, dtype=np.float64)
-    M_norm = Mmat / np.sqrt(np.sum(Mmat**2, axis=0))
-    Q_tm, _ = np.linalg.qr(M_norm)
+    Q_tm, _ = np.linalg.qr(normalise_tm_basis(psr))
 
     if project is not None:
         # e.g. makegp_fd_piecewise: a time-constant frequency basis, already
@@ -1633,12 +1652,24 @@ def make_timeinterpbasis_solar(start_time=None, order=1):
         return t_coarse, dt_coarse, dt_DM[:, None] * Bmat
     return timeinterpbasis_solar
 
-def psd2cov(psdfunc, components, T, oversample=3, fmax_factor=1, cutoff=1):
+# Relative white floor added to every sampled PSD bin in psd2cov, as a fraction of the
+# PSD peak. The Toeplitz covariance psd2cov builds has cond(Phi) ~ (components/2)**gamma,
+# and NoiseMatrix2D_var.make_inv forms Phi^-1 explicitly, so for the ~500-knot bases a
+# 20-yr baseline produces at 30-day cadence the condition number crosses 1/eps64 near
+# gamma = 6.5: Phi loses positive definiteness by gamma = 7 and its inverse returns NaN.
+# At 1e-10 the floor holds cond(Phi) at ~4e9 independently of gamma while perturbing Phi
+# by 4e-9 in Frobenius norm, i.e. ~1e-7 of the integrated variance -- ten decades below
+# anything the data constrain. Override per call with nugget=, or set to 0 to disable.
+PSD_NUGGET = 1e-10
+
+def psd2cov(psdfunc, components, T, oversample=3, fmax_factor=1, cutoff=1, nugget=None):
     if not (isinstance(oversample, int) and isinstance(fmax_factor, int) and isinstance(cutoff, int)):
         raise ValueError('psd2cov: oversample, fmax_factor and cutoff must be integers.')
 
     if components % 2 == 0:
         raise ValueError('psd2cov: number of components must be odd.')
+
+    nugget = PSD_NUGGET if nugget is None else nugget
 
     scaled_components = (components - 1) * fmax_factor + 1
     n_freqs = int((scaled_components - 1) / 2 * oversample + 1)
@@ -1653,10 +1684,17 @@ def psd2cov(psdfunc, components, T, oversample=3, fmax_factor=1, cutoff=1):
         fs = matrix.jnparray(freqs)
 
     def covmat(*args):
+        psd = psdfunc(fs, 1.0, *args[2:])
+
+        if nugget:
+            # Additive, not jnp.maximum: a hard floor changes how many bins are clipped as
+            # gamma varies, which puts a kink in the gradient. Applied before the cutoff
+            # bins are prepended so those stay exactly zero. jnp.max is smooth here because
+            # a decreasing power law always peaks in the lowest retained bin.
+            psd = psd + nugget * jnp.max(psd)
+
         if cutoff is not None:
-            psd = jnp.concatenate([zs, psdfunc(fs, 1.0, *args[2:])])
-        else:
-            psd = psdfunc(fs, 1.0, *args[2:])
+            psd = jnp.concatenate([zs, psd])
 
         fullpsd = jnp.concatenate((psd, psd[-2:0:-1]))
         Cfreq = jnp.fft.ifft(fullpsd, norm='backward')
