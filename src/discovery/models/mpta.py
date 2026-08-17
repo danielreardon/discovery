@@ -389,6 +389,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                  phys_ephem_inc_jerk=True, phys_ephem_mainbelt_prior_scale=1.0,
                  phys_ephem_mainbelt_block="mass",
                  phys_ephem_belt_eta_convention="none",
+                 phys_ephem_prior_units="edge", phys_ephem_minorbody_sigma=None,
                  phys_ephem_mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
     def has_param(df, param_string):
@@ -575,6 +576,8 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                 mainbelt_prior_scale=phys_ephem_mainbelt_prior_scale,
                 mainbelt_block=phys_ephem_mainbelt_block,
                 belt_eta_convention=phys_ephem_belt_eta_convention,
+                prior_units=phys_ephem_prior_units,
+                minorbody_sigma=phys_ephem_minorbody_sigma,
                 mass_bodies=phys_ephem_mass_bodies)]
 
         if commongp_path:

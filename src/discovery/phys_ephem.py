@@ -112,8 +112,21 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
                                  inc_minorbody=True, orthogonalize_minorbody=True,
                                  inc_jerk=False, mainbelt_prior_scale=1.0,
                                  mainbelt_block="mass", belt_eta_convention="none",
+                                 prior_units="edge", minorbody_sigma=None,
+                                 prior_ephemerides=("DE440", "INPOP21a", "EPM2021"),
                                  mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     """Build the static per-pulsar design matrix and the parameter spec.
+
+    ``prior_units`` decides what a sampled coefficient of 1 means. ``"edge"`` folds each
+    block's prior half-width in, so a coefficient spans [-1, 1] over that box.
+    ``"sigma"`` folds the block's 1-sigma physical uncertainty in, so a coefficient of 1
+    is one sigma for every block and every vector component alike -- which makes a
+    single ``Normal(0, 1)`` prior the exact propagation of the underlying physical
+    uncertainties, with no block tighter or looser than any other. In ``"sigma"`` mode
+    every enabled block must have a 1-sigma to fold: the SSB jerk has none (its width is
+    a reference scale, not a measurement) and the mass-weighted main-belt block has no
+    per-mode sigma, so both are refused rather than silently mispriced, and
+    ``minorbody_sigma`` must be supplied for eta.
 
     ``belt_eta_convention`` decides which of the belt and eta claims the subspace both
     can produce over a span shorter than the Jovian period: ``"eta_perp_belt"`` makes
@@ -159,13 +172,21 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         if not flag:
             continue
         Q = _interp_partial(grid, npz[f"{planet}_Q"], toas_mjd)   # (6, ntoa, 3)
-        widths = npz[f"{planet}_orbit_widths"]                    # (6,)
+        if prior_units == "sigma":
+            # 1-sigma per element is the inter-ephemeris spread of the stored element
+            # offsets, which is what the half-width is kappa times.
+            dbs = np.array([npz[f"{planet}_db_{e}"] for e in prior_ephemerides
+                            if f"{planet}_db_{e}" in npz])
+            widths = dbs.max(axis=0) - dbs.min(axis=0)
+        else:
+            widths = npz[f"{planet}_orbit_widths"]                # (6,)
         scales = _MASS_RATIO[planet] * widths
         add_block(Q, scales, f"phys_ephem_{planet}_orbit", 6)
 
     # --- outer-planet masses -------------------------------------------
     if inc_masses:
-        mass_w = prior_block["mass_uniform_width"]
+        mass_w = prior_block["mass_normal_sigma" if prior_units == "sigma"
+                             else "mass_uniform_width"]
         # Select which outer-planet masses to free. Default all four, but over a
         # short (~6-yr) baseline Uranus/Neptune produce <1 ns of *residual* (their
         # >80-yr arcs are absorbed by F0/F1) and only serve as leakage channels
@@ -198,9 +219,11 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
     # 3.6-4.6 yr sit inside the MPTA band; priors come from the inter-ephemeris
     # GM spread (Pallas dominates).
     if inc_mainbelt:
-        if mainbelt_block not in ("mass", "moveable"):
+        _BELT_PREFIX = {"mass": "mainbelt_", "moveable": "mainbelt_moveable_",
+                        "bodies": "mainbelt_bodies_"}
+        if mainbelt_block not in _BELT_PREFIX:
             raise ValueError(f"unknown mainbelt_block {mainbelt_block!r}")
-        pre = "mainbelt_" if mainbelt_block == "mass" else "mainbelt_moveable_"
+        pre = _BELT_PREFIX[mainbelt_block]
         if pre + "basis" not in npz:
             raise ValueError(f"inc_mainbelt=True with mainbelt_block="
                              f"{mainbelt_block!r} but artifact has no {pre}basis")
@@ -211,7 +234,24 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         # leans on the fiducial prior edge localises at a finite amplitude when
         # allowed more room, or simply tracks the boundary (= unconstrained
         # direction, prior doing the work).
-        widths = np.asarray(npz[pre + "widths"], float) * float(mainbelt_prior_scale)
+        if prior_units == "sigma":
+            if mainbelt_block == "mass":
+                raise ValueError(
+                    "prior_units='sigma' needs mainbelt_block='moveable' or "
+                    "'bodies': the mass-weighted modes are priced as a blanket "
+                    "fractional redistribution and have no per-mode sigma to fold in.")
+            # The movable and per-body bases ARE the 1-sigma shapes, so the scale is
+            # unity and the stored kappa is only the half-width of the box they would
+            # be folded to.
+            widths = np.ones(basis.shape[0])
+        elif mainbelt_block == "bodies":
+            raise ValueError(
+                "mainbelt_block='bodies' needs prior_units='sigma': a per-body "
+                "column is defined as that body's own 1-sigma mass perturbation and "
+                "has no prior edge to fold in.")
+        else:
+            widths = np.asarray(npz[pre + "widths"], float)
+        widths = widths * float(mainbelt_prior_scale)
         add_block(basis, widths, "phys_ephem_mainbelt", basis.shape[0])
 
     # --- minor-body (TNO-dominated) barycentre normalisation eta -------
@@ -227,7 +267,15 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
     if inc_minorbody:
         # r_Sun->SSB = R_SSB - r_Sun = -(Sun relative to SSB) = -sunssb.
         r_sun_ssb = -np.asarray(psr.sunssb)[:, :3]      # (ntoa, 3) light-seconds
-        eta_w = float(prior_block.get("minorbody_width", 1.5e-7))
+        if prior_units == "sigma":
+            if minorbody_sigma is None:
+                raise ValueError(
+                    "prior_units='sigma' with inc_minorbody=True needs "
+                    "minorbody_sigma: the artifact stores only the wide uniform "
+                    "half-width, which is not a 1-sigma.")
+            eta_w = float(minorbody_sigma)
+        else:
+            eta_w = float(prior_block.get("minorbody_width", 1.5e-7))
         add_block(r_sun_ssb[None], np.array([eta_w]), "phys_ephem_minorbody", 1)
 
     # --- free-direction SSB jerk (3-axis) ------------------------------
@@ -244,6 +292,11 @@ def physical_ephem_design_matrix(psr, partials_file=DEFAULT_PARTIALS,
         jvecs = np.zeros((3, ntoa, 3))
         for a in range(3):
             jvecs[a, :, a] = tc3                          # dx_Earth->SSB along axis a
+        if prior_units == "sigma":
+            raise ValueError(
+                "prior_units='sigma' cannot price the SSB jerk: its width is a "
+                "Planet-Nine reference scale, not a measured uncertainty. Run with "
+                "inc_jerk=False, or keep prior_units='edge'.")
         jw = float(prior_block.get("jerk_width", 1.0e-31))
         add_block(jvecs, np.array([jw, jw, jw]), "phys_ephem_ssb_jerk", 3)
 
@@ -289,15 +342,16 @@ def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=Tru
                          inc_frame_drift=True, inc_mainbelt=False, inc_minorbody=True,
                          orthogonalize_minorbody=True, inc_jerk=False,
                          mainbelt_prior_scale=1.0, mainbelt_block="mass",
-                         belt_eta_convention="none",
+                         belt_eta_convention="none", prior_units="edge",
+                         minorbody_sigma=None,
                          mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
     """Factory for the PEBBLE deterministic delay component.
 
     Block toggles (``inc_jupiter``, ``inc_saturn``, ``inc_masses``,
     ``frame_drift_3axis``, ``inc_mainbelt``) select which perturbation blocks
     enter the model, e.g. frame + main belt only with everything else off.
-    ``mainbelt_block`` and ``belt_eta_convention`` are as in
-    :func:`physical_ephem_design_matrix`.
+    ``mainbelt_block``, ``belt_eta_convention``, ``prior_units`` and
+    ``minorbody_sigma`` are as in :func:`physical_ephem_design_matrix`.
 
     Returns a callable ``delay(params) -> jnp.ndarray`` (length ntoa) with a
     ``.params`` attribute listing the global/common parameter names. The design
@@ -310,7 +364,8 @@ def makedelay_phys_ephem(psr, partials_file=DEFAULT_PARTIALS, *, inc_jupiter=Tru
         inc_mainbelt=inc_mainbelt, inc_minorbody=inc_minorbody,
         orthogonalize_minorbody=orthogonalize_minorbody, inc_jerk=inc_jerk,
         mainbelt_prior_scale=mainbelt_prior_scale, mainbelt_block=mainbelt_block,
-        belt_eta_convention=belt_eta_convention, mass_bodies=mass_bodies)
+        belt_eta_convention=belt_eta_convention, prior_units=prior_units,
+        minorbody_sigma=minorbody_sigma, mass_bodies=mass_bodies)
     G = jnp.asarray(G_np)
 
     def assemble_c(params):
