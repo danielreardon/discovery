@@ -60,9 +60,9 @@ PPTA_CONFIG = {
         '(.*_)?red_noise2_gamma': [0, 7],
         '(.*_)?dm_gp_log10_A': [-18, -11],
         '(.*_)?dm_gp_gamma': [0, 7],
-        '(.*_)?chrom_gp_log10_A': [-18, -11],
+        '(.*_)?chrom_gp_log10_A': [-20, -11],
         '(.*_)?chrom_gp_gamma': [0, 7],
-        '(.*_)?chrom_gp_alpha': [2.5, 14],
+        '(.*_)?chrom_gp_alpha': [3, 10],
         # band GP centre and bandwidth are bounded per-pulsar from psr.freqs by
         # _set_band_priors at model-build time.
         '(.*_)?band_gp_log10_A': [-18, -11],
