@@ -1919,6 +1919,70 @@ def brokenpowerlaw(f, df, log10_A, gamma, log10_fb):
     return (10.0**(2.0 * log10_A)) / 12.0 / jnp.pi**2 * const.fyr ** (gamma - 3.0) * f ** (-gamma) * df * \
         (1.0 + (f / 10.0**log10_fb) ** (1.0 / kappa)) ** (kappa * gamma)
 
+def turnover(f, df, log10_A, gamma, log10_fc):
+    """Power law whose spectrum flattens below a corner frequency.
+
+    P(f) = A^2 / (12 pi^2) fyr^(gamma-3) f^-gamma df / [1 + (fc/f)^2]^(gamma/2)
+
+    log10_A and gamma describe the high-frequency power law, exactly as in
+    :func:`powerlaw`, and the spectrum flattens to a constant below fc. Equivalently
+    P(f) = P0 / [1 + (f/fc)^2]^(gamma/2) with a plateau
+    P0 = A^2 / (12 pi^2) fyr^(gamma-3) fc^-gamma df, which is the same model written
+    with the plateau as the amplitude rather than the power law. The flat
+    low-frequency limit leaves the integrated variance finite.
+
+    f:        Fourier frequencies, Hz
+    df:       frequency spacing, Hz
+    log10_A:  log10 amplitude of the high-frequency power law at 1/yr
+    gamma:    high-frequency spectral index
+    log10_fc: log10 corner frequency, Hz
+    """
+    return powerlaw(f, df, log10_A, gamma) / (1.0 + (10.0**log10_fc / f)**2.0)**(gamma / 2.0)
+
+def make_turnover(kappa=2.0, beta='flat'):
+    """Return a power law with a low-frequency turnover.
+
+    P(f) = A^2 / (12 pi^2) fyr^(gamma-3) f^-gamma df / [1 + (fc/f)^kappa]^(2 beta)
+
+    The spectral index is -gamma above fc and -gamma + 2 kappa beta below it. The
+    defaults tie beta to gamma so the index below the corner is zero, which is the
+    corner-frequency form :func:`turnover` implements; kappa = 2 then makes the
+    turnover factor [1 + (f/fc)^2]^(-gamma/2). Setting kappa or beta to None samples
+    it instead, giving the general form, whose integrated variance is finite only for
+    2 kappa beta > gamma - 1.
+
+    kappa: turnover sharpness. A number fixes it, None samples it.
+    beta:  turnover depth. 'flat' ties it to gamma / (2 kappa), which flattens the
+           spectrum below the corner whatever kappa is; a number fixes it; None
+           samples it.
+    """
+    if isinstance(beta, str) and beta != 'flat':
+        raise ValueError(f"make_turnover: beta must be 'flat', a number or None, "
+                         f"got {beta!r}.")
+    flat = isinstance(beta, str)
+    kappa_c = None if kappa is None else float(kappa)
+    beta_c = None if (flat or beta is None) else float(beta)
+
+    def psd(f, df, log10_A, gamma, log10_fc, kappa, beta):
+        twobeta = gamma / kappa if flat else 2.0 * beta
+        return (powerlaw(f, df, log10_A, gamma) /
+                (1.0 + (10.0**log10_fc / f)**kappa)**twobeta)
+
+    if kappa is None and beta is None:
+        def turnover_model(f, df, log10_A, gamma, log10_fc, kappa, beta):
+            return psd(f, df, log10_A, gamma, log10_fc, kappa, beta)
+    elif kappa is None:
+        def turnover_model(f, df, log10_A, gamma, log10_fc, kappa):
+            return psd(f, df, log10_A, gamma, log10_fc, kappa, beta_c)
+    elif beta is None:
+        def turnover_model(f, df, log10_A, gamma, log10_fc, beta):
+            return psd(f, df, log10_A, gamma, log10_fc, kappa_c, beta)
+    else:
+        def turnover_model(f, df, log10_A, gamma, log10_fc):
+            return psd(f, df, log10_A, gamma, log10_fc, kappa_c, beta_c)
+
+    return turnover_model
+
 def freespectrum(f, df, log10_rho: typing.Sequence):
     return jnp.repeat(10.0**(2.0 * log10_rho), 2)
 
