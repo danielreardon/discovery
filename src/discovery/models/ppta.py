@@ -79,7 +79,7 @@ PPTA_CONFIG = {
         '(.*_)?sw_gp_log10_sigma': [-2, 1.3],
         '(.*_)?sw_gp_log10_ell': [1, 4],
         '(.*_)?sw_gp_log10_Gamma': [-3, 2],
-        '(.*_)?sw_gp_log10_p': [1.5, 4.5],
+        '(.*_)?sw_gp_log10_p': [-2, 1.3],   # years (0.01 - 20 yr), as scaled in signals.quasi_periodic
         # Fourier power-law solar-wind GP, used when sw_powerlaw=True.
         '(.*_)?sw_gp_log10_A': [-10, 1],
         '(.*_)?sw_gp_gamma': [-4, 4],
