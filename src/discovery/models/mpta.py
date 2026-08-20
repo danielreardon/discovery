@@ -63,6 +63,9 @@ def update_priordict_standard_mpta():
         # common noise parameters
         'curn_log10_A':             [-18, -11],
         'curn_gamma':               [0, 7],
+        # per-pulsar forms, used only when common_noise(curn_per_pulsar=True)
+        '(.*_)?curn_log10_A':       [-18, -11],
+        '(.*_)?curn_gamma':         [0, 7],
         'gw_log10_A':             [-18, -11],
         'gw_gamma':               [0, 7],
         # deterministic parameters. chrom_exp_t0, _log10_tau and _log10_Amp are set
@@ -393,6 +396,8 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                  os_analysis=False,  # put the HD spectrum (gw_log10_A/gw_gamma) into a PER-PULSAR GP instead of a globalgp, so discovery.optimal.OS can see it. For OS runs only -- NOT for Bayesian sampling, which wants the correlated globalgp.
                  fd=False, fd_nodes=16, fd_spacing='quantile', fd_selection=None, fd_prior='improper',  # piecewise-linear frequency-dependent delay; nodes/spacing/selection MUST match the stage-1 runs, as they cannot be auto-detected (see below)
                  use_commongp=False,
+                 curn_per_pulsar=False,  # give the common process PER-PULSAR (log10_A, gamma), or per-bin log10_rho under freespec, instead of parameters shared across the array
+                 red2=False,  # force a SECOND per-pulsar red power law (name='red_noise2') in every pulsar, regardless of whether the stage-1 chains carry one; without it, red2 is enabled only where has_param(df, "red_noise2") finds it
                  freespec=False, freespec_components=30,  # free-spectrum CURN (per-bin log10_rho) instead of the power law; ~30 components keeps the parameter space manageable for a steep process
                  red_fixed_dict=None,  # {psrname: (log10_A, gamma)}: FIX each pulsar's red noise at these values (e.g. the power-law common-run posteriors) so the free-spectrum bins test excess over the same null the band power was defined against, rather than competing with co-sampled red noise for the same variance
                  use_phys_ephem=False, phys_ephem_partials=phys_ephem_mod.DEFAULT_PARTIALS,
@@ -539,11 +544,11 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             # Free-spectrum CURN: one common log10_rho per frequency bin
             # (Fourier basis; use with fftInt=False). Motivated by the
             # non-power-law common band power at 1.5-2.1 yr (Gate-2).
-            curn = signals.makegp_fourier(psr, signals.freespectrum, freespec_components, Tspan, common=['curn_log10_rho'], name='curn')
+            curn = signals.makegp_fourier(psr, signals.freespectrum, freespec_components, Tspan, common=([] if curn_per_pulsar else ['curn_log10_rho']), name='curn')
         elif not fftInt:
-            curn = signals.makegp_fourier(psr, signals.powerlaw, common_components, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
+            curn = signals.makegp_fourier(psr, signals.powerlaw, common_components, Tspan, common=([] if curn_per_pulsar else ['curn_log10_A', 'curn_gamma']), name='curn')
         else:
-            curn = signals.makegp_fftcov(psr, signals.powerlaw, common_knots, Tspan, common=['curn_log10_A', 'curn_gamma'], name='curn')
+            curn = signals.makegp_fftcov(psr, signals.powerlaw, common_knots, Tspan, common=([] if curn_per_pulsar else ['curn_log10_A', 'curn_gamma']), name='curn')
         # Sampled common GPs that are STACKABLE into the commongp (curn, red_fixed).
         common_gps = curn if isinstance(curn, list) else [curn]
 
@@ -610,7 +615,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             # 'sw_gp') is filtered out and kept per-pulsar (dense, not stackable).
             gp_builder = make_psr_gps_fftint if fftInt else make_psr_gps_fourier
             psr_gps = gp_builder(psr, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False,
-                                 red=red_flag, red2=has_param(df, "red_noise2"),
+                                 red=red_flag, red2=(red2 or has_param(df, "red_noise2")),
                                  dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"),
                                  chrom_alpha=chrom_alpha, chrom_poly=False,
                                  sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw, sw_qp=sw_qp,
@@ -636,7 +641,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             # background=False, as we are including a common red noise process
             m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict,
                                     ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
-                                    red=red_flag, red2=has_param(df, "red_noise2"),
+                                    red=red_flag, red2=(red2 or has_param(df, "red_noise2")),
                                     dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_alpha=chrom_alpha, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw, sw_qp=sw_qp,
                                     band=has_param(df, "band_gp"), band_alpha=has_param(df, "bandalpha_gp"),
                                     chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
