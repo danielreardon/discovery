@@ -68,6 +68,66 @@ def selection_backend_flags(psr):
     return psr.backend_flags
 
 
+def selection_flags(flags, sep='_', warn_below=10):
+    """Return a selection splitting the TOAs on one or more per-TOA flags.
+
+    Any function taking a selection -- :func:`makenoise_measurement`,
+    :func:`makegp_ecorr` and its Legendre variants, :func:`makegp_fd_piecewise` --
+    splits on the backend by default. This generalises that to any entry of
+    ``psr.flags``, so a per-channel efac and equad is ``selection_flags('chan')``.
+
+    Labels carry the flag name, giving parameters like
+    ``J0437-4715_chan15_efac`` rather than ``J0437-4715_15_efac``, so a chain stays
+    readable and two flags cannot collide.
+
+    Raises if a named flag is absent, and if any TOA carries an empty value for one:
+    :func:`makenoise_measurement` drops the empty label, which would leave those TOAs
+    with zero measurement noise rather than an error.
+
+    flags:      flag name, or a sequence of names whose values are combined into one
+                label
+    sep:        separator between the parts of a combined label
+    warn_below: warn about groups holding fewer than this many TOAs, which cannot
+                constrain a white-noise parameter of their own
+    """
+    names = [flags] if isinstance(flags, str) else list(flags)
+
+    def selection(psr):
+        missing = [n for n in names if n not in psr.flags]
+        if missing:
+            raise KeyError(f'selection_flags: {psr.name} has no flag(s) {missing}; '
+                           f'available flags are {sorted(psr.flags)}.')
+
+        cols = []
+        for n in names:
+            v = np.asarray(psr.flags[n]).astype(str)
+            nempty = int((v == '').sum())
+            if nempty:
+                raise ValueError(
+                    f'selection_flags: {psr.name} has {nempty} TOAs with an empty {n!r} '
+                    f'flag. Those TOAs would be dropped from the selection and left with '
+                    f'zero measurement noise, so fix the flag rather than proceeding.')
+            cols.append(np.char.add(n, v))
+
+        labels = cols[0] if len(cols) == 1 else np.array(
+            [sep.join(parts) for parts in zip(*cols)])
+
+        counts = {lab: int((labels == lab).sum()) for lab in set(labels.tolist())}
+        thin = {k: v for k, v in counts.items() if v < warn_below}
+        if thin:
+            print(f'Warning: selection_flags on {names} for {psr.name} gives '
+                  f'{len(counts)} groups, of which {len(thin)} hold fewer than '
+                  f'{warn_below} TOAs: {dict(sorted(thin.items())[:6])}'
+                  f'{" ..." if len(thin) > 6 else ""}')
+
+        return labels
+
+    selection.__name__ = 'selection_' + '_'.join(names)
+    selection.flags = names
+
+    return selection
+
+
 def makenoise_measurement(psr, noisedict={}, scale=1.0, tnequad=False, ecorr=False, selection=selection_backend_flags, vectorize=True,
                           outliers=False, enterprise=False):
     backend_flags = selection(psr)
@@ -755,7 +815,8 @@ def makegp_timing(psr, constant=None, variance=None, svd=False, scale=1.0, varia
 
 # Analytically-marginalised SVD chromatic polynomial GP.
 def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None, groups=None,
-                        project_tm=True, constant=1.0e40, name='fd'):
+                        project_tm=True, constant=1.0e40, name='fd',
+                        kind='linear', bin_flag=None):
     """Piecewise-linear frequency-dependent delay, constant in time, marginalised.
 
     Absorbs arbitrary time-constant structure across the observing band -- residual
@@ -811,6 +872,29 @@ def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None, group
     without the projection the joint model is singular. Directions annihilated by
     the projection are dropped, so the surviving basis is full rank.
 
+    ``kind='constant'`` replaces the hat functions with indicator (boxcar) columns,
+    one per frequency bin with disjoint support. A hat basis interpolates between its
+    nodes and so cannot represent a step; an indicator basis represents a per-channel
+    offset exactly, in one column, and ``F^T F`` is diagonal at any bin count. For
+    hats a node is a centre; for indicators it is a bin, so the placement differs:
+
+    - ``spacing='flag'`` with ``bin_flag='chan'``: one column per distinct value of a
+      named per-TOA flag, using the instrument's own channelisation. Exact, and the
+      only mode that needs no estimate of where the edges are.
+    - ``spacing='gap'``: edges at the midpoints of the ``nodes - 1`` largest gaps in
+      the sorted unique frequencies, recovering the channelisation from the
+      frequencies alone where no flag exists. A fallback, not exact: the largest
+      within-channel gap can come within a factor of 1.3 of the smallest
+      between-channel gap.
+    - ``spacing='log'`` or ``'quantile'``: allowed, but these place edges without
+      regard to the channel structure and split channels across two columns, which is
+      reported. Balanced TOA counts do not reveal it, since quantile placement
+      balances them by construction.
+
+    Indicator columns are not normalised, so a coefficient reads directly as a delay
+    in seconds. They sum to the all-ones vector, which is exactly the timing model's
+    phase offset, so ``project_tm`` is required here too.
+
     Note this term is degenerate with the constant-in-time part of
     :func:`makegp_chrom_poly_svd`; pass this GP to that function's ``project``
     argument to remove the overlap.
@@ -821,7 +905,8 @@ def makegp_fd_piecewise(psr, nodes=16, spacing='quantile', selection=None, group
     mats, group_nodes = [], {}
     for label, sel in blocks:
         block = _fd_piecewise_block(psr, x, sel, nodes, spacing,
-                                    name if label is None else f'{name}_{label}')
+                                    name if label is None else f'{name}_{label}',
+                                    kind=kind, bin_flag=bin_flag)
         if block is not None:
             fmat_g, q = block
             mats.append(fmat_g)
@@ -898,7 +983,8 @@ _SQRT3 = float(np.sqrt(3.0))
 
 
 def makegp_fd_piecewise_matern(psr, nodes=16, spacing='quantile', selection=None, groups=None,
-                               project_tm=True, jitter=1e-8, name='fd_gp'):
+                               project_tm=True, jitter=1e-8, name='fd_gp',
+                               kind='linear', bin_flag=None):
     """Piecewise-linear frequency-dependent delay under a Matern-3/2 prior.
 
     Same hat-function basis as :func:`makegp_fd_piecewise`, but the node
@@ -931,6 +1017,13 @@ def makegp_fd_piecewise_matern(psr, nodes=16, spacing='quantile', selection=None
     jitter:     relative diagonal added to Phi, capping its condition number near
                 nodes/jitter
     name:       parameter-name stem
+    kind:       'linear' for hat functions, 'constant' for indicator columns; see
+                :func:`makegp_fd_piecewise` for the placement modes each admits. Under
+                'constant' the kernel positions are the TOA-weighted mean log(freq)
+                within each bin, so the kernel distance follows the data rather than
+                the bin edges.
+    bin_flag:   per-TOA flag whose distinct values define the bins, for
+                kind='constant' with spacing='flag'
     """
     from . import prior as _prior
 
@@ -940,7 +1033,8 @@ def makegp_fd_piecewise_matern(psr, nodes=16, spacing='quantile', selection=None
     mats, qs, group_nodes = [], [], {}
     for label, sel in blocks:
         block = _fd_piecewise_block(psr, x, sel, nodes, spacing,
-                                    name if label is None else f'{name}_{label}')
+                                    name if label is None else f'{name}_{label}',
+                                    kind=kind, bin_flag=bin_flag)
         if block is not None:
             fmat_g, q = block
             mats.append(fmat_g)
@@ -1013,12 +1107,17 @@ def makegp_fd_piecewise_matern(psr, nodes=16, spacing='quantile', selection=None
     return gp
 
 
-def _fd_piecewise_block(psr, x, sel, nodes, spacing, name):
-    """Hat-function block for one TOA selection, zero outside it.
+def _fd_piecewise_block(psr, x, sel, nodes, spacing, name, kind='linear', bin_flag=None):
+    """Basis block for one TOA selection, zero outside it.
 
-    Returns ``(fmat, q)`` with ``q`` the node positions in ``log(freq)``, or None
-    (with a warning) if the selection cannot support a basis. Blocks for
-    different selections have disjoint support and so are mutually orthogonal.
+    Returns ``(fmat, q)`` with ``q`` one position in ``log(freq)`` per column, or None
+    (with a warning) if the selection cannot support a basis. Blocks for different
+    selections have disjoint support and so are mutually orthogonal.
+
+    kind='linear' builds hat functions, where a node is a centre and the basis
+    interpolates between centres. kind='constant' builds indicator columns, where a
+    node is a bin and the columns are disjoint, so a per-bin step is represented
+    exactly in one column and ``F^T F`` is diagonal.
     """
     xs = x[sel]
 
@@ -1026,6 +1125,11 @@ def _fd_piecewise_block(psr, x, sel, nodes, spacing, name):
         print(f"Warning: fd_piecewise selection {name!r} for {psr.name} spans "
               f"{len(np.unique(xs))} distinct frequencies over {int(sel.sum())} TOAs; skipped.")
         return None
+
+    if kind == 'constant':
+        return _fd_constant_block(psr, x, sel, nodes, spacing, name, bin_flag)
+    if kind != 'linear':
+        raise ValueError(f"makegp_fd_piecewise: kind must be 'linear' or 'constant', got {kind!r}.")
 
     if spacing == 'log':
         q = np.linspace(xs.min(), xs.max(), nodes)
@@ -1049,6 +1153,119 @@ def _fd_piecewise_block(psr, x, sel, nodes, spacing, name):
         right = sel & (x > c) & (x <= hi)
         fmat[left, i] = (x[left] - lo) / (c - lo)
         fmat[right, i] = (hi - x[right]) / (hi - c)
+
+    return fmat, q
+
+
+def _fd_flag_masks(psr, sel, name, bin_flag):
+    """Per-TOA masks for each distinct value of a named flag, in numeric order if possible."""
+    if bin_flag is None:
+        raise ValueError(f"makegp_fd_piecewise: spacing='flag' needs bin_flag, the name of "
+                         f"the per-TOA flag whose distinct values define the bins.")
+    if bin_flag not in psr.flags:
+        raise KeyError(f"makegp_fd_piecewise: {psr.name} has no flag {bin_flag!r}; available "
+                       f"flags are {sorted(psr.flags)}. A silently skipped basis is worse "
+                       f"than a failure here.")
+
+    labels = np.asarray(psr.flags[bin_flag]).astype(str)
+    present = set(labels[sel].tolist())
+    if '' in present:
+        print(f"Warning: fd_piecewise {name!r} for {psr.name}: {int((labels[sel] == '').sum())} "
+              f"TOAs carry an empty {bin_flag!r} flag and get no column.")
+        present.discard('')
+
+    try:
+        order = sorted(present, key=int)
+    except ValueError:
+        # not every label is an integer, so plain string order is the only option
+        order = sorted(present)
+
+    return [(v, sel & (labels == v)) for v in order]
+
+
+def _fd_gap_edges(freqs, nbins):
+    """Interior bin edges at the midpoints of the ``nbins - 1`` largest frequency gaps.
+
+    Recovers an instrument's channelisation from the frequencies alone, for data whose
+    per-TOA frequencies are channel centroids rather than exact channel centres. A
+    threshold on the gap size is not used: the largest within-channel gap can come
+    within a factor of 1.6 of the smallest between-channel gap, so any fixed multiple
+    of the median gap needs tuning per pulsar.
+    """
+    uf = np.unique(freqs)
+    if nbins < 2 or len(uf) < 2:
+        return np.array([])
+    gaps = np.diff(uf)
+    take = min(int(nbins) - 1, len(gaps))
+    idx = np.argsort(gaps)[-take:]
+
+    return np.sort(0.5 * (uf[:-1][idx] + uf[1:][idx]))
+
+
+def _fd_constant_block(psr, x, sel, nodes, spacing, name, bin_flag):
+    """Indicator (boxcar) block for one TOA selection, one column per frequency bin.
+
+    Columns are 1 inside their bin and 0 outside, and are not normalised, so a fitted
+    coefficient reads directly as a delay in seconds. ``q`` is the TOA-weighted mean of
+    ``log(freq)`` within each bin, so the Matern kernel distance reflects where the
+    data are rather than where the bin edges are.
+    """
+    if spacing == 'flag':
+        pairs = _fd_flag_masks(psr, sel, name, bin_flag)
+    else:
+        xs = x[sel]
+        if spacing == 'gap':
+            edges = np.log(_fd_gap_edges(np.exp(xs), nodes))
+        elif spacing == 'log':
+            edges = np.linspace(xs.min(), xs.max(), int(nodes) + 1)[1:-1]
+        elif spacing == 'quantile':
+            edges = np.quantile(xs, np.linspace(0.0, 1.0, int(nodes) + 1)[1:-1])
+        else:
+            raise ValueError(f"makegp_fd_piecewise: for kind='constant', spacing must be "
+                             f"'flag', 'gap', 'log' or 'quantile', got {spacing!r}.")
+        which = np.searchsorted(np.asarray(edges, dtype=np.float64), x)
+        pairs = [(str(b), sel & (which == b)) for b in range(len(edges) + 1)]
+
+    counts = np.array([int(m.sum()) for _, m in pairs])
+    empty = [lab for (lab, _), n in zip(pairs, counts) if n == 0]
+    if empty:
+        print(f"Warning: fd_piecewise {name!r} for {psr.name}: {len(empty)} empty "
+              f"{spacing} bin(s) {empty} dropped.")
+    pairs = [(lab, m) for (lab, m), n in zip(pairs, counts) if n > 0]
+
+    if len(pairs) < 2:
+        print(f"Warning: fd_piecewise selection {name!r} for {psr.name} yields "
+              f"{len(pairs)} non-empty bin(s); skipped.")
+        return None
+
+    if spacing in ('log', 'quantile'):
+        # These place edges without regard to the channel structure. Balanced TOA counts
+        # do not show it -- quantile placement balances them by construction while still
+        # cutting channels in half -- so count the edges that land inside a populated
+        # block rather than in a gap between blocks.
+        uf = np.unique(np.exp(x[sel]))
+        gaps = np.diff(uf)
+        nb = len(pairs)
+        if len(gaps) >= nb > 1:
+            boundary = float(np.sort(gaps)[-(nb - 1)])
+            j = np.clip(np.searchsorted(uf, np.exp(edges)), 1, len(uf) - 1)
+            split = int(np.sum((uf[j] - uf[j - 1]) < 0.5 * boundary))
+            if split:
+                print(f"Warning: fd_piecewise {name!r} for {psr.name}: spacing={spacing!r} "
+                      f"with kind='constant' puts {split} of {len(edges)} edges inside a "
+                      f"populated frequency block, splitting it across two columns; "
+                      f"'flag' or 'gap' place edges between blocks.")
+        live = np.array([int(m.sum()) for _, m in pairs])
+        thin = int(np.sum(live < 0.5 * np.median(live)))
+        if thin:
+            print(f"Warning: fd_piecewise {name!r} for {psr.name}: {thin} of {len(live)} "
+                  f"bins hold below half the median TOA count ({int(np.median(live))}).")
+
+    fmat = np.zeros((len(x), len(pairs)), dtype=np.float64)
+    q = np.empty(len(pairs), dtype=np.float64)
+    for i, (_, mask) in enumerate(pairs):
+        fmat[mask, i] = 1.0
+        q[i] = float(np.mean(x[mask]))
 
     return fmat, q
 

@@ -488,3 +488,172 @@ def test_mpta_unknown_fd_prior_raises(psr, restore_priors):
     """fd_prior must name one of the two implemented priors."""
     with pytest.raises(ValueError, match='fd_prior'):
         _mpta_model(psr, fd=True, fd_prior='bogus')
+
+
+# --- piecewise-constant (indicator) basis -----------------------------------
+
+def _reference_linear_block(psr, x, sel, nodes, spacing):
+    """Hat-function block as it stood before ``kind`` was added, for regression."""
+    xs = x[sel]
+    if len(np.unique(xs)) < 2:
+        return None
+    if spacing == 'log':
+        q = np.linspace(xs.min(), xs.max(), nodes)
+    elif spacing == 'quantile':
+        q = np.quantile(xs, np.linspace(0.0, 1.0, nodes))
+    else:
+        raise ValueError
+    q = np.unique(q)
+    if len(q) < 2:
+        return None
+    fmat = np.zeros((len(x), len(q)), dtype=np.float64)
+    for i, c in enumerate(q):
+        lo = q[i-1] if i > 0 else c - (q[1] - q[0])
+        hi = q[i+1] if i < len(q) - 1 else c + (q[-1] - q[-2])
+        left = sel & (x >= lo) & (x <= c)
+        right = sel & (x > c) & (x <= hi)
+        fmat[left, i] = (x[left] - lo) / (c - lo)
+        fmat[right, i] = (hi - x[right]) / (hi - c)
+    return fmat, q
+
+
+@pytest.mark.parametrize('nodes', [16, 32])
+@pytest.mark.parametrize('spacing', ['quantile', 'log'])
+def test_linear_kind_is_bit_identical_to_the_reference(psr, nodes, spacing):
+    """kind='linear' must not move: existing chains depend on it."""
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    sel = np.ones(len(x), dtype=bool)
+
+    want = _reference_linear_block(psr, x, sel, nodes, spacing)
+    got = s._fd_piecewise_block(psr, x, sel, nodes, spacing, 'fd')
+
+    assert np.array_equal(got[0], want[0])
+    assert np.array_equal(got[1], want[1])
+
+
+def test_constant_columns_are_exactly_orthogonal(psr):
+    """Indicator columns have disjoint support, so F^T F is exactly diagonal."""
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    sel = np.ones(len(x), dtype=bool)
+    fmat, q = s._fd_piecewise_block(psr, x, sel, 24, 'gap', 'fd', kind='constant')
+
+    gram = fmat.T @ fmat
+    assert np.max(np.abs(gram - np.diag(np.diag(gram)))) == 0.0
+    assert np.all(np.diag(gram) > 0)
+    # one representative position per surviving column, ordered
+    assert len(q) == fmat.shape[1]
+    assert np.all(np.diff(q) > 0)
+
+
+def test_constant_columns_are_indicators(psr):
+    """Columns are 1 inside their bin and 0 outside, so a coefficient is a delay."""
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    sel = np.ones(len(x), dtype=bool)
+    fmat, _ = s._fd_piecewise_block(psr, x, sel, 24, 'gap', 'fd', kind='constant')
+
+    assert set(np.unique(fmat).tolist()) <= {0.0, 1.0}
+    # every TOA falls in exactly one bin
+    assert np.all(fmat.sum(axis=1) == 1.0)
+
+
+def test_constant_from_a_flag_gives_one_column_per_value(psr):
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    sel = np.ones(len(x), dtype=bool)
+    fmat, _ = s._fd_piecewise_block(psr, x, sel, 16, 'flag', 'fd',
+                                    kind='constant', bin_flag='f')
+
+    labels = np.asarray(psr.flags['f']).astype(str)
+    assert fmat.shape[1] == len(set(labels.tolist()))
+
+
+def test_constant_flag_survives_the_timing_model_projection(psr):
+    """Indicators sum to the all-ones vector, so exactly one direction is annihilated."""
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    sel = np.ones(len(x), dtype=bool)
+    fmat, _ = s._fd_piecewise_block(psr, x, sel, 16, 'flag', 'fd',
+                                    kind='constant', bin_flag='chan')
+
+    Q = _qtm(psr)
+    sv = np.linalg.svd(fmat - Q @ (Q.T @ fmat), compute_uv=False)
+    rank = int(np.sum(sv > 1e-8 * sv[0]))
+    assert rank == fmat.shape[1] - 1
+
+
+def test_constant_needs_a_flag_name_for_flag_spacing(psr):
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    sel = np.ones(len(x), dtype=bool)
+    with pytest.raises(ValueError, match='bin_flag'):
+        s._fd_piecewise_block(psr, x, sel, 16, 'flag', 'fd', kind='constant')
+
+
+def test_constant_raises_on_an_absent_flag(psr):
+    """A missing flag must fail, not silently skip the basis."""
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    sel = np.ones(len(x), dtype=bool)
+    with pytest.raises(KeyError, match='no flag'):
+        s._fd_piecewise_block(psr, x, sel, 16, 'flag', 'fd',
+                              kind='constant', bin_flag='not_a_flag')
+
+
+def test_unknown_kind_raises(psr):
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    sel = np.ones(len(x), dtype=bool)
+    with pytest.raises(ValueError, match='kind'):
+        s._fd_piecewise_block(psr, x, sel, 16, 'quantile', 'fd', kind='bogus')
+
+
+@pytest.mark.parametrize('prior_kind', ['improper', 'matern'])
+def test_constant_builds_through_the_public_builders(psr, prior_kind, restore_priors):
+    build = (s.makegp_fd_piecewise if prior_kind == 'improper'
+             else s.makegp_fd_piecewise_matern)
+    gp = build(psr, nodes=24, spacing='gap', kind='constant')
+
+    assert np.asarray(gp.F).shape[0] == len(psr.freqs)
+    assert np.asarray(gp.F).shape[1] > 1
+    assert hasattr(gp, 'fd_nodes')          # validate_noise.py finds the GP by this
+
+
+def test_gap_edges_split_at_the_largest_gaps():
+    """The edges are the midpoints of the nbins-1 largest gaps, in order."""
+    freqs = np.array([1.0, 1.1, 1.2, 5.0, 5.1, 9.0, 9.1, 9.2])
+    edges = s._fd_gap_edges(freqs, 3)
+
+    assert len(edges) == 2
+    assert np.allclose(edges, [(1.2 + 5.0) / 2, (5.1 + 9.0) / 2])
+
+
+# --- generalised flag selections --------------------------------------------
+
+def test_selection_flags_labels_carry_the_flag_name(psr):
+    labels = s.selection_flags('be')(psr)
+    raw = np.asarray(psr.flags['be']).astype(str)
+
+    assert set(labels.tolist()) == {'be' + v for v in set(raw.tolist())}
+
+
+def test_selection_flags_combines_several_flags(psr):
+    labels = s.selection_flags(['be', 'fe'])(psr)
+
+    assert all('_' in v for v in set(labels.tolist()))
+    assert len(set(labels.tolist())) >= len(set(np.asarray(psr.flags['be']).tolist()))
+
+
+def test_selection_flags_raises_on_an_absent_flag(psr):
+    with pytest.raises(KeyError, match='no flag'):
+        s.selection_flags('not_a_flag')(psr)
+
+
+def test_selection_flags_raises_on_empty_values(psr):
+    """An empty label is dropped downstream, leaving those TOAs with no noise."""
+    with pytest.raises(ValueError, match='empty'):
+        s.selection_flags('simul')(psr)
+
+
+def test_selection_flags_splits_the_white_noise(psr):
+    noise = s.makenoise_measurement(psr, tnequad=True,
+                                    selection=s.selection_flags('be'))
+    pars = noise.getN.params
+    labels = {'be' + v for v in set(np.asarray(psr.flags['be']).astype(str).tolist())}
+
+    assert len(pars) == 2 * len(labels)
+    assert all(any(lab in p for lab in labels) for p in pars)
