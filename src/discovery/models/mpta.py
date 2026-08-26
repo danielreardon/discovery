@@ -295,14 +295,22 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
 
 
 def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={},
+                        white_selection=None, # per-TOA flag whose values split efac and tnequad, e.g. 'chan' for one pair per frequency channel. ECORR is deliberately NOT split: each epoch-channel is a singleton, so a per-channel ECORR would give one basis column per TOA
                         ecorr=True, quadratic=False, ecorr_nmodes=None, ecorr_correlated=False, global_ecorr=False, # ecorr options. ecorr_nmodes=N selects an N-mode Legendre ECORR (log-frequency basis; nmodes=1 is standard ECORR); ecorr_correlated=True uses the full-M (correlated-mode) variant that can also model a frequency-asymmetric jitter amplitude
                         background=True, bkgrnd_log10_A=None, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_poly=True, sw=True, sw_powerlaw=False, sw_qp=False, sw_logf=False, # Base model: gwb, red, dm, chromatic, solar wind (sw_powerlaw=True selects the legacy power-law solar-wind GP instead of the time-domain one; sw_logf=True log-spaces its frequencies -- Fourier path only)
                         band=False, band_alpha=False, band_bw_min=20.0, fd=False, fd_nodes=16, fd_spacing='quantile', fd_selection=None, fd_prior='improper', fd_kind='linear', fd_bin_flag=None, # Additional GP models (fd=True marginalises an arbitrary time-constant frequency-dependent delay over fd_nodes frequency nodes; fd_selection splits it per TOA group; fd_prior selects the improper or the Matern-3/2 prior over the node amplitudes)
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False, # Deterministic chromatic models
                         shapiro=False, orbital_dm=False, orbital_dm_fourier=False, extra_gps=None, # Shapiro delay and orbital DM, and extra GPs
                         return_components=False): # Whether to return the list of model components in addition to the likelihood object (useful for adding additional components)
-    # Set up per-backend white noise (efac and tnequad)
-    measurement_noise = signals.makenoise_measurement(psr, tnequad=True, noisedict=noisedict)
+    # Set up white noise (efac and tnequad), per backend by default. white_selection names a
+    # per-TOA flag to split on instead, so 'chan' gives one efac and one tnequad per
+    # frequency channel. Both are split together: the split is what lets a production run
+    # show which of the two the excess lands in, rather than that being settled separately.
+    _white_sel = (signals.selection_flags(white_selection) if isinstance(white_selection, str)
+                  else white_selection)
+    measurement_noise = signals.makenoise_measurement(
+        psr, tnequad=True, noisedict=noisedict,
+        **({'selection': _white_sel} if _white_sel is not None else {}))
     # Set up model components
     model_components = [psr.residuals]
     model_components += [signals.makegp_timing(psr, svd=True)] # Set up timing model (analytically marginalised)

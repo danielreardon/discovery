@@ -855,6 +855,7 @@ def single_pulsar_noise(
     max_cadence_days=30,
     Tspan=None,
     noisedict={},
+    white_selection=None,  # per-TOA flag whose values split efac and tnequad; ECORR is not split
     ecorr=True,
     ecorr_nmodes=3,
     ecorr_correlated=True,
@@ -1024,8 +1025,11 @@ def single_pulsar_noise(
     # form; the time-domain one is already in ppta_gps.
     components = [psr.residuals]
     components += [signals.makegp_timing(psr, svd=True)]
-    components += [signals.makenoise_measurement(psr, tnequad=True,
-                                                 noisedict=noisedict)]
+    _white_sel = (signals.selection_flags(white_selection) if isinstance(white_selection, str)
+                  else white_selection)
+    components += [signals.makenoise_measurement(
+        psr, tnequad=True, noisedict=noisedict,
+        **({'selection': _white_sel} if _white_sel is not None else {}))]
 
     # An additional unlabelled event, searched over the full span. The labelled
     # events in models_dict['chrom_exp'] are always in the model, added by
