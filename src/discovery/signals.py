@@ -2565,6 +2565,24 @@ def quasi_periodic(tau, log10_sigma, log10_ell, log10_Gamma, log10_p):
 
     return smooth + diag
 
+def make_quasi_periodic(log10_p=None):
+    """Return a :func:`quasi_periodic` kernel, optionally with the period held fixed.
+
+    log10_p: log10 period in years. None samples it; a number fixes it, and the
+             returned kernel no longer takes log10_p, so the GP does not carry that
+             parameter at all.
+    """
+    if log10_p is None:
+        return quasi_periodic
+
+    lp = float(log10_p)
+
+    def kernel(tau, log10_sigma, log10_ell, log10_Gamma):
+        return quasi_periodic(tau, log10_sigma, log10_ell, log10_Gamma, lp)
+
+    return kernel
+
+
 # Generic time-domain GP  (achromatic / DM / chromatic; NO freq covariance)
 def makegp_timedomain(psr, covariance, dt=14 * 86400.0, fref=1400.0,
                       chromatic_index=0, common=[], name='timedomain_gp'):

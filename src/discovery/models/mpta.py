@@ -282,6 +282,30 @@ def _set_chrom_exp_priors(psr, chrom_exponential=False, tau_min_days=10.0,
     return updates
 
 
+# Period of the quasi-periodic solar-wind kernel, held fixed for MPTA. The array spans
+# 6.3 yr against a solar cycle of about 11 yr, so the data cover less than one period
+# and cannot measure it; sampling it would let it wander over a prior the likelihood
+# does not constrain. Datasets longer than a cycle should sample it instead.
+SW_QP_LOG10_P = float(np.log10(11.0))
+
+# TOA quantisation bin width for the time-domain solar-wind GP. This bins the TOAs; it
+# is not a basis resolution, and tying it to the Fourier cadence merged whole observing
+# sessions by a different factor for each pulsar -- at 30 days, 270 sessions into 63
+# bins for J1909-3744 against 135 into 52 for J0030+0451 -- so the fitted correlation
+# length depended on the binning and did so unequally across the array.
+#
+# Half a day puts exactly one observing session in each bin for every pulsar measured:
+# 270, 150, 137, 135 and 230 bins for J1909-3744, J0437-4715, J1022+1001, J0030+0451
+# and J1811-2405, matching their session counts. A whole day still merges the densely
+# observed ones, J1909-3744 to 249 and J1811-2405 to 212, which have sessions 1.0 to 1.2
+# days apart that share a bin depending on phase; a quarter day splits sessions instead.
+# One second would reproduce the ECORR epochs exactly, since makegp_ecorr quantises at
+# that default, but those are per observation rather than per session -- 573 bins for
+# J1811-2405 against 230 sessions -- and the solar-wind prior is a dense bin-by-bin
+# matrix rebuilt every likelihood call.
+SW_DT = 43200.0
+
+
 def _chrom_poly_noisedict(psr, chrom_alpha):
     """Noisedict fixing the chromatic polynomial's alpha, or empty if it is sampled.
 
@@ -308,7 +332,7 @@ def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=No
             ([signals.makegp_fourier(psr, signals.turnover_psd('chrom', turnover), components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_chrom, name='chrom_gp', alpha=chrom_alpha, fref=chrom_fref)] if chrom else [])+ \
             ([signals.makegp_chrom_poly_svd(psr, name='chrom_gp', project=fd_gp, noisedict=_chrom_poly_noisedict(psr, chrom_alpha))] if chrom_poly else []) + \
             # Solar wind: time-domain GP by default, quasi-periodic when sw_qp=True and squared-exponential otherwise, or the power-law (Fourier) GP when sw_powerlaw=True (legacy treatment).
-            ([solar.makegp_timedomain_solar_dm(psr, covariance=(signals.quasi_periodic if sw_qp else signals.squared_exponential), dt=max_cadence_days*86400.0, name='sw_gp')] if (sw and not sw_powerlaw) else []) + \
+            ([solar.makegp_timedomain_solar_dm(psr, covariance=(signals.make_quasi_periodic(SW_QP_LOG10_P) if sw_qp else signals.squared_exponential), dt=SW_DT, name='sw_gp')] if (sw and not sw_powerlaw) else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, T=psr_Tspan, fourierbasis=solar.make_fourierbasis_solar_dm(logf=sw_logf), name='sw_gp')] if (sw and sw_powerlaw) else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_band, name='band_gp')] if band else []) + \
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_band_alpha, name='bandalpha_gp')] if band_alpha else []))
@@ -328,7 +352,7 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
             ([signals.makegp_fftcov_chrom(psr, signals.turnover_psd('chrom', turnover), components=psr_knots, T=psr_Tspan, name='chrom_gp', alpha=chrom_alpha, fref=chrom_fref)] if chrom else [])+ \
             ([signals.makegp_chrom_poly_svd(psr, name='chrom_gp', project=fd_gp, noisedict=_chrom_poly_noisedict(psr, chrom_alpha))] if chrom_poly else []) + \
             # Solar wind: time-domain GP by default, quasi-periodic when sw_qp=True and squared-exponential otherwise, or the power-law (FFT-covariance) GP when sw_powerlaw=True (legacy treatment).
-            ([solar.makegp_timedomain_solar_dm(psr, covariance=(signals.quasi_periodic if sw_qp else signals.squared_exponential), dt=max_cadence_days*86400.0, name='sw_gp')] if (sw and not sw_powerlaw) else []) + \
+            ([solar.makegp_timedomain_solar_dm(psr, covariance=(signals.make_quasi_periodic(SW_QP_LOG10_P) if sw_qp else signals.squared_exponential), dt=SW_DT, name='sw_gp')] if (sw and not sw_powerlaw) else []) + \
             ([signals.makegp_fftcov_solar(psr, signals.powerlaw, components=psr_knots, T=psr_Tspan, name='sw_gp')] if (sw and sw_powerlaw) else []) + \
             ([signals.makegp_fftcov_band(psr, signals.powerlaw, components=psr_knots, T=psr_Tspan, name='band_gp')] if band else []) + \
             ([signals.makegp_fftcov_band_alpha(psr, signals.powerlaw, components=psr_knots, T=psr_Tspan, name='bandalpha_gp')] if band_alpha else []))

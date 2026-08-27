@@ -376,6 +376,13 @@ def chromatic_gaussian_20cm(psr, nu1=1000.0, nu2=2000.0):
 # ECORR
 # ---------------------------------------------------------------------------
 
+# TOA quantisation bin width for the time-domain solar-wind GP; see mpta.SW_DT. Half a
+# day, which puts one observing session in each bin. The period of the quasi-periodic
+# kernel is NOT fixed here: the PPTA span exceeds a solar cycle, so the data can
+# measure it.
+SW_DT = 43200.0
+
+
 def _set_band_priors(psr, band=False, band_alpha=False, bw_min_mhz=20.0):
     """Set data-bounded per-pulsar priors for the (fcenter, log10_bw) band GPs.
 
@@ -605,7 +612,7 @@ def makegp_solar_wind(psr, max_cadence_days=30.0, kernel='qp'):
                   'se': signals.squared_exponential}[kernel]
 
     return [solar.makegp_timedomain_solar_dm(
-        psr, covariance=covariance, dt=max_cadence_days * 86400.0,
+        psr, covariance=covariance, dt=SW_DT,
         name='sw_gp')]
 
 
@@ -797,7 +804,7 @@ def make_psr_gps_fourier(
     if chrom and chrom_poly:
         gp_signals.append(signals.makegp_chrom_poly_svd(psr, name='chrom_gp', project=fd_gp))
     if sw and not sw_powerlaw:
-        gp_signals.append(solar.makegp_timedomain_solar_dm(psr, covariance=signals.squared_exponential, dt=max_cadence_days * 86400.0, name='sw_gp'))
+        gp_signals.append(solar.makegp_timedomain_solar_dm(psr, covariance=signals.squared_exponential, dt=SW_DT, name='sw_gp'))
     if sw and sw_powerlaw:
         gp_signals.append(signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, T=psr_Tspan, fourierbasis=solar.make_fourierbasis_solar_dm(logf=sw_logf), name='sw_gp'))
     if band:
@@ -853,7 +860,7 @@ def make_psr_gps_fftint(
     if chrom and chrom_poly:
         gp_signals.append(signals.makegp_chrom_poly_svd(psr, name='chrom_gp', project=fd_gp))
     if sw and not sw_powerlaw:
-        gp_signals.append(solar.makegp_timedomain_solar_dm(psr, covariance=signals.squared_exponential, dt=max_cadence_days * 86400.0, name='sw_gp'))
+        gp_signals.append(solar.makegp_timedomain_solar_dm(psr, covariance=signals.squared_exponential, dt=SW_DT, name='sw_gp'))
     if sw and sw_powerlaw:
         gp_signals.append(signals.makegp_fftcov_solar(psr, signals.powerlaw, components=psr_knots, T=psr_Tspan, name='sw_gp'))
     if band:
