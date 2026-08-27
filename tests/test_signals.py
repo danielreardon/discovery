@@ -131,3 +131,110 @@ class TestMakeCombinedCrnValues:
         np.testing.assert_allclose(phi[2 * n_crn:], irn[2 * n_crn:], rtol=1e-6)
         # Bins within n_crn are strictly larger than IRN alone
         assert np.all(phi[:2 * n_crn] > irn[:2 * n_crn])
+
+
+# --- low-frequency turnover --------------------------------------------------
+
+from discovery import const, signals as s
+
+
+def _band(nyears=6.0, nc=156):
+    T = nyears * 365.25 * 86400.0
+    f = np.arange(1, nc + 1) / T
+    return T, f, np.full_like(f, 1.0 / T)
+
+
+def test_turnover_is_flat_below_the_corner_and_a_power_law_above():
+    f = np.logspace(-11, -6, 600)
+    df = np.gradient(f)
+    P = np.asarray(s.turnover(f, df, -14.0, 4.33, -8.0)) / df
+
+    lo = np.polyfit(np.log(f[:60]), np.log(P[:60]), 1)[0]
+    hi = np.polyfit(np.log(f[-60:]), np.log(P[-60:]), 1)[0]
+
+    assert abs(lo) < 0.01
+    assert abs(hi + 4.33) < 0.01
+
+
+def test_turnover_reduces_to_a_power_law_below_the_band():
+    """The model-averaging property: a corner far below 1/T leaves no imprint."""
+    _, f, df = _band()
+    pl = np.asarray(s.powerlaw(f, df, -14.0, 4.33))
+
+    for log10_fc, tol in ((-12.0, 1e-4), (-14.0, 1e-8)):
+        q = np.asarray(s.turnover(f, df, -14.0, 4.33, log10_fc))
+        assert np.max(np.abs(q / pl - 1)) < tol
+
+
+def test_make_turnover_default_is_the_corner_form():
+    _, f, df = _band()
+    for gamma in (2.0, 4.33, 6.0):
+        assert np.array_equal(np.asarray(s.make_turnover()(f, df, -14.0, gamma, -8.0)),
+                              np.asarray(s.turnover(f, df, -14.0, gamma, -8.0)))
+
+
+def test_make_turnover_samples_only_what_is_set_to_none():
+    named = lambda fn: list(inspect.signature(fn).parameters)[2:]
+
+    assert named(s.make_turnover()) == ['log10_A', 'gamma', 'log10_fc']
+    assert named(s.make_turnover(kappa=None)) == ['log10_A', 'gamma', 'log10_fc', 'kappa']
+    assert named(s.make_turnover(beta=None)) == ['log10_A', 'gamma', 'log10_fc', 'beta']
+    assert named(s.make_turnover(kappa=None, beta=None)) == [
+        'log10_A', 'gamma', 'log10_fc', 'kappa', 'beta']
+
+
+def test_make_turnover_matches_the_enterprise_expression():
+    _, f, df = _band()
+    A, g, lfc = -14.0, 4.33, -8.0
+    model = s.make_turnover(kappa=None, beta=None)
+
+    for kappa, beta in ((2.0, 0.5), (4.33, 0.5), (1.0, 2.0)):
+        hcf = 10**A * (f / const.fyr)**((3 - g) / 2) / (1 + (10**lfc / f)**kappa)**beta
+        want = hcf**2 / 12 / np.pi**2 / f**3 * df
+        got = np.asarray(model(f, df, A, g, lfc, kappa, beta))
+        assert np.max(np.abs(got / want - 1)) < 1e-12
+
+
+def test_make_turnover_flat_beta_keeps_the_low_frequency_slope_at_zero():
+    f = np.logspace(-12, -6, 800)
+    df = np.gradient(f)
+    for kappa in (2.0, 4.0, 8.0):
+        P = np.asarray(s.make_turnover(kappa=kappa)(f, df, -14.0, 4.33, -8.0)) / df
+        slope = np.polyfit(np.log(f[:60]), np.log(P[:60]), 1)[0]
+        assert abs(slope) < 0.01
+
+
+def test_make_turnover_rejects_a_bad_beta():
+    with pytest.raises(ValueError, match='flat'):
+        s.make_turnover(beta='sharp')
+
+
+def test_the_corner_prior_is_one_box_for_every_pulsar():
+    """A hierarchical prior needs a single support, so the box must not track Tspan."""
+    import discovery.models.mpta as mpta
+    from discovery import prior
+
+    mpta.update_priordict_standard_mpta()
+    box = prior.getsupport('JXXXX+0000_red_noise_log10_fc')
+
+    for par in ('J0437-4715_red_noise_log10_fc', 'J1909-3744_dm_gp_log10_fc',
+                'J0030+0451_chrom_gp_log10_fc', 'B1937+21_red_noise2_log10_fc'):
+        assert tuple(prior.getsupport(par)) == tuple(box)
+
+    # and it is the range the derivation gives for the array span
+    assert [float(v) for v in box] == [-9.3, -6.4]
+
+
+def test_turnover_set_normalises_and_rejects_unknown_components():
+    assert s.turnover_set(None) == frozenset()
+    assert s.turnover_set('red') == frozenset({'red'})
+    assert s.turnover_set(('red', 'dm')) == frozenset({'red', 'dm'})
+
+    with pytest.raises(ValueError, match='unknown component'):
+        s.turnover_set('spin')
+
+
+def test_turnover_psd_picks_the_right_spectrum():
+    assert s.turnover_psd('red', frozenset()) is s.powerlaw
+    assert s.turnover_psd('red', frozenset({'red'})) is s.turnover
+    assert s.turnover_psd('dm', frozenset({'red'})) is s.powerlaw

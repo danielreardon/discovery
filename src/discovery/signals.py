@@ -2156,6 +2156,29 @@ def turnover(f, df, log10_A, gamma, log10_fc):
     """
     return powerlaw(f, df, log10_A, gamma) / (1.0 + (10.0**log10_fc / f)**2.0)**(gamma / 2.0)
 
+# Components whose power-law GP can take a low-frequency turnover, and the GP name each
+# carries in the mpta and ppta models. Common processes are not offered here.
+TURNOVER_COMPONENTS = {'red': 'red_noise', 'red2': 'red_noise2',
+                       'dm': 'dm_gp', 'chrom': 'chrom_gp'}
+
+
+def turnover_set(turnover):
+    """Normalise a turnover argument -- None, a name, or a sequence -- to a set."""
+    if not turnover:
+        return frozenset()
+    names = (turnover,) if isinstance(turnover, str) else tuple(turnover)
+    unknown = set(names) - set(TURNOVER_COMPONENTS)
+    if unknown:
+        raise ValueError(f"turnover: unknown component(s) {sorted(unknown)}; known are "
+                         f"{sorted(TURNOVER_COMPONENTS)}.")
+    return frozenset(names)
+
+
+def turnover_psd(component, components):
+    """:func:`turnover` for a component named in components, else :func:`powerlaw`."""
+    return turnover if component in components else powerlaw
+
+
 def make_turnover(kappa=2.0, beta='flat'):
     """Return a power law with a low-frequency turnover.
 

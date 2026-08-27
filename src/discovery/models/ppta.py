@@ -63,6 +63,13 @@ PPTA_CONFIG = {
         '(.*_)?chrom_gp_log10_A': [-20, -11],
         '(.*_)?chrom_gp_gamma': [0, 7],
         '(.*_)?chrom_gp_alpha': [3, 10],
+        # Corner frequency of the optional low-frequency turnover, one box for every
+        # pulsar and every component so a hierarchical prior has a single support to
+        # work with. 1/(10 Tspan) to 1/(30 d) at the 20.96 yr PPTA array span. The
+        # lower bound is a decade below the lowest sampled frequency, where the
+        # turnover leaves no imprint and the model returns to a power law. Recompute
+        # both bounds for a different array span.
+        '(.*_)?log10_fc': [-9.8, -6.4],
         # band GP centre and bandwidth are bounded per-pulsar from psr.freqs by
         # _set_band_priors at model-build time.
         '(.*_)?band_gp_log10_A': [-18, -11],
@@ -757,6 +764,7 @@ def make_psr_gps_fourier(
     sw_logf=False,
     band=False,
     band_alpha=False,
+    turnover=None,
     fd_gp=None,
 ):
     """Per-pulsar power-law GPs on a Fourier basis.
@@ -768,19 +776,20 @@ def make_psr_gps_fourier(
     psr_Tspan = signals.getspan(psr) if Tspan is None else Tspan
     psr_components = int(psr_Tspan / (max_cadence_days * 86400))
     _set_band_priors(psr, band=band, band_alpha=band_alpha)
+    turnover = signals.turnover_set(turnover)
 
     gp_signals = []
 
     if background:
         gp_signals.append(signals.makegp_fourier(psr, signals.powerlaw_gwb(log10_A=bkgrnd_log10_A), components=psr_components, T=psr_Tspan, name='bkgrnd'))
     if red:
-        gp_signals.append(signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, T=psr_Tspan, name='red_noise'))
+        gp_signals.append(signals.makegp_fourier(psr, signals.turnover_psd('red', turnover), components=psr_components, T=psr_Tspan, name='red_noise'))
     if red2:
-        gp_signals.append(signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, T=psr_Tspan, name='red_noise2'))
+        gp_signals.append(signals.makegp_fourier(psr, signals.turnover_psd('red2', turnover), components=psr_components, T=psr_Tspan, name='red_noise2'))
     if dm:
-        gp_signals.append(signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_dm, name='dm_gp'))
+        gp_signals.append(signals.makegp_fourier(psr, signals.turnover_psd('dm', turnover), components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_dm, name='dm_gp'))
     if chrom:
-        gp_signals.append(signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_chrom, name='chrom_gp', alpha=chrom_alpha))
+        gp_signals.append(signals.makegp_fourier(psr, signals.turnover_psd('chrom', turnover), components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_chrom, name='chrom_gp', alpha=chrom_alpha))
     if chrom and chrom_poly:
         gp_signals.append(signals.makegp_chrom_poly_svd(psr, name='chrom_gp', project=fd_gp))
     if sw and not sw_powerlaw:
@@ -811,6 +820,7 @@ def make_psr_gps_fftint(
     sw_powerlaw=False,
     band=False,
     band_alpha=False,
+    turnover=None,
     fd_gp=None,
 ):
     """Per-pulsar power-law GPs on an FFT-covariance basis.
@@ -822,19 +832,20 @@ def make_psr_gps_fftint(
     psr_components = int(psr_Tspan / (max_cadence_days * 86400))
     psr_knots = 2 * psr_components + 1
     _set_band_priors(psr, band=band, band_alpha=band_alpha)
+    turnover = signals.turnover_set(turnover)
 
     gp_signals = []
 
     if background:
         gp_signals.append(signals.makegp_fftcov(psr, signals.powerlaw_gwb(log10_A=bkgrnd_log10_A), components=psr_knots, T=psr_Tspan, name='bkgrnd'))
     if red:
-        gp_signals.append(signals.makegp_fftcov(psr, signals.powerlaw, components=psr_knots, T=psr_Tspan, name='red_noise'))
+        gp_signals.append(signals.makegp_fftcov(psr, signals.turnover_psd('red', turnover), components=psr_knots, T=psr_Tspan, name='red_noise'))
     if red2:
-        gp_signals.append(signals.makegp_fftcov(psr, signals.powerlaw, components=psr_knots, T=psr_Tspan, name='red_noise2'))
+        gp_signals.append(signals.makegp_fftcov(psr, signals.turnover_psd('red2', turnover), components=psr_knots, T=psr_Tspan, name='red_noise2'))
     if dm:
-        gp_signals.append(signals.makegp_fftcov_dm(psr, signals.powerlaw, components=psr_knots, T=psr_Tspan, name='dm_gp'))
+        gp_signals.append(signals.makegp_fftcov_dm(psr, signals.turnover_psd('dm', turnover), components=psr_knots, T=psr_Tspan, name='dm_gp'))
     if chrom:
-        gp_signals.append(signals.makegp_fftcov_chrom(psr, signals.powerlaw, components=psr_knots, T=psr_Tspan, name='chrom_gp', alpha=chrom_alpha))
+        gp_signals.append(signals.makegp_fftcov_chrom(psr, signals.turnover_psd('chrom', turnover), components=psr_knots, T=psr_Tspan, name='chrom_gp', alpha=chrom_alpha))
     if chrom and chrom_poly:
         gp_signals.append(signals.makegp_chrom_poly_svd(psr, name='chrom_gp', project=fd_gp))
     if sw and not sw_powerlaw:
@@ -883,6 +894,7 @@ def single_pulsar_noise(
     mean_sw=False,
     band=False,
     band_alpha=None,
+    turnover=None,  # components ('red', 'red2', 'dm', 'chrom') whose power law takes a low-frequency turnover
     group=None,
     group_dict=None,
     group_tspan='backend',
@@ -1055,7 +1067,7 @@ def single_pulsar_noise(
                      background=background, red=red, red2=red2, dm=dm,
                      chrom=chrom, chrom_alpha=chrom_alpha, chrom_poly=False,
                      sw=(sw and sw_powerlaw), sw_powerlaw=sw_powerlaw,
-                     band=band, band_alpha=band_alpha, fd_gp=None)
+                     band=band, band_alpha=band_alpha, turnover=turnover, fd_gp=None)
     if fftint:
         if sw_logf:
             print('Warning: sw_logf=True is ignored with fftint=True (the '
