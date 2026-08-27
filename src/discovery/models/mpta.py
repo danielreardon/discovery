@@ -41,12 +41,15 @@ def update_priordict_standard_mpta():
         '(.*_)?chrom_gp_alpha':     [3.0, 10], # start at 3 to avoid confusion with DM.
         # Corner frequency of the optional low-frequency turnover, one box for every
         # pulsar and every component so a hierarchical prior has a single support to
-        # work with. 1/(10 Tspan) to 1/(30 d) at the 6.33 yr MPTA array span. The
-        # lower bound is a decade below the lowest sampled frequency, where the
-        # turnover leaves no imprint and the model returns to a power law, so the
-        # prior averages over its presence rather than asserting it. Recompute both
-        # bounds for a different array span.
-        '(.*_)?log10_fc':           [-9.3, -6.4],
+        # work with. The lower bound is set so the prior carries even odds on the
+        # turnover: a corner below f_low/5 suppresses the lowest sampled bin by 2.9%
+        # at gamma = 1.5 and 7.5% at gamma = 4, which is undetectable, so that region
+        # is the "no turnover" hypothesis and its share of the box is the prior
+        # probability of it. At the 6.33 yr MPTA array span, f_low/5 is 10^-9.00 and
+        # a lower bound of -11.5 puts 0.492 of the box below it. The upper bound is
+        # 1/(30 d). Recompute both for a different array span, and quote the f_low/5
+        # threshold with any odds read off this box.
+        '(.*_)?log10_fc':           [-11.5, -6.4],
         '(.*_)?sw_gp_log10_A':      [-10, -2],
         '(.*_)?sw_gp_gamma':        [0, 4],
         # SE kernel for time-domain SW GP

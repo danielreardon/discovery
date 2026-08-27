@@ -222,7 +222,7 @@ def test_the_corner_prior_is_one_box_for_every_pulsar():
         assert tuple(prior.getsupport(par)) == tuple(box)
 
     # and it is the range the derivation gives for the array span
-    assert [float(v) for v in box] == [-9.3, -6.4]
+    assert [float(v) for v in box] == [-11.5, -6.4]
 
 
 def test_turnover_set_normalises_and_rejects_unknown_components():

@@ -65,11 +65,15 @@ PPTA_CONFIG = {
         '(.*_)?chrom_gp_alpha': [3, 10],
         # Corner frequency of the optional low-frequency turnover, one box for every
         # pulsar and every component so a hierarchical prior has a single support to
-        # work with. 1/(10 Tspan) to 1/(30 d) at the 20.96 yr PPTA array span. The
-        # lower bound is a decade below the lowest sampled frequency, where the
-        # turnover leaves no imprint and the model returns to a power law. Recompute
-        # both bounds for a different array span.
-        '(.*_)?log10_fc': [-9.8, -6.4],
+        # work with. The lower bound is set so the prior carries even odds on the
+        # turnover: a corner below f_low/5 suppresses the lowest sampled bin by a few
+        # per cent, which is undetectable, so that region is the "no turnover"
+        # hypothesis and its share of the box is the prior probability of it. At the
+        # 20.96 yr PPTA array span, f_low/5 is 10^-9.52 and a lower bound of -12.6
+        # puts 0.498 of the box below it. The upper bound is 1/(30 d). Recompute both
+        # for a different array span, and quote the f_low/5 threshold with any odds
+        # read off this box.
+        '(.*_)?log10_fc': [-12.6, -6.4],
         # band GP centre and bandwidth are bounded per-pulsar from psr.freqs by
         # _set_band_priors at model-build time.
         '(.*_)?band_gp_log10_A': [-18, -11],
