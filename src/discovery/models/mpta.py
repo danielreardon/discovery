@@ -39,17 +39,23 @@ def update_priordict_standard_mpta():
         '(.*_)?chrom_gp_log10_A':   [-20, -11], # -20 minimum is "effectively zero" at alpha=10
         '(.*_)?chrom_gp_gamma':     [0, 7],
         '(.*_)?chrom_gp_alpha':     [3.0, 10], # start at 3 to avoid confusion with DM.
-        # Corner frequency of the optional low-frequency turnover, one box for every
-        # pulsar and every component so a hierarchical prior has a single support to
-        # work with. The lower bound is set so the prior carries even odds on the
-        # turnover: a corner below f_low/5 suppresses the lowest sampled bin by 2.9%
-        # at gamma = 1.5 and 7.5% at gamma = 4, which is undetectable, so that region
-        # is the "no turnover" hypothesis and its share of the box is the prior
-        # probability of it. At the 6.33 yr MPTA array span, f_low/5 is 10^-9.00 and
-        # a lower bound of -11.5 puts 0.492 of the box below it. The upper bound is
-        # 1/(30 d). Recompute both for a different array span, and quote the f_low/5
-        # threshold with any odds read off this box.
-        '(.*_)?log10_fc':           [-11.5, -6.4],
+        # Corner frequency of the optional low-frequency turnover, one box for every pulsar
+        # and every component so a hierarchical prior has a single support to work with.
+        # 1/(158 Tspan) to 1/yr at the 6.33 yr MPTA array span, giving EVEN prior odds on
+        # the presence of a turnover with "off" taken as at most 6% suppression of the
+        # lowest Fourier bin. The lower bound sits 1.5 decades below the lowest sampled
+        # frequency, where the turnover leaves no imprint and the model returns to a power
+        # law, so the prior averages over its presence rather than asserting it.
+        #
+        # The UPPER bound is 1/yr rather than the top of the band, because a corner near
+        # 1/(2 x cadence) makes the model unidentifiable in two ways: only one Fourier bin
+        # then lies above the corner, so gamma -- which is the HIGH-frequency slope in this
+        # parameterisation -- is set by a single bin; and the spectrum becomes nearly flat
+        # across the band, P(f_low)/P(f_high) = 2.8 at 1/(30 d) against 1753 at 1/yr, which
+        # is degenerate with the flat PSD of efac/equad/ecorr. Prior mass above about
+        # 1/(90 d) therefore buys neither the null nor a measurable turnover.
+        # Recompute both bounds for a different array span.
+        '(.*_)?log10_fc':           [-10.5, -7.5],
         '(.*_)?sw_gp_log10_A':      [-10, -2],
         '(.*_)?sw_gp_gamma':        [0, 4],
         # SE kernel for time-domain SW GP

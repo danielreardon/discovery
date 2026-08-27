@@ -69,11 +69,24 @@ PPTA_CONFIG = {
         # turnover: a corner below f_low/5 suppresses the lowest sampled bin by a few
         # per cent, which is undetectable, so that region is the "no turnover"
         # hypothesis and its share of the box is the prior probability of it. At the
-        # 20.96 yr PPTA array span, f_low/5 is 10^-9.52 and a lower bound of -12.6
-        # puts 0.498 of the box below it. The upper bound is 1/(30 d). Recompute both
-        # for a different array span, and quote the f_low/5 threshold with any odds
-        # read off this box.
-        '(.*_)?log10_fc': [-12.6, -6.4],
+        # 20.96 yr PPTA array span, f_low/5 is 10^-9.52, and against an upper bound of
+        # 1/yr a lower bound of -11.54 -- 1/(524 Tspan), or 1/(10983 yr) -- puts 0.500
+        # of the box below it.
+        #
+        # The UPPER bound is 1/yr rather than the top of the band because a corner near
+        # 1/(2 x cadence) leaves the spectrum nearly flat across the band:
+        # P(f_low)/P(f_high) at gamma = 3 is 2.8 at 1/(30 d) and 11.2 at 1/(60 d),
+        # against 1817 at 1/yr, and a flat PSD is what efac, equad and ecorr already
+        # produce, so that region of the box is a white-noise impostor inside the red
+        # component. This ratio is set by the corner's position within the band and is
+        # almost independent of the span, so it bites here as hard as it does on the
+        # shorter MPTA baseline, even though PPTA's 255 Fourier bins still leave 128
+        # above a corner at 1/(60 d). Prior mass above about 1/(90 d) buys neither the
+        # null nor a measurable turnover.
+        #
+        # Recompute both bounds for a different array span, and quote the f_low/5
+        # threshold with any odds read off this box.
+        '(.*_)?log10_fc': [-11.54, -7.5],
         # band GP centre and bandwidth are bounded per-pulsar from psr.freqs by
         # _set_band_priors at model-build time.
         '(.*_)?band_gp_log10_A': [-18, -11],

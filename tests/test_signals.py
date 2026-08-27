@@ -222,7 +222,33 @@ def test_the_corner_prior_is_one_box_for_every_pulsar():
         assert tuple(prior.getsupport(par)) == tuple(box)
 
     # and it is the range the derivation gives for the array span
-    assert [float(v) for v in box] == [-11.5, -6.4]
+    assert [float(v) for v in box] == [-10.5, -7.5]
+
+
+def test_the_corner_box_carries_even_prior_odds_on_the_turnover():
+    """Half the box below f_low/5, where the lowest sampled bin is barely suppressed.
+
+    Pins the RULE rather than the numbers: the derivation is stated in the comment
+    beside each prior, and this fails if a bound is moved without moving the threshold
+    it was derived from. The thresholds are log10(f_low / 5) at each array's documented
+    span, 6.33 yr for mpta and 20.96 yr for ppta.
+    """
+    import discovery.models.mpta as mpta
+    import discovery.models.ppta as ppta
+    from discovery import prior
+
+    updaters = ((mpta.update_priordict_standard_mpta, -9.00),
+                (ppta.update_priordict_standard_ppta, -9.52))
+    for update, threshold in updaters:
+        update()
+        lo, hi = (float(v) for v in prior.getsupport('JXXXX+0000_red_noise_log10_fc'))
+        assert abs((threshold - lo) / (hi - lo) - 0.5) < 0.005, (update.__name__, lo, hi)
+        # the upper bound is 1/yr, above which the corner is degenerate with white noise
+        assert abs(hi - np.log10(1.0 / 31557600.0)) < 0.01
+
+    # priordict_standard is a module-level global, so leave it as the rest of the suite
+    # expects to find it rather than with whichever model ran last
+    mpta.update_priordict_standard_mpta()
 
 
 def test_turnover_set_normalises_and_rejects_unknown_components():
