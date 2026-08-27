@@ -471,6 +471,7 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     return m
 
 def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
+                 psr_cadence_days=None,  # {psrname: cadence} overriding the PER-PULSAR GP cadence only; the common basis stays on max_cadence_days, since the common process is one signal sampled at the array's cadence
                  chrom_poly=True, fix_chrom_alpha=True, chrom_fref=1400.0, noise_point='median', hd=False, hd_fixed_gamma=False,
                  hd_components=None,  # HD Fourier bins; None -> common_components (i.e. tied to max_cadence_days)
                  os_analysis=False,  # put the HD spectrum (gw_log10_A/gw_gamma) into a PER-PULSAR GP instead of a globalgp, so discovery.optimal.OS can see it. For OS runs only -- NOT for Bayesian sampling, which wants the correlated globalgp.
@@ -567,6 +568,14 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
 
     if Tspan is None:
         Tspan = signals.getspan(psrs)
+    if psr_cadence_days:
+        unknown = sorted(set(psr_cadence_days) - {psr.name for psr in psrs})
+        if unknown:
+            raise ValueError(
+                f"common_noise: psr_cadence_days names {unknown}, which are not among "
+                f"the pulsars in this run. A misspelled name would otherwise leave that "
+                f"pulsar at the array cadence with nothing in the log to say so.")
+
     common_components = int(Tspan / (max_cadence_days * 86400))
     common_knots = 2 * common_components + 1
     # Bin count for the HD process, shared by the globalgp and the os_analysis
@@ -618,6 +627,13 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
         sw_qp = has_param(df, "sw_gp_log10_Gamma") or has_param(df, "sw_gp_log10_p")
         if sw_qp:
             print(f"detected quasi-periodic solar-wind kernel for {psr.name}")
+        # a per-pulsar cadence override changes only that pulsar's GP knot count; the
+        # common basis above is untouched, so the common process keeps one basis
+        psr_cadence = (psr_cadence_days or {}).get(psr.name, max_cadence_days)
+        if psr_cadence != max_cadence_days:
+            print(f"using a {psr_cadence} d per-pulsar GP cadence for {psr.name} "
+                  f"(array default {max_cadence_days} d)")
+
         # a stage-1 chain carrying <gp>_log10_fc was run with a turnover on that
         # component, so the stage-4 model must carry one too or it silently fits a
         # different spectrum
@@ -700,7 +716,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             # calls as the per-pulsar path; the time-domain solar-wind GP (gpname
             # 'sw_gp') is filtered out and kept per-pulsar (dense, not stackable).
             gp_builder = make_psr_gps_fftint if fftInt else make_psr_gps_fourier
-            psr_gps = gp_builder(psr, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False,
+            psr_gps = gp_builder(psr, max_cadence_days=psr_cadence, Tspan=Tspan, background=False,
                                  red=red_flag, red2=(red2 or has_param(df, "red_noise2")),
                                  dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"),
                                  chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=False,
@@ -712,7 +728,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             # Core per-pulsar likelihood: residuals + timing + white noise + ecorr +
             # deterministic delays + BayesEphem + time-domain solar-wind GP. NO sampled
             # Fourier/fftcov GPs (those go to the commongp).
-            core = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict,
+            core = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=psr_cadence, Tspan=Tspan, background=False, noisedict=noisedict,
                                        ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
                                        red=False, red2=False, dm=False, chrom=False, chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=False, sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
                                        band=False, band_alpha=False,
@@ -725,7 +741,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             psls.append(core)
         else:
             # background=False, as we are including a common red noise process
-            m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict,
+            m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=psr_cadence, Tspan=Tspan, background=False, noisedict=noisedict,
                                     ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
                                     red=red_flag, red2=(red2 or has_param(df, "red_noise2")),
                                     dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
