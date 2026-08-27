@@ -21,7 +21,7 @@ import numpyro
 import discovery as ds
 from discovery import prior
 from discovery.models.nanograv_single_pulsar_outlier import (
-    priordict_outlier_default,
+    priordict_outlier,
     make_outlier_likelihood,
     _partition_params,
     assemble_pardict,
@@ -63,13 +63,15 @@ class _FakePsrl:
         self.logL = _FakeLogL(params)
 
 
-# ---- priordict_outlier_default ----
+# ---- priordict_outlier ----
 
 def test_priordict_extends_standard_with_outlier_entries():
-    assert priordict_outlier_default["nu"] == [1, 40]
-    assert priordict_outlier_default["theta_m"] == 0.01
+    d = priordict_outlier()
+    assert d["nu"] == [1, 40]
+    assert d["theta_m"] == 0.01
+    # built on demand, so it tracks the dict in force rather than an import-time snapshot
     for k in prior.priordict_standard:
-        assert k in priordict_outlier_default
+        assert k in d
 
 
 # ---- _partition_params ----
@@ -406,7 +408,7 @@ def test_outlier_model_priors_pulled_from_priordict(j0437_psr):
     # ranges (Uniform draws are guaranteed to be in [low, high]).
     psrl = make_outlier_likelihood(j0437_psr, Tspan=20 * 86400 * 365.25)
     custom = {
-        **priordict_outlier_default,
+        **priordict_outlier(),
         "(.*_)?efac": [0.5, 1.5],
         "nu": [2, 10],
     }

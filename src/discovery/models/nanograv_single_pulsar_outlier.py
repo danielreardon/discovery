@@ -27,11 +27,20 @@ from .. import signals
 # `nu` is the inverse-gamma dof for the per-TOA alpha_i scaling.
 # `theta_m` is the Tak/Ellis/Ghosh prior mean for the outlier fraction
 # (a scalar hyperparameter, not a sampled range).
-priordict_outlier_default = {
-    **prior.priordict_standard,
+OUTLIER_PRIORS = {
     "nu":      [1, 40],
     "theta_m": 0.01,
 }
+
+
+def priordict_outlier(priordict=None):
+    """The standard priors as they stand now, plus the outlier entries.
+
+    priordict: base dict; defaults to the live prior.priordict_standard.
+    """
+    base = prior.priordict_standard if priordict is None else priordict
+
+    return {**base, **OUTLIER_PRIORS}
 
 
 def make_outlier_likelihood(psr, *,
@@ -276,14 +285,14 @@ def make_outlier_model(psrl, *, priordict=None):
     Args:
         psrl: outlier-configured `PulsarLikelihood`.
         priordict: prior ranges (regex-keyed). Defaults to
-            `priordict_outlier_default`. Must contain a match for every
+            `priordict_outlier()`. Must contain a match for every
             HMC site, including `nu`.
 
     Returns:
         A numpyro model callable `model(rng_key=None)`.
     """
     if priordict is None:
-        priordict = priordict_outlier_default
+        priordict = priordict_outlier()
 
     partition  = _partition_params(psrl)
     alpha_key  = partition["alpha_scaling"]
@@ -555,7 +564,7 @@ def run_outlier_mcmc(psr, *,
         psrl: optional pre-built outlier `PulsarLikelihood`. If `None`,
             `make_outlier_likelihood(psr, Tspan=Tspan, components=components)`
             is used.
-        priordict: prior dict. Defaults to `priordict_outlier_default`.
+        priordict: prior dict. Defaults to `priordict_outlier()`.
         init_values: optional dict of HMC-site init values; missing keys
             are filled from prior midpoints.
         num_warmup, num_samples: MCMC iteration counts.
@@ -567,7 +576,7 @@ def run_outlier_mcmc(psr, *,
         `OutlierFitResult`.
     """
     if priordict is None:
-        priordict = priordict_outlier_default
+        priordict = priordict_outlier()
     if psrl is None:
         psrl = make_outlier_likelihood(psr, Tspan=Tspan, components=components)
 

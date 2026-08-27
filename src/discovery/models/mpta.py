@@ -24,7 +24,9 @@ def update_priordict_standard_mpta():
     prior.priordict_standard.update({
         # White noise parameters
         '(.*_)?efac':               [0.5, 2],
-        '(.*_)?log10_tnequad':      [-10, -5],
+        # '(.*_)?tnequad', not '(.*_)?log10_tnequad': the dict is scanned in insertion
+        # order and the stock '(.*_)?tnequad' would shadow the longer key.
+        '(.*_)?tnequad':            [-10, -5],
         '(.*_)?log10_ecorr_q.*':    [-10, -5],
         '(.*_)?log10_ecorr':        [-10, -5],
         # Per-pulsar GW background parameters
@@ -39,22 +41,9 @@ def update_priordict_standard_mpta():
         '(.*_)?chrom_gp_log10_A':   [-20, -11], # -20 minimum is "effectively zero" at alpha=10
         '(.*_)?chrom_gp_gamma':     [0, 7],
         '(.*_)?chrom_gp_alpha':     [3.0, 10], # start at 3 to avoid confusion with DM.
-        # Corner frequency of the optional low-frequency turnover, one box for every pulsar
-        # and every component so a hierarchical prior has a single support to work with.
-        # 1/(158 Tspan) to 1/yr at the 6.33 yr MPTA array span, giving EVEN prior odds on
-        # the presence of a turnover with "off" taken as at most 6% suppression of the
-        # lowest Fourier bin. The lower bound sits 1.5 decades below the lowest sampled
-        # frequency, where the turnover leaves no imprint and the model returns to a power
-        # law, so the prior averages over its presence rather than asserting it.
-        #
-        # The UPPER bound is 1/yr rather than the top of the band, because a corner near
-        # 1/(2 x cadence) makes the model unidentifiable in two ways: only one Fourier bin
-        # then lies above the corner, so gamma -- which is the HIGH-frequency slope in this
-        # parameterisation -- is set by a single bin; and the spectrum becomes nearly flat
-        # across the band, P(f_low)/P(f_high) = 2.8 at 1/(30 d) against 1753 at 1/yr, which
-        # is degenerate with the flat PSD of efac/equad/ecorr. Prior mass above about
-        # 1/(90 d) therefore buys neither the null nor a measurable turnover.
-        # Recompute both bounds for a different array span.
+        # Turnover corner, one box for every pulsar and component. 1/(158 Tspan) to
+        # 1/yr at the 6.33 yr MPTA span; for another span,
+        # lower = 2 log10(f_low/5) - log10(1/yr).
         '(.*_)?log10_fc':           [-10.5, -7.5],
         '(.*_)?sw_gp_log10_A':      [-10, -2],
         '(.*_)?sw_gp_gamma':        [0, 4],
@@ -114,13 +103,10 @@ def update_priordict_standard_mpta():
         r'(.*_)?h3': [1e-10, 1e-5],
         r'(.*_)?stig': [1e-6, 1.0 - 1e-6], # clip to avoid singularities
         r'(.*_)?cosi': [1e-6, 1.0 - 1e-6], # clip to avoid singularities
-        r'(.*_)?orbital_dm_amp': [0.0, 1e-3],        # pc cm^-3
+        # orbital_DM_gaussian names its amplitude dm_orb_amp.
+        r'(.*_)?orbital_dm_dm_orb_amp': [0.0, 1e-3],     # pc cm^-3
         r'(.*_)?orbital_dm_phi0': [-1.0, 1.0],           # radians
-        r'(.*_)?orbital_dm_sigma_phi': [0.0, 0.5],      # radians
-        r'(.*_)?orbital_dm_fourier_cos\d+': [-1e-4, 1e-4],
-        r'(.*_)?orbital_dm_fourier_sin\d+': [-1e-4, 1e-4],
-        r'(.*_)?orbital_dm_gp_log10_A': [-12, -4],
-        r'(.*_)?orbital_dm_gp_gamma': [0, 7],
+        r'(.*_)?orbital_dm_sigma_phi': [0.0, 0.5],       # radians
         r"(.*_)?chrom_gp_CM0": [-1e-4, 1e-4], # <100us at 1.4 GHz
         r"(.*_)?chrom_gp_CM1": [-1e-5, 1e-5], # <10us/yr at 1.4 GHz
         r"(.*_)?chrom_gp_CM2": [-1e-6, 1e-6], # <1us/yr^2 at 1.4 GHz
@@ -371,8 +357,14 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
                         band=False, band_alpha=False, band_bw_min=20.0, fd=False, fd_nodes=16, fd_spacing='quantile', fd_selection=None, fd_prior='improper', fd_kind='linear', fd_bin_flag=None, # Additional GP models (fd=True marginalises an arbitrary time-constant frequency-dependent delay over fd_nodes frequency nodes; fd_selection splits it per TOA group; fd_prior selects the improper or the Matern-3/2 prior over the node amplitudes)
                         pa_gp=False, pa_bin_flag='chan', pa_project_fd=True, # Delay locked to twice the parallactic angle, with a free amplitude and phase per frequency channel; pa_project_fd removes the fd column span from the basis
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False, # Deterministic chromatic models
-                        shapiro=False, orbital_dm=False, orbital_dm_fourier=False, extra_gps=None, # Shapiro delay and orbital DM, and extra GPs
-                        return_components=False): # Whether to return the list of model components in addition to the likelihood object (useful for adding additional components)
+                        shapiro=False, orbital_dm=False, extra_gps=None, # Shapiro delay and orbital DM, and extra GPs
+                        return_components=False, # Whether to return the list of model components in addition to the likelihood object (useful for adding additional components)
+                        install_priors=True): # install this module's priordict_standard entries; a delegating caller that has installed its own passes False
+    # Follow the model being built, not the import order. update(), not clear(): it
+    # preserves front-inserted per-pulsar overrides.
+    if install_priors:
+        update_priordict_standard_mpta()
+
     # Set up white noise (efac and tnequad), per backend by default. white_selection names a
     # per-TOA flag to split on instead, so 'chan' gives one efac and one tnequad per
     # frequency channel. Both are split together: the split is what lets a production run
@@ -412,7 +404,7 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
         model_components += [signals.makedelay(psr, deterministic.chromatic_step(psr), name='chrom_step')]
     
     # Models that require orbital phase information    
-    if shapiro or orbital_dm or orbital_dm_fourier:
+    if shapiro or orbital_dm:
         if psr.tasc is None or psr.pb is None:
             raise ValueError("Error: You must set psr.tasc and psr.pb to use the deterministic Shapiro delay function")
         print("Warning: Binary phase calculation assumes constant orbital period and CIRCULAR ORBIT. Ensure this is a valid approximation for your pulsar and model choice.")
@@ -421,8 +413,6 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
             model_components += [signals.makedelay(psr, deterministic.shapiro_cosi(psr, binphase), name='shapiro')]
         if orbital_dm:
             model_components += [signals.makedelay(psr, deterministic.orbital_DM_gaussian(psr, binphase), name='orbital_dm')]
-        if orbital_dm_fourier:
-            model_components += [signals.makedelay(psr, deterministic.orbital_DM_fourier(psr, binphase), name='orbital_dm_fourier')]
 
     # Marginalised time-constant frequency-dependent delay (residual DM, mean
     # scattering, uncorrected profile evolution). Built first so it can be
@@ -507,10 +497,40 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                  phys_ephem_mainbelt_block="mass",
                  phys_ephem_belt_eta_convention="none",
                  phys_ephem_prior_units="edge", phys_ephem_minorbody_sigma=None,
-                 phys_ephem_mass_bodies=("jupiter", "saturn", "uranus", "neptune")):
+                 phys_ephem_mass_bodies=("jupiter", "saturn", "uranus", "neptune"),
+                 white_selection=None,  # per-TOA flag splitting efac and tnequad; MUST match the stage-1 runs, whose parameter names it changes, or the chain values cannot be matched to the rebuilt model and the white noise is sampled instead of fixed
+                 install_priors=True):  # install this module's priordict_standard entries, here AND in the per-pulsar single_pulsar_noise calls below; ppta.common_noise delegates here and passes False, having installed its own
     # Accepts a list of pulsars and their corresponding chain dataframes and constructs a GlobalLikelihood
+    # Also PPTA's machinery, so a delegating caller with its own boxes passes False.
+    if install_priors:
+        update_priordict_standard_mpta()
+
     def has_param(df, param_string):
         return any(param_string in col for col in df.columns)
+
+    def check_white_noise_names_match(psr, df):
+        """Warn about stage-1 efac names this rebuild's white-noise split cannot produce.
+
+        Compares the chain's efac columns against the names white_selection gives. Keyed
+        on names, not on which parameters are left free, so freeing a family is quiet.
+        """
+        sel = (signals.selection_flags(white_selection)
+               if isinstance(white_selection, str) else white_selection)
+        labels = np.asarray(sel(psr) if sel is not None else psr.backend_flags)
+        expected = {f'{psr.name}_{lab}_efac' for lab in set(labels.tolist())}
+
+        orphans = sorted(c for c in df.columns
+                         if c.startswith(psr.name) and c.endswith('_efac')
+                         and c not in expected)
+        if orphans:
+            print(f"Warning: {psr.name}: the stage-1 chain carries {len(orphans)} efac "
+                  f"parameter(s) this rebuild cannot produce, so their values -- and the "
+                  f"equad and ecorr values beside them -- are not applied and those "
+                  f"parameters fall back on their priors: {orphans[:4]}"
+                  f"{' ...' if len(orphans) > 4 else ''}. This rebuild splits the white "
+                  f"noise as white_selection={white_selection!r}; pass the value the "
+                  f"stage-1 run used.")
+        return orphans
 
     if chrom_poly:
         print("Note: chrom_poly=True (the chromatic polynomial is marginalised analytically).")
@@ -568,11 +588,10 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                 if has_param(df, "pa_gp_log10_sigma")]
     if _pa_psrs:
         print(f"pa_gp: {len(_pa_psrs)} of {len(psrs)} pulsar(s) carry the "
-              f"parallactic-angle GP, from the chains.")
-        print(f"Warning: its basis is NOT auto-detected. This build uses "
-              f"bin_flag={pa_bin_flag!r} and pa_project_fd={pa_project_fd}. Either "
-              f"differing from the stage-1 runs marginalises over a different basis, "
-              f"with no missing parameter to catch it.")
+              f"parallactic-angle GP, from the chains. Its basis is built with "
+              f"bin_flag={pa_bin_flag!r} and pa_project_fd={pa_project_fd}, which must "
+              f"match the stage-1 runs: neither leaves a parameter in the chains, so "
+              f"neither is auto-detected and a disagreement cannot be reported here.")
 
     commongp_path = use_commongp and fix_chrom_alpha
     if use_commongp and not fix_chrom_alpha:
@@ -766,7 +785,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             # deterministic delays + BayesEphem + time-domain solar-wind GP. NO sampled
             # Fourier/fftcov GPs (those go to the commongp).
             core = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=psr_cadence, Tspan=Tspan, background=False, noisedict=noisedict,
-                                       ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
+                                       ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_log10_ecorr"), white_selection=white_selection, install_priors=install_priors,
                                        red=False, red2=False, dm=False, chrom=False, chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=False, sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
                                        band=False, band_alpha=False,
                                        chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
@@ -775,12 +794,13 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                                        extra_gps=(sw_gps + pe_delays))
 
             per_psr_stack_gps.append(matrix.CompoundGP(stack_gps + common_gps))
+            check_white_noise_names_match(psr, df)
             print("Including pulsar", psr.name, "(commongp) with model parameters:\n", core.logL.params)
             psls.append(core)
         else:
             # background=False, as we are including a common red noise process
             m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=psr_cadence, Tspan=Tspan, background=False, noisedict=noisedict,
-                                    ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
+                                    ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_log10_ecorr"), white_selection=white_selection, install_priors=install_priors,
                                     red=red_flag, red2=(red2 or has_param(df, "red_noise2")),
                                     dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
                                     band=has_param(df, "band_gp"), band_alpha=has_param(df, "bandalpha_gp"),
@@ -789,6 +809,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                                     pa_gp=(psr.name in _pa_psrs), pa_bin_flag=pa_bin_flag, pa_project_fd=pa_project_fd,
                                     extra_gps=(common_gps + pe_delays))
 
+            check_white_noise_names_match(psr, df)
             print("Including pulsar", psr.name, "with model parameters:\n", m.logL.params)
             psls.append(m)
 

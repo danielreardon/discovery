@@ -1139,4 +1139,5 @@ def common_noise(psrs, chain_dfs, **kwargs):
     """
     update_priordict_standard_ppta()
 
-    return mpta.common_noise(psrs, chain_dfs, **kwargs)
+    # install_priors=False: otherwise mpta.common_noise reinstalls the MPTA boxes.
+    return mpta.common_noise(psrs, chain_dfs, install_priors=False, **kwargs)

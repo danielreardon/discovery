@@ -77,8 +77,22 @@ def test_uniform_only_models_reproduce_the_legacy_tanh_arithmetic():
                 == np.float64(expected_lp).view(np.int64))
 
 
-def test_makelogtransform_uniform_is_makelogtransform():
-    assert prior.makelogtransform_uniform is prior.makelogtransform
+def test_makelogtransform_uniform_dispatches_to_makelogtransform(monkeypatch):
+    """It is a wrapper, not an import-time alias.
+
+    Bound as `makelogtransform_uniform = makelogtransform` the two were identical, which
+    is what this test used to assert -- but it also meant replacing
+    prior.makelogtransform left every caller of the alias on the original, including the
+    sampler entry points that take it as a default argument value.
+    """
+    import inspect
+
+    assert (inspect.signature(prior.makelogtransform_uniform)
+            == inspect.signature(prior.makelogtransform))
+
+    sentinel = object()
+    monkeypatch.setattr(prior, 'makelogtransform', lambda *a, **k: sentinel)
+    assert prior.makelogtransform_uniform(None) is sentinel
 
 
 def test_vector_parameters_stay_arrays_when_the_flat_length_equals_the_parameter_count():

@@ -336,7 +336,7 @@ def test_common_noise_warns_about_the_settings_the_chain_cannot_carry(two_psrs, 
                       fd=False, pa_bin_flag='chan', noise_point='median')
 
     out = capsys.readouterr().out
-    assert 'basis is NOT auto-detected' in out
+    assert 'a disagreement cannot be reported' in out
     assert "bin_flag='chan'" in out
     assert 'pa_project_fd=True' in out
     assert f'1 of {len(two_psrs)} pulsar(s) carry' in out

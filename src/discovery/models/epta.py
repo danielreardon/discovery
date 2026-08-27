@@ -4,7 +4,8 @@ from .. import matrix
 from .. import signals
 from .. import likelihood
 
-priordict_standard = {
+# Local defaults for this module; NOT the shared prior.priordict_standard.
+EPTA_PRIORS = {
     "(.*_)?efac": [0.9, 1.1],
     "(.*_)?t2equad": [-8.5, -5],
     "(.*_)?tnequad": [-8.5, -5],

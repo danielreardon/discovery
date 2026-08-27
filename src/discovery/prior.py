@@ -428,6 +428,62 @@ def parse_spec(spec):
     return name, args
 
 
+def prior_key_witnesses(key):
+    """Parameter names a prior key is meant to match, or None if it cannot be sampled.
+
+    Used to test one key against another by matching rather than by reasoning about
+    regex containment, which is easy to get wrong: ``re.match`` is anchored only at the
+    start, so a trailing ``.*`` adds nothing and ``(.*_)?`` absorbs any underscored
+    prefix.
+    """
+    body = key[len('(.*_)?'):] if key.startswith('(.*_)?') else key
+    stem = body[:-2] if body.endswith('.*') else body
+    if not re.fullmatch(r'[A-Za-z0-9_]+', stem):
+        return None
+
+    if key.startswith('(.*_)?'):
+        return [stem, f'J0000+0000_{stem}', f'J0000+0000_backend_{stem}']
+
+    return [stem]
+
+
+def shadowed_priors(priordict=None):
+    """Prior keys that can never match, because an earlier key matches everything they do.
+
+    ``priordict_standard`` is scanned in insertion order with ``re.match`` and the first
+    hit wins, so a key registered after a looser one is dead. That is worse than a
+    missing prior: the declaration reads as though it applied, while the box in force
+    belongs to another entry. ``'(.*_)?tnequad'`` shadowing ``'(.*_)?log10_tnequad'`` is
+    the case this exists to catch, since ``.*_`` absorbs the ``log10_``.
+
+    A key is reported only when an earlier key matches EVERY witness of it, so the test
+    cannot fire on a merely overlapping pattern. Keys with no sampleable witness are
+    returned separately rather than passed silently, since an unanalysed key is not a
+    clean one.
+
+    Returns ``(shadowed, unchecked)``, where shadowed is a list of
+    ``(dead_key, key_that_shadows_it, values_agree)``.
+    """
+    if priordict is None:
+        priordict = priordict_standard
+
+    keys = list(priordict)
+    witnesses = {k: prior_key_witnesses(k) for k in keys}
+    unchecked = [k for k in keys if witnesses[k] is None]
+
+    shadowed = []
+    for i, key in enumerate(keys):
+        if witnesses[key] is None:
+            continue
+        for earlier in keys[:i]:
+            if all(re.match(earlier, w) for w in witnesses[key]):
+                shadowed.append((key, earlier,
+                                 priordict[key] == priordict[earlier]))
+                break
+
+    return shadowed, unchecked
+
+
 def _matchprior(par, priordict):
     """Return the prior specification for par, matching keys as regexes in order."""
     for pname, spec in priordict.items():
@@ -1263,7 +1319,16 @@ def _makelogtransform_uniform(func, priordict, slices, parlen, columns, hasvecto
                    matrix.jnparray(np.full(parlen, 10.0)))
 
 
-makelogtransform_uniform = makelogtransform
+def makelogtransform_uniform(func, priordict={}, jointpriors={}, prior_whiten=True):
+    """Deprecated alias for :func:`makelogtransform`, resolved at call time.
+
+    Bound as ``makelogtransform_uniform = makelogtransform`` this captured the function
+    object at import, so replacing ``prior.makelogtransform`` left every caller of the
+    alias on the original -- including the sampler entry points, which take it as a
+    default argument value.
+    """
+    return makelogtransform(func, priordict=priordict, jointpriors=jointpriors,
+                            prior_whiten=prior_whiten)
 
 
 def makelogtransform_classic(func, priordict={}):
