@@ -910,6 +910,11 @@ def single_pulsar_noise(
     fd_selection=None,
     fd_groups=None,
     fd_prior='improper',
+    # Delay locked to twice the parallactic angle, with a free amplitude and phase per
+    # frequency channel.
+    pa_gp=False,
+    pa_bin_flag='chan',
+    pa_project_fd=True,
     sw=None,
     sw_elat_max=SW_ELAT_MAX,
     sw_kernel='qp',
@@ -1043,6 +1048,12 @@ def single_pulsar_noise(
                           fd_groups_dict=md.get("fd_groups"), prior=fd_prior)
         if fd_gp is not None:
             ppta_gps += [fd_gp]
+
+    # Built after fd_gp because pa_project_fd removes the fd column span from the basis.
+    if pa_gp:
+        ppta_gps += [signals.makegp_pa_quadrature(
+            psr, bin_flag=pa_bin_flag, name='pa_gp',
+            project=fd_gp if (pa_project_fd and fd_gp is not None) else None)]
 
     if chrom and chrom_poly:
         ppta_gps += [signals.makegp_chrom_poly_svd(psr, name='chrom_gp',

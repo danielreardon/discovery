@@ -53,6 +53,9 @@ class Pulsar:
     # notes: currently ignores _isort/__isort and gets sorted versions
 
     columns = ['toas', 'stoas', 'toaerrs', 'residuals', 'freqs', 'backend_flags']
+    # read and written only where present. `telescope` carries the tempo2 observatory
+    # code per TOA, which signals.parallactic_angle uses to place the site.
+    optional_columns = ['telescope']
     vector_columns = ['Mmat', 'sunssb', 'pos_t']
     tensor_columns = ['planetssb']
     # flags are done separately
@@ -74,7 +77,7 @@ class Pulsar:
         f = pyarrow.feather.read_table(filename)
         self = Pulsar()
 
-        for array in Pulsar.columns:
+        for array in Pulsar.columns + Pulsar.optional_columns:
             if array in f.column_names:
                 setattr(self, array, f[array].to_numpy())
 
@@ -112,6 +115,9 @@ class Pulsar:
 
     def save_feather(self, filename, noisedict=None):
         pydict = {array: getattr(self, array) for array in Pulsar.columns}
+
+        pydict.update({array: getattr(self, array) for array in Pulsar.optional_columns
+                       if hasattr(self, array)})
 
         pydict.update({f'{array}_{i}': getattr(self, array)[:,i] for array in Pulsar.vector_columns
                                                                  for i in range(getattr(self, array).shape[1])})

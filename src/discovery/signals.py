@@ -1,3 +1,4 @@
+import os
 import re
 import inspect
 import typing
@@ -1157,20 +1158,20 @@ def _fd_piecewise_block(psr, x, sel, nodes, spacing, name, kind='linear', bin_fl
     return fmat, q
 
 
-def _fd_flag_masks(psr, sel, name, bin_flag):
+def _fd_flag_masks(psr, sel, name, bin_flag, what='fd_piecewise'):
     """Per-TOA masks for each distinct value of a named flag, in numeric order if possible."""
     if bin_flag is None:
-        raise ValueError(f"makegp_fd_piecewise: spacing='flag' needs bin_flag, the name of "
+        raise ValueError(f"{what}: spacing='flag' needs bin_flag, the name of "
                          f"the per-TOA flag whose distinct values define the bins.")
     if bin_flag not in psr.flags:
-        raise KeyError(f"makegp_fd_piecewise: {psr.name} has no flag {bin_flag!r}; available "
+        raise KeyError(f"{what}: {psr.name} has no flag {bin_flag!r}; available "
                        f"flags are {sorted(psr.flags)}. A silently skipped basis is worse "
                        f"than a failure here.")
 
     labels = np.asarray(psr.flags[bin_flag]).astype(str)
     present = set(labels[sel].tolist())
     if '' in present:
-        print(f"Warning: fd_piecewise {name!r} for {psr.name}: {int((labels[sel] == '').sum())} "
+        print(f"Warning: {what} {name!r} for {psr.name}: {int((labels[sel] == '').sum())} "
               f"TOAs carry an empty {bin_flag!r} flag and get no column.")
         present.discard('')
 
@@ -1202,7 +1203,7 @@ def _fd_gap_edges(freqs, nbins):
     return np.sort(0.5 * (uf[:-1][idx] + uf[1:][idx]))
 
 
-def _fd_constant_block(psr, x, sel, nodes, spacing, name, bin_flag):
+def _fd_constant_block(psr, x, sel, nodes, spacing, name, bin_flag, what='fd_piecewise'):
     """Indicator (boxcar) block for one TOA selection, one column per frequency bin.
 
     Columns are 1 inside their bin and 0 outside, and are not normalised, so a fitted
@@ -1211,7 +1212,7 @@ def _fd_constant_block(psr, x, sel, nodes, spacing, name, bin_flag):
     data are rather than where the bin edges are.
     """
     if spacing == 'flag':
-        pairs = _fd_flag_masks(psr, sel, name, bin_flag)
+        pairs = _fd_flag_masks(psr, sel, name, bin_flag, what)
     else:
         xs = x[sel]
         if spacing == 'gap':
@@ -1221,7 +1222,7 @@ def _fd_constant_block(psr, x, sel, nodes, spacing, name, bin_flag):
         elif spacing == 'quantile':
             edges = np.quantile(xs, np.linspace(0.0, 1.0, int(nodes) + 1)[1:-1])
         else:
-            raise ValueError(f"makegp_fd_piecewise: for kind='constant', spacing must be "
+            raise ValueError(f"{what}: for kind='constant', spacing must be "
                              f"'flag', 'gap', 'log' or 'quantile', got {spacing!r}.")
         which = np.searchsorted(np.asarray(edges, dtype=np.float64), x)
         pairs = [(str(b), sel & (which == b)) for b in range(len(edges) + 1)]
@@ -1229,12 +1230,12 @@ def _fd_constant_block(psr, x, sel, nodes, spacing, name, bin_flag):
     counts = np.array([int(m.sum()) for _, m in pairs])
     empty = [lab for (lab, _), n in zip(pairs, counts) if n == 0]
     if empty:
-        print(f"Warning: fd_piecewise {name!r} for {psr.name}: {len(empty)} empty "
+        print(f"Warning: {what} {name!r} for {psr.name}: {len(empty)} empty "
               f"{spacing} bin(s) {empty} dropped.")
     pairs = [(lab, m) for (lab, m), n in zip(pairs, counts) if n > 0]
 
     if len(pairs) < 2:
-        print(f"Warning: fd_piecewise selection {name!r} for {psr.name} yields "
+        print(f"Warning: {what} selection {name!r} for {psr.name} yields "
               f"{len(pairs)} non-empty bin(s); skipped.")
         return None
 
@@ -1251,14 +1252,14 @@ def _fd_constant_block(psr, x, sel, nodes, spacing, name, bin_flag):
             j = np.clip(np.searchsorted(uf, np.exp(edges)), 1, len(uf) - 1)
             split = int(np.sum((uf[j] - uf[j - 1]) < 0.5 * boundary))
             if split:
-                print(f"Warning: fd_piecewise {name!r} for {psr.name}: spacing={spacing!r} "
+                print(f"Warning: {what} {name!r} for {psr.name}: spacing={spacing!r} "
                       f"with kind='constant' puts {split} of {len(edges)} edges inside a "
                       f"populated frequency block, splitting it across two columns; "
                       f"'flag' or 'gap' place edges between blocks.")
         live = np.array([int(m.sum()) for _, m in pairs])
         thin = int(np.sum(live < 0.5 * np.median(live)))
         if thin:
-            print(f"Warning: fd_piecewise {name!r} for {psr.name}: {thin} of {len(live)} "
+            print(f"Warning: {what} {name!r} for {psr.name}: {thin} of {len(live)} "
                   f"bins hold below half the median TOA count ({int(np.median(live))}).")
 
     fmat = np.zeros((len(x), len(pairs)), dtype=np.float64)
@@ -1268,6 +1269,286 @@ def _fd_constant_block(psr, x, sel, nodes, spacing, name, bin_flag):
         q[i] = float(np.mean(x[mask]))
 
     return fmat, q
+
+# Parallactic angle
+
+# ITRF geocentric coordinates in metres, verbatim from tempo2's observatories.dat
+OBSERVATORY_ITRF = {
+    'pks':     (-4554231.500,  2816759.100, -3454036.300),   # PARKES / MURRIYANG
+    'meerkat': ( 5109360.133,  2006852.586, -3238948.127),   # MEERKAT
+}
+
+_WGS84_A = 6378137.0
+_WGS84_E2 = (1.0 / 298.257223563) * (2.0 - 1.0 / 298.257223563)
+
+
+def _itrf_to_geodetic(x, y, z):
+    """Geodetic latitude and longitude, in radians, from ITRF metres on WGS84.
+
+    The latitude is geodetic, i.e. measured from the local vertical, which is the
+    convention :func:`parallactic_angle` needs.
+    """
+    lon = np.arctan2(y, x)
+    p = np.hypot(x, y)
+    lat = np.arctan2(z, p * (1.0 - _WGS84_E2))
+    for _ in range(8):
+        N = _WGS84_A / np.sqrt(1.0 - _WGS84_E2 * np.sin(lat)**2)
+        h = p / np.cos(lat) - N
+        lat = np.arctan2(z, p * (1.0 - _WGS84_E2 * N / (N + h)))
+
+    return lat, lon
+
+
+def _observatories_dat():
+    """tempo2's observatory table as ``{key: (x, y, z)}``, or ``{}`` if unreachable.
+
+    Keys are the lowercased code and name columns, so either identifies a site.
+    """
+    root = os.environ.get('TEMPO2')
+    if not root:
+        return {}
+    path = os.path.join(root, 'observatory', 'observatories.dat')
+    if not os.path.exists(path):
+        return {}
+
+    table = {}
+    for line in open(path):
+        fields = line.split()
+        if len(fields) < 5 or line.lstrip().startswith('#'):
+            continue
+        try:
+            xyz = tuple(float(v) for v in fields[:3])
+        except ValueError:
+            continue
+        for key in (fields[4], fields[3]):
+            table.setdefault(key.lower(), xyz)
+
+    return table
+
+
+def observatory_location(site):
+    """Geodetic latitude and longitude in radians for an observing site.
+
+    site: tempo2 observatory code or name, matched case-insensitively against
+          :data:`OBSERVATORY_ITRF` and then against
+          ``$TEMPO2/observatory/observatories.dat``; or an explicit
+          ``(latitude, longitude)`` pair in degrees
+    """
+    if not isinstance(site, str):
+        lat, lon = site
+        return np.deg2rad(float(lat)), np.deg2rad(float(lon))
+
+    key = site.strip().lower()
+    xyz = OBSERVATORY_ITRF.get(key) or _observatories_dat().get(key)
+    if xyz is None:
+        raise KeyError(
+            f'observatory_location: no coordinates for site {site!r}. Known sites are '
+            f'{sorted(OBSERVATORY_ITRF)}; set $TEMPO2 to reach the full tempo2 table, or '
+            f'pass site=(latitude_deg, longitude_deg).')
+
+    return _itrf_to_geodetic(*xyz)
+
+
+def greenwich_sidereal_angle(mjd_utc):
+    """Greenwich mean sidereal time in radians, from a UTC MJD.
+
+    UT1 is approximated by UTC and the equation of the equinoxes is dropped, together
+    worth under 0.01 degrees of hour angle.
+    """
+    d = np.asarray(mjd_utc, dtype=np.float64) + (2400000.5 - 2451545.0)
+    T = d / 36525.0
+    deg = 280.46061837 + 360.98564736629 * d + 0.000387933 * T**2 - T**3 / 38710000.0
+
+    return np.deg2rad(np.mod(deg, 360.0))
+
+
+def parallactic_angle(psr, site=None):
+    """Parallactic angle at each TOA, in radians, in ``(-pi, pi]``.
+
+    The angle between the great circle from the source to the zenith and the great
+    circle from the source to the north celestial pole,
+
+        tan(psi) = sin(H) cos(phi) / [sin(phi) cos(dec) - cos(phi) sin(dec) cos(H)]
+
+    with ``H`` the local hour angle and ``phi`` the geodetic latitude of the site.
+
+    Computed from ``psr.stoas``, the site arrival times, and NOT from ``psr.toas``,
+    which are barycentric: the two differ by the Roemer delay plus TDB - UTC, which is
+    degrees of hour angle.
+
+    psr:  Discovery Pulsar object, carrying ``stoas`` and the source position in
+          ``phi`` and ``theta``
+    site: observing site, if ``psr.telescope`` is absent or is to be overridden --
+          a tempo2 code or name, or a ``(latitude, longitude)`` pair in degrees.
+          With ``psr.telescope`` present each TOA is placed at its own site, so
+          combined data spanning several telescopes needs no argument here.
+    """
+    if not hasattr(psr, 'stoas'):
+        raise AttributeError(
+            f'parallactic_angle: {psr.name} has no stoas, the site arrival times. The '
+            f'barycentric toas are not a substitute -- they carry the Roemer delay, '
+            f'which is degrees of hour angle. Rebuild the feather with the stoas column.')
+
+    mjd = np.asarray(psr.stoas, dtype=np.float64) / 86400.0
+    ra, dec = float(psr.phi), 0.5 * np.pi - float(psr.theta)
+
+    telescope = getattr(psr, 'telescope', None)
+    if site is not None:
+        if telescope is not None:
+            named = sorted(set(np.asarray(telescope).astype(str).tolist()))
+            if len(named) > 1 or (len(named) == 1 and named[0].lower() != str(site).lower()):
+                print(f'Warning: parallactic_angle: {psr.name} carries telescope(s) {named} '
+                      f'but site={site!r} was given, and overrides them for every TOA.')
+        lat, lon = observatory_location(site)
+        H = greenwich_sidereal_angle(mjd) + lon - ra
+    elif telescope is not None:
+        labels = np.asarray(telescope).astype(str)
+        gst = greenwich_sidereal_angle(mjd)
+        H = np.empty(len(mjd), dtype=np.float64)
+        lat = np.empty(len(mjd), dtype=np.float64)
+        for value in sorted(set(labels.tolist())):
+            mask = labels == value
+            lat_s, lon_s = observatory_location(value)
+            lat[mask] = lat_s
+            H[mask] = gst[mask] + lon_s - ra
+    else:
+        raise ValueError(
+            f'parallactic_angle: {psr.name} has no telescope column and no site= was '
+            f'given, so there is nowhere to stand. Feathers written by enterprise carry '
+            f'the column; otherwise pass e.g. site="meerkat".')
+
+    return np.arctan2(np.sin(H) * np.cos(lat),
+                      np.sin(lat) * np.cos(dec) - np.cos(lat) * np.sin(dec) * np.cos(H))
+
+
+def makegp_pa_quadrature(psr, bin_flag='chan', harmonic=2, site=None,
+                         project=None, project_tm=True, name='pa_gp'):
+    """Delay locked to a harmonic of the parallactic angle, per frequency channel.
+
+    For a receiver with fixed feeds the sky rotates through the parallactic angle
+    ``psi``, so leakage between the polarisation products enters the total-intensity
+    profile modulated by ``sin(m psi)`` and ``cos(m psi)`` and shifts the fitted arrival
+    time. The shift is constant in time at fixed ``psi`` and differs between frequency
+    channels.
+
+    ``harmonic`` is 2 because a rotation of the feed mixes Q and U through twice the
+    angle while leaving V invariant, so a Jones rotation produces no first harmonic at
+    all. A term at ``m = 1`` would need a different mechanism, such as an
+    elevation-dependent deformation, and belongs in its own component rather than here.
+
+    The basis is the channel-indicator basis of :func:`makegp_fd_piecewise` with
+    ``kind='constant'`` and ``spacing='flag'``, multiplied row-wise by the two
+    quadratures::
+
+        column (c, sin):   F[i] = 1[chan_i = c] sin(m psi_i)
+        column (c, cos):   F[i] = 1[chan_i = c] cos(m psi_i)
+
+    giving ``2 x n_chan`` columns, the sin block then the cos block, so column j of one
+    matches column j of the other and both match bin j. Each channel therefore carries a
+    free amplitude and a free phase. The bins come from ``bin_flag`` and nowhere else:
+    the leakage is a property of the receiver's channelisation, so bins inferred from
+    the frequencies would be a guess at something the instrument already records.
+
+    The coefficients carry a proper prior ``Phi = sigma**2 I`` over the whole basis,
+    sampling one ``{psr}_{name}_log10_sigma``: a delay in seconds, per quadrature, with
+    a channel of amplitude A having ``E[A**2] = 2 sigma**2``. The box is ``[-10, -6]``.
+
+    The basis is not orthonormalised, and the projections are applied to the design
+    matrix while Phi is left alone, which leaves the columns unequal in norm:
+    ``sigma**2 F F^T`` with the projected ``F`` is the prior the unprojected model
+    induces on the subspace that remains, so rescaling the columns would substitute a
+    different one. Rank deficiency is harmless, since the Woodbury form inverts Phi
+    rather than F, and an annihilated direction integrates back to its prior. The
+    delivered rank is reported.
+
+    psr:        Discovery Pulsar object
+    bin_flag:   per-TOA flag whose distinct values define the frequency bins
+    harmonic:   multiple of the parallactic angle to model
+    site:       observing site, passed to :func:`parallactic_angle`
+    project:    further bases to remove alongside the timing model, each an array or a
+                GP with a non-callable ``F``. The quadratures have a non-zero mean
+                within a channel, so each column here overlaps the corresponding channel
+                indicator of a piecewise-constant FD basis; pass that GP here to remove
+                the overlap
+    project_tm: remove the timing-model column span
+    name:       base name for the GP parameters
+    """
+    from . import prior as _prior
+
+    harmonic = int(harmonic)
+    if harmonic < 1:
+        raise ValueError(f'makegp_pa_quadrature: harmonic must be a positive integer, '
+                         f'got {harmonic}.')
+    if not bin_flag:
+        raise ValueError(
+            f'makegp_pa_quadrature: {psr.name} needs bin_flag, the per-TOA flag whose '
+            f'distinct values define the frequency bins. Bins guessed from the '
+            f'frequencies would not be the receiver channelisation the leakage follows.')
+
+    psi = parallactic_angle(psr, site=site)
+
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    block = _fd_constant_block(psr, x, np.ones(len(x), dtype=bool), None, 'flag',
+                               name, bin_flag, what='makegp_pa_quadrature')
+    if block is None:
+        raise ValueError(f'makegp_pa_quadrature: no usable frequency bins for {psr.name}.')
+    ind, q = block
+
+    fmat = np.hstack([ind * np.sin(harmonic * psi)[:, None],
+                      ind * np.cos(harmonic * psi)[:, None]])
+
+    Q_null = np.linalg.qr(normalise_tm_basis(psr))[0] if project_tm else None
+
+    if project is not None:
+        parts = project if isinstance(project, (list, tuple)) else [project]
+        mats = []
+        for part in parts:
+            F_p = getattr(part, 'F', part)
+            if callable(F_p):
+                raise ValueError(
+                    f'makegp_pa_quadrature: {psr.name}: a basis passed to project has a '
+                    f'callable F, so it has no fixed column span to remove. Only bases '
+                    f'with a constant design matrix can be projected out.')
+            mats.append(np.asarray(F_p, dtype=np.float64))
+        P = np.hstack(mats)
+        if Q_null is not None:
+            P = P - Q_null @ (Q_null.T @ P)
+        Up, Sp, _ = np.linalg.svd(P, full_matrices=False)
+        keep = Up[:, Sp > 1e-10 * Sp[0]]
+        Q_null = keep if Q_null is None else np.hstack([Q_null, keep])
+
+    if Q_null is not None:
+        before = np.linalg.svd(fmat, compute_uv=False)
+        fmat = fmat - Q_null @ (Q_null.T @ fmat)
+        after = np.linalg.svd(fmat, compute_uv=False)
+        rank = int(np.sum(after > 1e-8 * after[0])) if after[0] > 0 else 0
+        print(f'makegp_pa_quadrature: {psr.name} {name}: {fmat.shape[1]} columns over '
+              f'{ind.shape[1]} bin(s) at {harmonic} x PA; projection leaves rank {rank}, '
+              f'retaining {np.sum(after**2) / np.sum(before**2):.4f} of the basis power.')
+        if rank < fmat.shape[1]:
+            print(f'Warning: makegp_pa_quadrature: {psr.name} {name}: the projection '
+                  f'annihilates {fmat.shape[1] - rank} direction(s), which stay in the '
+                  f'basis and integrate back to their prior rather than being dropped, '
+                  f'so the marginal likelihood is unaffected.')
+
+    signame = f'{psr.name}_{name}_log10_sigma'
+    ones = matrix.jnparray(np.ones(fmat.shape[1]))
+
+    def getphi(params):
+        return 10.0**(2.0 * params[signame]) * ones
+    getphi.params = [signame]
+
+    _prior.priordict_standard.update(
+        {f'{re.escape(psr.name)}_{name}_log10_sigma': [-10.0, -6.0]})
+
+    gp = matrix.VariableGP(matrix.NoiseMatrix1D_var(getphi), fmat)
+    gp.index = {f'{psr.name}_{name}_coefficients({fmat.shape[1]})': slice(0, fmat.shape[1])}
+    gp.name, gp.pos, gp.gpname, gp.gpcommon = psr.name, psr.pos, name, []
+    gp.pa_harmonic = harmonic
+    gp.pa_bins = np.exp(q)
+    gp.pa_angle = psi
+
+    return gp
 
 def chrom_poly_basis(psr, fref=None):
     """Callable chromatic polynomial basis ``U * (fref/freq)**alpha``.
