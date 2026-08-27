@@ -127,6 +127,33 @@ def update_priordict_standard_mpta():
 
 update_priordict_standard_mpta() # Ensure priordict_standard is updated on import, but also update when a model is created to catch any changes during likelihood/prior initialisation
 
+def chain_point(df, psrname, point='median'):
+    """Per-pulsar fixed-noise values from a single-pulsar chain.
+
+    point='median' takes each parameter's marginal median, 'ml' the row of highest
+    logl. The median is much the quieter choice: measured leg to leg on chains sharing
+    TOAs, in units of each parameter's own posterior sd, the ML pick moves by 0.66 to
+    1.36 against 0.16 to 0.29 for the median, removing 65% to 84% of the leg-to-leg
+    scatter. The ML pick is close to one draw from the posterior rather than a summary
+    of it: its spread reaches 0.80 of the 3/sqrt(pi) expected for an independent draw.
+
+    What the ML has and the median does not is joint self-consistency: it is a single
+    realisable state, whereas a vector of marginal medians need not be a point the
+    posterior visits. For white noise, weakly correlated and well constrained, that is
+    worth much less than the scatter it costs. It is not negligible for a parameter
+    sliced out of a strong degeneracy, which is why fixing the chromatic index at any
+    point estimate leaves its amplitude posterior too narrow; sampling it is the fix
+    there, and the median only makes the fixed-alpha option less noisy.
+    """
+    cols = [c for c in df.columns if c.startswith(psrname)]
+    if point == 'median':
+        return {c: float(df[c].median()) for c in cols}
+    if point == 'ml':
+        ml = df.loc[df['logl'].idxmax()]
+        return {c: float(ml[c]) for c in cols}
+    raise ValueError(f"chain_point: point must be 'median' or 'ml', got {point!r}.")
+
+
 def gps2commongp(gps):
     """Pad/stack a list of per-pulsar GPs (each a ``matrix.CompoundGP`` of that
     pulsar's sampled GPs, or a single ``matrix.VariableGP``) into one common GP
@@ -268,7 +295,7 @@ def _chrom_poly_noisedict(psr, chrom_alpha):
     return {f'{psr.name}_chrom_gp_alpha': float(chrom_alpha)}
 
 
-def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_poly=True, sw=True, sw_powerlaw=False, sw_qp=False, sw_logf=False, band=False, band_alpha=False, band_bw_min=20.0, turnover=None, fd_gp=None):
+def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_fref=1400.0, chrom_poly=True, sw=True, sw_powerlaw=False, sw_qp=False, sw_logf=False, band=False, band_alpha=False, band_bw_min=20.0, turnover=None, fd_gp=None):
     psr_Tspan = signals.getspan(psr) if Tspan is None else Tspan
     psr_components = int(psr_Tspan / (max_cadence_days * 86400))
     _set_band_priors(psr, band=band, band_alpha=band_alpha, bw_min_mhz=band_bw_min)
@@ -278,7 +305,7 @@ def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=No
             ([signals.makegp_fourier(psr, signals.turnover_psd('red', turnover), components=psr_components, T=psr_Tspan, name='red_noise')] if red else []) + \
             ([signals.makegp_fourier(psr, signals.turnover_psd('red2', turnover), components=psr_components, T=psr_Tspan, name='red_noise2')] if red2 else []) + \
             ([signals.makegp_fourier(psr, signals.turnover_psd('dm', turnover), components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_dm, name='dm_gp')] if dm else [])+ \
-            ([signals.makegp_fourier(psr, signals.turnover_psd('chrom', turnover), components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_chrom, name='chrom_gp', alpha=chrom_alpha)] if chrom else [])+ \
+            ([signals.makegp_fourier(psr, signals.turnover_psd('chrom', turnover), components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_chrom, name='chrom_gp', alpha=chrom_alpha, fref=chrom_fref)] if chrom else [])+ \
             ([signals.makegp_chrom_poly_svd(psr, name='chrom_gp', project=fd_gp, noisedict=_chrom_poly_noisedict(psr, chrom_alpha))] if chrom_poly else []) + \
             # Solar wind: time-domain GP by default, quasi-periodic when sw_qp=True and squared-exponential otherwise, or the power-law (Fourier) GP when sw_powerlaw=True (legacy treatment).
             ([solar.makegp_timedomain_solar_dm(psr, covariance=(signals.quasi_periodic if sw_qp else signals.squared_exponential), dt=max_cadence_days*86400.0, name='sw_gp')] if (sw and not sw_powerlaw) else []) + \
@@ -287,7 +314,7 @@ def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=No
             ([signals.makegp_fourier(psr, signals.powerlaw, components=psr_components, T=psr_Tspan, fourierbasis=signals.fourierbasis_band_alpha, name='bandalpha_gp')] if band_alpha else []))
 
 
-def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_poly=True, sw=True, sw_powerlaw=False, sw_qp=False, band=False, band_alpha=False, band_bw_min=20.0, turnover=None, fd_gp=None):
+def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_fref=1400.0, chrom_poly=True, sw=True, sw_powerlaw=False, sw_qp=False, band=False, band_alpha=False, band_bw_min=20.0, turnover=None, fd_gp=None):
     psr_Tspan = signals.getspan(psr) if Tspan is None else Tspan
     psr_components = int(psr_Tspan / (max_cadence_days * 86400))
     psr_knots = 2 * psr_components + 1
@@ -298,7 +325,7 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
             ([signals.makegp_fftcov(psr, signals.turnover_psd('red', turnover), components=psr_knots, T=psr_Tspan, name='red_noise')] if red else []) + \
             ([signals.makegp_fftcov(psr, signals.turnover_psd('red2', turnover), components=psr_knots, T=psr_Tspan, name='red_noise2')] if red2 else []) + \
             ([signals.makegp_fftcov_dm(psr, signals.turnover_psd('dm', turnover), components=psr_knots, T=psr_Tspan, name='dm_gp')] if dm else [])+ \
-            ([signals.makegp_fftcov_chrom(psr, signals.turnover_psd('chrom', turnover), components=psr_knots, T=psr_Tspan, name='chrom_gp', alpha=chrom_alpha)] if chrom else [])+ \
+            ([signals.makegp_fftcov_chrom(psr, signals.turnover_psd('chrom', turnover), components=psr_knots, T=psr_Tspan, name='chrom_gp', alpha=chrom_alpha, fref=chrom_fref)] if chrom else [])+ \
             ([signals.makegp_chrom_poly_svd(psr, name='chrom_gp', project=fd_gp, noisedict=_chrom_poly_noisedict(psr, chrom_alpha))] if chrom_poly else []) + \
             # Solar wind: time-domain GP by default, quasi-periodic when sw_qp=True and squared-exponential otherwise, or the power-law (FFT-covariance) GP when sw_powerlaw=True (legacy treatment).
             ([solar.makegp_timedomain_solar_dm(psr, covariance=(signals.quasi_periodic if sw_qp else signals.squared_exponential), dt=max_cadence_days*86400.0, name='sw_gp')] if (sw and not sw_powerlaw) else []) + \
@@ -310,7 +337,7 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
 def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={},
                         white_selection=None, # per-TOA flag whose values split efac and tnequad, e.g. 'chan' for one pair per frequency channel. ECORR is deliberately NOT split: each epoch-channel is a singleton, so a per-channel ECORR would give one basis column per TOA
                         ecorr=True, quadratic=False, ecorr_nmodes=None, ecorr_correlated=False, global_ecorr=False, # ecorr options. ecorr_nmodes=N selects an N-mode Legendre ECORR (log-frequency basis; nmodes=1 is standard ECORR); ecorr_correlated=True uses the full-M (correlated-mode) variant that can also model a frequency-asymmetric jitter amplitude
-                        background=True, bkgrnd_log10_A=None, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_poly=True, sw=True, sw_powerlaw=False, sw_qp=False, sw_logf=False, turnover=None, # Base model: gwb, red, dm, chromatic, solar wind (sw_powerlaw=True selects the legacy power-law solar-wind GP instead of the time-domain one; sw_logf=True log-spaces its frequencies -- Fourier path only)
+                        background=True, bkgrnd_log10_A=None, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_fref=1400.0, chrom_poly=True, sw=True, sw_powerlaw=False, sw_qp=False, sw_logf=False, turnover=None, # Base model: gwb, red, dm, chromatic, solar wind (sw_powerlaw=True selects the legacy power-law solar-wind GP instead of the time-domain one; sw_logf=True log-spaces its frequencies -- Fourier path only)
                         band=False, band_alpha=False, band_bw_min=20.0, fd=False, fd_nodes=16, fd_spacing='quantile', fd_selection=None, fd_prior='improper', fd_kind='linear', fd_bin_flag=None, # Additional GP models (fd=True marginalises an arbitrary time-constant frequency-dependent delay over fd_nodes frequency nodes; fd_selection splits it per TOA group; fd_prior selects the improper or the Matern-3/2 prior over the node amplitudes)
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False, # Deterministic chromatic models
                         shapiro=False, orbital_dm=False, orbital_dm_fourier=False, extra_gps=None, # Shapiro delay and orbital DM, and extra GPs
@@ -404,9 +431,9 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
             # Fourier frequency grid to log-space; sw_logf needs fftint=False.
             print("Warning: sw_logf=True is ignored with fftint=True (the FFT-covariance "
                   "solar GP uses a time-interpolation basis). Use fftint=False.")
-        model_components += make_psr_gps_fftint(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, chrom_alpha=chrom_alpha, chrom_poly=chrom_poly, sw=sw, sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, band=band, band_alpha=band_alpha, band_bw_min=band_bw_min, turnover=turnover, fd_gp=fd_gp)
+        model_components += make_psr_gps_fftint(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=chrom_poly, sw=sw, sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, band=band, band_alpha=band_alpha, band_bw_min=band_bw_min, turnover=turnover, fd_gp=fd_gp)
     else:
-        model_components += make_psr_gps_fourier(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, chrom_alpha=chrom_alpha, chrom_poly=chrom_poly, sw=sw, sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, sw_logf=sw_logf, band=band, band_alpha=band_alpha, band_bw_min=band_bw_min, turnover=turnover, fd_gp=fd_gp)
+        model_components += make_psr_gps_fourier(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=chrom_poly, sw=sw, sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, sw_logf=sw_logf, band=band, band_alpha=band_alpha, band_bw_min=band_bw_min, turnover=turnover, fd_gp=fd_gp)
 
 
     if extra_gps is not None:
@@ -420,7 +447,7 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     return m
 
 def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
-                 chrom_poly=True, fix_chrom_alpha=True, hd=False, hd_fixed_gamma=False,
+                 chrom_poly=True, fix_chrom_alpha=True, chrom_fref=1400.0, noise_point='median', hd=False, hd_fixed_gamma=False,
                  hd_components=None,  # HD Fourier bins; None -> common_components (i.e. tied to max_cadence_days)
                  os_analysis=False,  # put the HD spectrum (gw_log10_A/gw_gamma) into a PER-PULSAR GP instead of a globalgp, so discovery.optimal.OS can see it. For OS runs only -- NOT for Bayesian sampling, which wants the correlated globalgp.
                  fd=False, fd_nodes=16, fd_spacing='quantile', fd_selection=None, fd_prior='improper', fd_kind='linear', fd_bin_flag=None,  # piecewise-linear frequency-dependent delay; nodes/spacing/selection MUST match the stage-1 runs, as they cannot be auto-detected (see below)
@@ -538,9 +565,8 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
     for psr, df in zip(psrs, chain_dfs):
         if not any(psr.name in col for col in df.columns):
             raise ValueError("Chain data frames do not match pulsar names")
-        # per-pulsar noise from the max-likelihood row of the chain
-        ml_idx = df['logl'].idxmax()
-        noisedict = {col: df.loc[ml_idx, col] for col in df.columns if col.startswith(psr.name)}
+        # per-pulsar fixed noise from the chain; see chain_point for why the median
+        noisedict = chain_point(df, psr.name, point=noise_point)
         # Fix chromatic alpha, or leave it sampled with a callable basis
         chrom_alpha = None
         if fix_chrom_alpha:
@@ -653,7 +679,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             psr_gps = gp_builder(psr, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False,
                                  red=red_flag, red2=(red2 or has_param(df, "red_noise2")),
                                  dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"),
-                                 chrom_alpha=chrom_alpha, chrom_poly=False,
+                                 chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=False,
                                  sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
                                  band=has_param(df, "band_gp"), band_alpha=has_param(df, "bandalpha_gp"))
             sw_gps    = [g for g in psr_gps if getattr(g, 'gpname', None) == 'sw_gp']
@@ -664,7 +690,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             # Fourier/fftcov GPs (those go to the commongp).
             core = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict,
                                        ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
-                                       red=False, red2=False, dm=False, chrom=False, chrom_alpha=chrom_alpha, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=False, sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
+                                       red=False, red2=False, dm=False, chrom=False, chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=False, sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
                                        band=False, band_alpha=False,
                                        chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
                                        fd=fd, fd_nodes=fd_nodes, fd_spacing=fd_spacing, fd_selection=fd_selection, fd_prior=fd_prior, fd_kind=fd_kind, fd_bin_flag=fd_bin_flag,
@@ -678,7 +704,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=max_cadence_days, Tspan=Tspan, background=False, noisedict=noisedict,
                                     ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_ecorr"),
                                     red=red_flag, red2=(red2 or has_param(df, "red_noise2")),
-                                    dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_alpha=chrom_alpha, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
+                                    dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
                                     band=has_param(df, "band_gp"), band_alpha=has_param(df, "bandalpha_gp"),
                                     chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
                                     fd=fd, fd_nodes=fd_nodes, fd_spacing=fd_spacing, fd_selection=fd_selection, fd_prior=fd_prior, fd_kind=fd_kind, fd_bin_flag=fd_bin_flag,
