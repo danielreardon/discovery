@@ -134,12 +134,7 @@ PPTA_CONFIG = {
     # Which pulsars carry each optional component.
     "models_dict": {
 
-        # Band noise: one chromatic GP per pulsar, with centre, bandwidth
-        # and chromatic index sampled. Drives band_alpha; the achromatic
-        # band GP is opt-in via band=True.
-        "band_noise": ['J0125-2327', 'J0437-4715', 'J0613-0200', 'J1017-7156',
-                       'J1045-4509', 'J1600-3053', 'J1643-1224', 'J1705-1903',
-                       'J1713+0747', 'J1824-2452A', 'J1909-3744', 'J1939+2134'],
+        "band_noise": [],
 
         # Exponential dips. 't0' is the epoch prior in MJD; 'alpha' the
         # chromatic index prior. An event is included only if its epoch window
