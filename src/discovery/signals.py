@@ -129,6 +129,89 @@ def selection_flags(flags, sep='_', warn_below=10):
     return selection
 
 
+def selection_flag_values(flag, values, rest='rest', warn_below=10):
+    """Selection giving NAMED values of a flag their own group, pooling the rest.
+
+    :func:`selection_flags` gives every distinct value its own group, which on an MPTA
+    pulsar is 32 EFAC/EQUAD pairs and takes the sampled dimension from 19 to 81. When the
+    question is about a few known channels, ``k`` named values cost ``2(k+1)`` white
+    parameters instead of ``2 n_values``.
+
+    Labels follow the same convention, so a TOA whose ``chan`` is ``'26'`` with
+    ``values=['7', '26']`` is labelled ``'chan26'`` and everything else ``'chanrest'``,
+    giving ``{psr}_chan26_efac`` and ``{psr}_chanrest_efac``.
+
+    Values compare as strings, matching :func:`selection_flags`, which casts through
+    ``astype(str)``; ints are accepted and cast, so ``values=[7]`` and ``values=['7']``
+    behave identically.
+
+    Raises rather than degrading on every failure mode below: each of them otherwise
+    yields a model that runs and quietly differs from the one asked for.
+
+    flag:       per-TOA flag name
+    values:     the values to give their own group
+    rest:       label suffix for the pooled remainder
+    warn_below: warn about named groups holding fewer TOAs than this
+    """
+    names = [str(v) for v in ([values] if isinstance(values, (str, int)) else values)]
+    if not names:
+        raise ValueError('selection_flag_values: no values given; use selection_flags to '
+                         'split on every value of a flag.')
+    if len(set(names)) != len(names):
+        raise ValueError(f'selection_flag_values: duplicate values in {names}.')
+
+    def selection(psr):
+        if flag not in psr.flags:
+            raise KeyError(f'selection_flag_values: {psr.name} has no flag {flag!r}; '
+                           f'available flags are {sorted(psr.flags)}.')
+        v = np.asarray(psr.flags[flag]).astype(str)
+        nempty = int((v == '').sum())
+        if nempty:
+            raise ValueError(
+                f'selection_flag_values: {psr.name} has {nempty} TOAs with an empty '
+                f'{flag!r} flag. makenoise_measurement drops the empty label, which would '
+                f'leave those TOAs with zero measurement noise, so fix the flag.')
+
+        present = set(v.tolist())
+        missing = [n for n in names if n not in present]
+        if missing:
+            raise ValueError(
+                f'selection_flag_values: {psr.name} has no TOA with {flag}={missing}. '
+                f'Present values are {sorted(present)}. A value that selects nothing '
+                f'would silently give one fewer free group than asked for.')
+        if rest in present:
+            raise ValueError(
+                f'selection_flag_values: {flag}={rest!r} is a real value for {psr.name}, '
+                f'so it would collide with the pooled-remainder label. Pass a different '
+                f'rest=.')
+        if not (present - set(names)):
+            raise ValueError(
+                f'selection_flag_values: the named values cover every value of {flag!r} '
+                f'for {psr.name}, so the pooled group would be empty and its parameters '
+                f'would sample their prior. Use selection_flags instead.')
+
+        keep = np.isin(v, names)
+        labels = np.where(keep, np.char.add(flag, v), flag + rest)
+
+        counts = {n: int((v == n).sum()) for n in names}
+        thin = {k: c for k, c in counts.items() if c < warn_below}
+        if thin:
+            print(f'Warning: selection_flag_values on {flag!r} for {psr.name}: named '
+                  f'group(s) {thin} hold fewer than {warn_below} TOAs and cannot '
+                  f'constrain a white-noise parameter of their own.')
+        print(f'selection_flag_values: {psr.name} {flag}: '
+              f'{len(names)} named group(s) {counts}, pooled remainder '
+              f'{int((~keep).sum())} TOAs -> {2 * (len(names) + 1)} white parameters.')
+        return labels
+
+    selection.__name__ = f'selection_{flag}_' + '_'.join(names)
+    selection.flags = [flag]
+    selection.values = names
+    selection.rest = rest
+
+    return selection
+
+
 def makenoise_measurement(psr, noisedict={}, scale=1.0, tnequad=False, ecorr=False, selection=selection_backend_flags, vectorize=True,
                           outliers=False, enterprise=False):
     backend_flags = selection(psr)
