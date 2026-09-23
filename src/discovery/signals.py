@@ -629,6 +629,302 @@ def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1
                                  nmodes=3, fref=fref, name=name,
                                  tobs_scale=tobs_scale, tobs_ref=tobs_ref)
 
+def make_withinday_powerlaw(f_lo=1.0 / 86400.0, f_hi=None, nf=64):
+    """Band-limited power-law PSD as a covariance in lag, for :func:`makegp_withinday`.
+
+    ``S(f) = f**-gamma`` over ``nf`` log-spaced frequencies in ``[f_lo, f_hi]``, summed to
+    ``k(tau) = sum_k S(f_k) df_k cos(2 pi f_k tau)`` and normalised to ``k(0) = sigma**2``,
+    so ``log10_sigma`` is the within-day rms in seconds and ``gamma`` only sets the shape.
+    Written this way ``k`` is positive semi-definite by construction -- it is
+    ``C diag(w) C^T + S diag(w) S^T`` for the cosine and sine bases -- and differentiable
+    in both parameters without special functions.
+
+    ``f_lo`` is the outer scale, beyond which the process decorrelates. The default of one
+    day matches the blocking and assumes nothing about a pulsar; set it per pulsar.
+
+    ``f_hi`` left as None builds an unbound kernel, which :func:`makegp_withinday` binds to
+    the highest frequency the epochs resolve; calling it directly raises. Pass a number
+    to evaluate the kernel outside a GP.
+
+    A structure function quoted as ``sqrt(D/2) = sqrt(k(0) - k(tau))`` is an rms per point,
+    not ``sqrt(D)``, the rms of the difference; fitting the second form to the first
+    returns a ``sigma`` low by ``sqrt(2)``.
+
+    The kernel loses rank once a day holds more epochs than it can span: its condition
+    number runs 8.6 at 4 epochs and 25 at 16, then 1.6e288 at 64 and beyond, where the
+    Cholesky fails. The ECORR diagonal of :func:`makegp_withinday` is the nugget that
+    regularises it, holding the condition number under 300 at 256 epochs.
+
+    f_lo, f_hi: frequency bounds in Hz; f_hi None binds it to the epoch sampling
+    nf:         number of log-spaced modes
+    """
+    if f_hi is None:
+        return _withinday_unbound(make_withinday_powerlaw, f_lo=f_lo, nf=nf)
+
+    if not f_hi > f_lo:
+        raise ValueError(f'make_withinday_powerlaw: f_hi = 1/{1 / f_hi:.0f} s is not above f_lo = '
+                         f'1/{1 / f_lo:.0f} s, so the kernel has no band. For a kernel bound '
+                         f'to the epoch sampling this means the epochs resolve nothing above '
+                         f'the outer scale.')
+
+    f = np.exp(np.linspace(np.log(f_lo), np.log(f_hi), int(nf)))
+    dlnf = np.log(f_hi / f_lo) / (int(nf) - 1)
+    fj, wj = matrix.jnparray(f), matrix.jnparray(f * dlnf)
+
+    def covariance(tau, log10_sigma, gamma):
+        w = wj * (fj / fj[0]) ** (-gamma)
+        w = w / jnp.sum(w) * 10.0 ** (2.0 * log10_sigma)
+        return jnp.sum(w[:, None, None] * jnp.cos(2.0 * np.pi * fj[:, None, None] * tau[None]), axis=0)
+
+    covariance.f_hi = float(f_hi)
+    return covariance
+
+
+def make_withinday_brokenpowerlaw(f_lo=1.0 / 86400.0, f_hi=None, nf=96):
+    """Broken power-law PSD as a covariance in lag, for :func:`makegp_withinday`.
+
+    ``S(f) = (f/f_b)**-gamma_lo`` below the break and ``(f/f_b)**-gamma_hi`` above it,
+    summed over log-spaced modes as :func:`make_withinday_powerlaw` does and normalised to
+    ``k(0) = sigma**2``; equal slopes give that kernel exactly. ``gamma_hi`` prices the
+    power between the break and the band edge. It cannot price power above the edge,
+    which is why the edge is set from the epoch sampling rather than chosen: ``f_hi``
+    None binds it there, as for :func:`make_withinday_powerlaw`.
+
+    f_lo, f_hi: frequency bounds in Hz; f_hi None binds it to the epoch sampling
+    nf:         number of log-spaced modes
+    """
+    if f_hi is None:
+        return _withinday_unbound(make_withinday_brokenpowerlaw, f_lo=f_lo, nf=nf)
+
+    if not f_hi > f_lo:
+        raise ValueError(f'make_withinday_brokenpowerlaw: f_hi = 1/{1 / f_hi:.0f} s is not above f_lo = '
+                         f'1/{1 / f_lo:.0f} s, so the kernel has no band. For a kernel bound '
+                         f'to the epoch sampling this means the epochs resolve nothing above '
+                         f'the outer scale.')
+
+    f = np.exp(np.linspace(np.log(f_lo), np.log(f_hi), int(nf)))
+    dlnf = np.log(f_hi / f_lo) / (int(nf) - 1)
+    fj, wj = matrix.jnparray(f), matrix.jnparray(f * dlnf)
+
+    def covariance(tau, log10_sigma, gamma_lo, gamma_hi, log10_fbreak):
+        fb = 10.0 ** log10_fbreak
+        x = fj / fb
+        w = wj * jnp.where(fj < fb, x ** (-gamma_lo), x ** (-gamma_hi))
+        w = w / jnp.sum(w) * 10.0 ** (2.0 * log10_sigma)
+        return jnp.sum(w[:, None, None] * jnp.cos(2.0 * np.pi * fj[:, None, None] * tau[None]), axis=0)
+
+    # the break must stay inside the modelled band, or one slope stops being identified
+    covariance.prior_boxes = {'log10_sigma': [-9.0, -5.5],
+                              'gamma_lo': [0.0, 5.0],
+                              'gamma_hi': [0.0, 5.0],
+                              'log10_fbreak': [float(np.log10(f_lo)) + 0.2,
+                                               float(np.log10(f_hi)) - 0.2]}
+    covariance.f_hi = float(f_hi)
+    return covariance
+
+
+def _withinday_unbound(factory, **kw):
+    """Placeholder for a within-day kernel whose ``f_hi`` is set from the data."""
+    def covariance(*args, **kwargs):
+        raise ValueError(f'{factory.__name__}: f_hi is None, so this kernel is bound to the '
+                         f'epoch sampling by makegp_withinday; pass f_hi to evaluate it '
+                         f'directly.')
+    covariance.unbound = True
+    covariance.bind = lambda f_hi: factory(f_hi=f_hi, **kw)
+    return covariance
+
+
+def _withinday_epochs(psr, selection, dt, tobs_scale, tobs_ref, what):
+    """ECORR's per-backend epoch basis and the epoch times, for the within-day GP."""
+    backend_flags = selection(psr)
+    backends = [b for b in sorted(set(backend_flags)) if b != '']
+
+    Umats = []
+    for b in backends:
+        mask = np.array(backend_flags == b)
+        first = 0 if len(backends) == 1 else 1
+        bins = quantize(psr.toas * mask, dt)
+        Umats.append(np.vstack([bins == i for i in range(first, bins.max() + 1)]).T)
+    Umatall = np.hstack(Umats).astype(np.float64)
+    if tobs_scale:
+        Umatall = Umatall * ecorr_tobs_weights(psr, tobs_ref)[:, None]
+
+    counts = Umatall.sum(axis=0)
+    if np.any(counts <= 0):
+        raise ValueError(f'{what}: {psr.name} has an empty epoch column; the '
+                         f'selection and dt must partition the TOAs.')
+    return backends, Umats, Umatall, (np.asarray(psr.toas) @ Umatall) / counts
+
+
+def _withinday_fhi(psr, epoch_t, day, what):
+    dayidx = np.floor(epoch_t / day).astype(np.int64)
+    gaps = [np.diff(np.sort(epoch_t[dayidx == d])) for d in np.unique(dayidx)]
+    gaps = [g for g in gaps if g.size]
+    if not gaps:
+        raise ValueError(f'{what}: {psr.name} has no day holding more than one epoch, so no '
+                         f'within-day correlation is measurable and the component is ECORR.')
+    return 1.0 / (2.0 * float(np.median(np.concatenate(gaps))))
+
+
+def withinday_resolution(psr, selection=selection_backend_flags, dt=1.0, day=86400.0,
+                         tobs_scale=False, tobs_ref=1800.0):
+    """Highest frequency the within-day epochs resolve, in Hz.
+
+    ``1 / (2 x median gap between consecutive epochs of one day)``, over the epochs
+    :func:`makegp_withinday` builds with the same arguments.
+    """
+    *_, epoch_t = _withinday_epochs(psr, selection, dt, tobs_scale, tobs_ref,
+                                    'withinday_resolution')
+    return _withinday_fhi(psr, epoch_t, day, 'withinday_resolution')
+
+
+def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
+                     selection=selection_backend_flags, dt=1.0, day=86400.0,
+                     ecorr=True, tobs_scale=False, tobs_ref=1800.0,
+                     common=[], name='withinday_gp'):
+    """Achromatic noise correlated within an observing day and independent between days.
+
+    Fills the gap between a Fourier GP, whose highest frequency is set by the array
+    cadence, and ECORR, which is independent per epoch. The basis is ECORR's own per-epoch
+    indicator matrix, so this is ECORR with a correlated prior rather than a diagonal one:
+    the prior is block diagonal by day, with block ``g``
+
+        Phi_g = covariance(|t_i - t_j|, ...) + diag(ecorr**2)
+
+    over the epochs of that day. It therefore CARRIES the ECORR term and replaces
+    :func:`makegp_ecorr` rather than sitting beside it -- two GPs on one basis would
+    duplicate every column and leave the diagonal split between them unidentified. The
+    ``{psr}_{backend}_log10_ecorr`` names are unchanged, so a chain from
+    :func:`makegp_ecorr` supplies them directly.
+
+    The diagonal is not optional wherever a day is densely sampled. The bare kernel goes
+    singular once a day holds more epochs than it spans -- its condition number is 25 at
+    16 epochs and 1e288 by 64 -- and J1902-5105 reaches 174 epochs in a day, where the
+    Cholesky fails outright; the ECORR variance regularises it to a condition number of
+    40 at the fitted 93 ns. A pulsar observed a few times a night never reaches that
+    regime. Days holding a single epoch carry only the diagonal, so there the component
+    and ECORR are exactly degenerate and only their sum is identified.
+
+    Blocking by day is a modelling choice, not a measurement: it asserts that the
+    day-to-day correlation is already carried by the red, DM and chromatic GPs, so what
+    remains is the within-day residual and nothing is counted twice. It holds while the
+    correlation length stays well inside a day.
+
+    The kernel is purely temporal and the basis carries no frequency weight, so the
+    component is achromatic by construction and has no chromatic index.
+
+    The kernel band ends at :func:`withinday_resolution`, the highest frequency the epochs
+    resolve. Above it no pair of epochs is close enough to see a correlation and the kernel
+    is degenerate with ECORR, so variance placed there is split between the two by the
+    kernel's prior rather than the data. A kernel built without ``f_hi`` is bound to that
+    edge here, and one built with a higher ``f_hi`` gets a warning. The edge follows the
+    subintegration length, so fits at different subintegrations are not directly
+    comparable, and the band from ``f_lo`` to the edge carries all the information.
+
+    psr:        Discovery Pulsar object
+    covariance: callable ``covariance(tau, ...)`` in seconds, its arguments after ``tau``
+                sampled as ``{psr}_{name}_{arg}``; defaults to
+                :func:`make_withinday_powerlaw` bound to the epoch sampling
+    dt:         epoch quantisation in seconds, as :func:`quantize` uses
+    day:        block length in seconds
+    ecorr:      add the per-backend ECORR diagonal; without it the kernel is singular, so
+                False is for tests only
+    selection, scale, tobs_scale, tobs_ref: as :func:`makegp_ecorr`
+    name:       parameter-name stem for the kernel
+    """
+    from . import prior as _prior
+
+    covariance = make_withinday_powerlaw() if covariance is None else covariance
+    backends, Umats, Umatall, epoch_t = _withinday_epochs(psr, selection, dt, tobs_scale,
+                                                          tobs_ref, 'makegp_withinday')
+    log10_ecorrs = [f'{psr.name}_{b}_log10_ecorr' for b in backends]
+
+    f_res = _withinday_fhi(psr, epoch_t, day, 'makegp_withinday')
+    if getattr(covariance, 'unbound', False):
+        covariance = covariance.bind(f_res)
+        print(f'makegp_withinday: {psr.name}: kernel band up to 1/{1 / f_res:.0f} s, the '
+              f'highest frequency the within-day epochs resolve.')
+    elif getattr(covariance, 'f_hi', None) is not None and covariance.f_hi > f_res * (1 + 1e-9):
+        print(f'Warning: makegp_withinday: {psr.name}: the kernel band reaches '
+              f'1/{1 / covariance.f_hi:.0f} s, {np.log2(covariance.f_hi / f_res):.1f} octaves '
+              f'above the 1/{1 / f_res:.0f} s the epochs resolve. There it is degenerate '
+              f'with ECORR, so its prior rather than the data sets the split.')
+
+    argmap = [(arg if arg in common
+               else f'{name}_{arg}' if f'{name}_{arg}' in common
+               else f'{psr.name}_{name}_{arg}')
+              for arg in inspect.getfullargspec(covariance).args if arg not in ('tau', 'tau_t')]
+
+    # the days holding a single epoch become one diagonal chunk rather than that many
+    # one-by-one factorisations, since the kernel is diagonal on a single epoch
+    dayidx = np.floor(epoch_t / day).astype(np.int64)
+    uday, inv = np.unique(dayidx, return_inverse=True)
+    multi = np.bincount(inv, minlength=len(uday))[inv] > 1
+    order = np.lexsort((inv, multi))
+
+    Umatall, epoch_t, inv, multi = Umatall[:, order], epoch_t[order], inv[order], multi[order]
+    pmasks, cnt = [], 0
+    for Umat in Umats:
+        z = np.zeros(Umatall.shape[1], dtype=np.float64)
+        z[cnt:cnt + Umat.shape[1]] = 1.0
+        pmasks.append(z[order])
+        cnt += Umat.shape[1]
+
+    n_single = int(np.sum(~multi))
+    spans, taus = [], []
+    if n_single:
+        spans.append((0, n_single, True))
+    i0 = n_single
+    for d in dict.fromkeys(inv[n_single:].tolist()):
+        tt = epoch_t[inv == d]
+        taus.append(matrix.jnparray(np.abs(tt[:, None] - tt[None, :])))
+        spans.append((i0, len(tt), False))
+        i0 += len(tt)
+
+    logscale = np.log10(scale)
+    pmasks_j = [matrix.jnparray(pm) for pm in pmasks]
+    total = Umatall.shape[1]
+    zero = matrix.jnparray(np.zeros((1, 1)))
+
+    def _diag(params):
+        if not ecorr:
+            return jnp.zeros(total)
+        return sum(10.0 ** (2 * (logscale + params[p])) * pm
+                   for p, pm in zip(log10_ecorrs, pmasks_j))
+
+    blockfuncs, k = [], 0
+    for (start, n, isdiag) in spans:
+        if isdiag:
+            def getb(params, start=start, n=n):
+                return (jax.lax.dynamic_slice(_diag(params), (start,), (n,))
+                        + covariance(zero, *[params[a] for a in argmap])[0, 0])
+            blockfuncs.append((True, getb))
+        else:
+            def getb(params, start=start, n=n, tau=taus[k]):
+                return (covariance(tau, *[params[a] for a in argmap])
+                        + jnp.diag(jax.lax.dynamic_slice(_diag(params), (start,), (n,))))
+            blockfuncs.append((False, getb))
+            k += 1
+
+    def getphi(params):
+        return matrix.jsp.linalg.block_diag(
+            *[(jnp.diag(f(params)) if isdiag else f(params)) for isdiag, f in blockfuncs])
+    getphi.params = (log10_ecorrs if ecorr else []) + argmap
+
+    boxes = getattr(covariance, 'prior_boxes', {'log10_sigma': [-9.0, -5.5], 'gamma': [0.0, 4.0]})
+    _prior.priordict_standard.update(
+        {f'{re.escape(psr.name)}_{name}_{arg}': box for arg, box in boxes.items()})
+
+    Phi = matrix.BlockDiagNoiseMatrix2D_var(getphi, blockfuncs)
+    Phi.params = getphi.params
+    gp = matrix.VariableGP(Phi, Umatall)
+    gp.index = {f'{psr.name}_{name}_coefficients({total})': slice(0, total)}
+    gp.name, gp.pos, gp.gpname, gp.gpcommon = psr.name, psr.pos, name, common
+    gp.wd_epochs, gp.wd_blocks, gp.wd_nsingle = epoch_t, spans, n_single
+    gp.wd_fhi = f_res
+    return gp
+
+
 def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=1.0,
                                      selection=selection_backend_flags, variable=False,
                                      nmodes=3, fref=None,

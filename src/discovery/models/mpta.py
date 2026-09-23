@@ -363,7 +363,7 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
 
 def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={},
                         white_selection=None, # per-TOA flag whose values split efac and tnequad, e.g. 'chan' for one pair per frequency channel. ECORR is deliberately NOT split: each epoch-channel is a singleton, so a per-channel ECORR would give one basis column per TOA
-                        ecorr=True, quadratic=False, ecorr_nmodes=None, ecorr_correlated=False, global_ecorr=False, ecorr_tobs_scale=False, # ecorr options. ecorr_tobs_scale weights the ECORR basis by sqrt(tobs_ref/tobs), making log10_ecorr the jitter at the reference integration time rather than an average over integrations of unequal length. ecorr_nmodes=N selects an N-mode Legendre ECORR (log-frequency basis; nmodes=1 is standard ECORR); ecorr_correlated=True uses the full-M (correlated-mode) variant that can also model a frequency-asymmetric jitter amplitude
+                        ecorr=True, quadratic=False, ecorr_nmodes=None, ecorr_correlated=False, global_ecorr=False, ecorr_tobs_scale=False, withinday=False, withinday_dt=1.0, withinday_day=86400.0, withinday_flo=1.0/86400.0, withinday_fhi=None, withinday_nf=64, # withinday=True replaces the diagonal ECORR prior with a within-day correlated one on the same epoch basis, sampling {psr}_withinday_gp_log10_sigma and _gamma alongside log10_ecorr, which the kernel needs as its nugget. withinday_fhi=None ends the kernel band at the highest frequency the within-day epochs resolve. ecorr options. ecorr_tobs_scale weights the ECORR basis by sqrt(tobs_ref/tobs), making log10_ecorr the jitter at the reference integration time rather than an average over integrations of unequal length. ecorr_nmodes=N selects an N-mode Legendre ECORR (log-frequency basis; nmodes=1 is standard ECORR); ecorr_correlated=True uses the full-M (correlated-mode) variant that can also model a frequency-asymmetric jitter amplitude
                         background=True, bkgrnd_log10_A=None, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_fref=1400.0, chrom_poly=True, sw=True, sw_powerlaw=False, sw_qp=False, sw_fourier=False, sw_logf=False, turnover=None, # Base model: gwb, red, dm, chromatic, solar wind (sw_powerlaw=True selects the legacy power-law solar-wind GP instead of the time-domain one; sw_logf=True log-spaces its frequencies -- Fourier path only)
                         band=False, band_alpha=False, band_bw_min=20.0, fd=False, fd_nodes=16, fd_spacing='quantile', fd_selection=None, fd_prior='improper', fd_kind='linear', fd_bin_flag=None, fd_normalise=False, # Additional GP models (fd=True marginalises an arbitrary time-constant frequency-dependent delay over fd_nodes frequency nodes; fd_selection splits it per TOA group; fd_prior selects the improper or the Matern-3/2 prior over the node amplitudes)
                         pa_gp=False, pa_phase='free', pa_variant='iso', pa_bin_flag='chan', pa_project_fd=True, # Delay locked to twice the parallactic angle. pa_phase='free': an amplitude and phase per channel; 'common': one phase across channels, sampled as {psr}_pa_gp_phase in radians, with a signed amplitude per channel; a number fixes that phase. pa_variant sets the prior on the free-phase pair: 'iso' one scale, 'diag' a scale per quadrature, 'full' adding their correlation. pa_project_fd removes the fd column span from the basis
@@ -392,7 +392,19 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     model_components += [measurement_noise]
     if ecorr:
         _tobs = dict(tobs_scale=ecorr_tobs_scale)
-        if ecorr_nmodes is not None:
+        if withinday:
+            # the within-day GP carries the ECORR diagonal in its own prior, so it
+            # replaces makegp_ecorr rather than joining it: two GPs on one epoch basis
+            # would duplicate every column and leave the diagonal split unidentified
+            if ecorr_nmodes is not None or ecorr_correlated or quadratic:
+                raise ValueError("single_pulsar_noise: withinday=True builds on the plain "
+                                 "per-epoch ECORR basis, so it cannot be combined with the "
+                                 "Legendre or quadratic variants.")
+            model_components += [signals.makegp_withinday(
+                psr, covariance=signals.make_withinday_powerlaw(
+                    f_lo=withinday_flo, f_hi=withinday_fhi, nf=withinday_nf),
+                noisedict=noisedict, dt=withinday_dt, day=withinday_day, **_tobs)]
+        elif ecorr_nmodes is not None:
             if ecorr_correlated:
                 model_components += [signals.makegp_ecorr_legendre_correlated(psr, noisedict=noisedict, nmodes=ecorr_nmodes, **_tobs)]
             else:
