@@ -577,6 +577,38 @@ def shapiro_cosi(psr, binphase, eps_cosi=1e-6, eps_log=1e-10):
 
     return delay
 
+def shapiro_cosi_ortho(psr, binphase, eps_cosi=1e-6, eps_log=1e-10):
+    """Orthometric Shapiro delay with its first two harmonics removed, Freire & Wex
+    (2010) eq. 29, in the (h3, cos i) parameterisation of :func:`shapiro_cosi`::
+
+        Delta_S = -(2 h3 / stig**3) [log(1 + stig**2 - 2 stig sin(Phi))
+                                     + 2 stig sin(Phi) - stig**2 cos(2 Phi)]
+
+    with ``stig = sin i / (1 + cos i)``. The removed terms are the constant-free first
+    and second harmonics, which an ELL1 orbit carries in ``A1``, ``EPS1`` and ``EPS2``, so
+    this is the form to use when those are held at values fitted without a Shapiro delay.
+    With them free in the timing model the two forms give the same marginal likelihood,
+    because the difference lies in the span of those design-matrix columns.
+
+    Valid for ``cos i >= 0`` only. At ``cos i < 0`` the stigma exceeds 1, the harmonic
+    series of the logarithm runs in powers of ``1/stig``, and the subtracted terms are no
+    longer its first two harmonics, so ``cos i`` is clipped to ``[eps_cosi, 1 - eps_cosi]``;
+    sample it on that range.
+    """
+    toas, binphase = matrix.jnparray(psr.toas / const.day), matrix.jnparray(binphase)
+    if not np.shape(binphase) == np.shape(toas):
+        raise ValueError("Input binphase must have the same shape as toas")
+
+    def delay(h3, cosi):
+        cosi_clipped = jnp.clip(cosi, eps_cosi, 1.0 - eps_cosi)
+        sin_i = jnp.sqrt(1.0 - cosi_clipped**2)
+        stig  = sin_i / (1.0 + cosi_clipped)
+        log_arg = jnp.maximum(1 + stig**2 - 2 * stig * jnp.sin(binphase), eps_log)
+        return -(2.0 * h3 / stig**3) * (jnp.log(log_arg) + 2 * stig * jnp.sin(binphase)
+                                        - stig**2 * jnp.cos(2 * binphase))
+
+    return delay
+
 def chromatic_polynomial(psr, fref=None, name='chrom_gp'):
     """SVD-orthogonalised chromatic polynomial as a sampled deterministic delay.
 

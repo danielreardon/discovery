@@ -369,7 +369,7 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
                         pa_gp=False, pa_phase='free', pa_variant='iso', pa_bin_flag='chan', pa_project_fd=True, # Delay locked to twice the parallactic angle. pa_phase='free': an amplitude and phase per channel; 'common': one phase across channels, sampled as {psr}_pa_gp_phase in radians, with a signed amplitude per channel; a number fixes that phase. pa_variant sets the prior on the free-phase pair: 'iso' one scale, 'diag' a scale per quadrature, 'full' adding their correlation. pa_project_fd removes the fd column span from the basis
                         pa_boost=False, pa_boost_z=None, pa_boost_variant='full', pa_boost_hand=1, pa_boost_chi0=0.0, pa_boost_era_split=None, # Polarimetric boost delay in boost units (signals.makegp_pa_boost) over the pa_bin_flag channels, needing the per-channel susceptibilities pa_boost_z; shares pa_project_fd. Exclusive with pa_gp, whose column space it spans
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False, # Deterministic chromatic models
-                        shapiro=False, orbital_dm=False, extra_gps=None, # Shapiro delay and orbital DM, and extra GPs
+                        shapiro=False, shapiro_ortho=False, orbital_dm=False, extra_gps=None, # Shapiro delay and orbital DM, and extra GPs. shapiro_ortho=True removes the first two harmonics (Freire & Wex eq. 29), for an orbit held at values fitted without a Shapiro delay
                         return_components=False, # Whether to return the list of model components in addition to the likelihood object (useful for adding additional components)
                         install_priors=True): # install this module's priordict_standard entries; a delegating caller that has installed its own passes False
     # Follow the model being built, not the import order. update(), not clear(): it
@@ -435,7 +435,8 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
         print("Warning: Binary phase calculation assumes constant orbital period and CIRCULAR ORBIT. Ensure this is a valid approximation for your pulsar and model choice.")
         binphase = (2 * np.pi / psr.pb) * (psr.toas - psr.tasc)
         if shapiro:
-            model_components += [signals.makedelay(psr, deterministic.shapiro_cosi(psr, binphase), name='shapiro')]
+            _shapiro = deterministic.shapiro_cosi_ortho if shapiro_ortho else deterministic.shapiro_cosi
+            model_components += [signals.makedelay(psr, _shapiro(psr, binphase), name='shapiro')]
         if orbital_dm:
             model_components += [signals.makedelay(psr, deterministic.orbital_DM_gaussian(psr, binphase), name='orbital_dm')]
 
