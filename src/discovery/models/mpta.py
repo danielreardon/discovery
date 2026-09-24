@@ -36,6 +36,7 @@ def update_priordict_standard_mpta():
         '(.*_)?withinday_gp_gamma_lo': [0, 5],
         '(.*_)?withinday_gp_gamma_hi': [0, 5],
         '(.*_)?withinday_gp_gamma':   [0, 4],
+        '(.*_)?red_tail_gamma_hi':    [0, 10],
         # Per-pulsar GW background parameters
         '(.*_)?bkgrnd_log10_A':     [-18, -11],
         # GP parameters
@@ -321,10 +322,16 @@ def _chrom_poly_noisedict(psr, chrom_alpha):
     return {f'{psr.name}_chrom_gp_alpha': float(chrom_alpha)}
 
 
-def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_fref=1400.0, chrom_poly=True, sw=True, sw_powerlaw=False, sw_qp=False, sw_logf=False, band=False, band_alpha=False, band_bw_min=20.0, turnover=None, fd_gp=None):
+def _fourier_grid(psr, max_cadence_days, Tspan):
+    """Span and bin count of the per-pulsar Fourier GPs."""
     psr_Tspan = signals.getspan(psr) if Tspan is None else Tspan
     psr_components = (signals.psr_components(psr.toas, dt=1.0, Tspan=psr_Tspan) if max_cadence_days is None
                       else int(psr_Tspan / (max_cadence_days * 86400)))
+    return psr_Tspan, psr_components
+
+
+def make_psr_gps_fourier(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=None, background=True, red=True, red2=False, dm=True, chrom=True, chrom_alpha=None, chrom_fref=1400.0, chrom_poly=True, sw=True, sw_powerlaw=False, sw_qp=False, sw_logf=False, band=False, band_alpha=False, band_bw_min=20.0, turnover=None, fd_gp=None):
+    psr_Tspan, psr_components = _fourier_grid(psr, max_cadence_days, Tspan)
     _set_band_priors(psr, band=band, band_alpha=band_alpha, bw_min_mhz=band_bw_min)
     turnover = signals.turnover_set(turnover)
 
@@ -403,6 +410,7 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
                         chrom_annual=False, chrom_exponential=False, chrom_gaussian=False, chrom_sphere=False, chrom_step=False, # Deterministic chromatic models
                         shapiro=False, shapiro_ortho=False, orbital_dm=False, extra_gps=None, # Shapiro delay and orbital DM, and extra GPs. shapiro_ortho=True removes the first two harmonics (Freire & Wex eq. 29), for an orbit held at values fitted without a Shapiro delay
                         return_components=False, # Whether to return the list of model components in addition to the likelihood object (useful for adding additional components)
+                        red_tail=False, red_tail_nf=128, red_tail_broken=False, red_tail_fbreak_max=None, # red_tail=True continues the Fourier red-noise spectrum from the upper edge of its last bin to the epoch resolution as a time-domain kernel over all epochs, sharing log10_A and gamma and carrying ECORR as its nugget in place of makegp_ecorr (fftint=False only); red_tail_broken adds a break above which the index is _gamma_hi, sampling {psr}_red_tail_gamma_hi and _log10_fbreak, the break bounded above by red_tail_fbreak_max in Hz (default the epoch resolution)
                         install_priors=True): # install this module's priordict_standard entries; a delegating caller that has installed its own passes False
     # Follow the model being built, not the import order. update(), not clear(): it
     # preserves front-inserted per-pulsar overrides.
@@ -422,7 +430,20 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     model_components = [psr.residuals]
     model_components += [signals.makegp_timing(psr, svd=True)] # Set up timing model (analytically marginalised)
     model_components += [measurement_noise]
-    if ecorr:
+    if red_tail:
+        if fftint or not red or not ecorr:
+            raise ValueError("single_pulsar_noise: red_tail=True continues the Fourier red-noise "
+                             "GP and carries ECORR, so it needs fftint=False, red=True and ecorr=True.")
+        if withinday or ecorr_nmodes is not None or quadratic:
+            raise ValueError("single_pulsar_noise: red_tail=True replaces the plain per-epoch "
+                             "ECORR, so it cannot be combined with withinday or the Legendre or "
+                             "quadratic ECORR variants.")
+        _T, _K = _fourier_grid(psr, max_cadence_days, Tspan)
+        model_components += [signals.makegp_red_tail(
+            psr, signals.turnover_psd('red', signals.turnover_set(turnover)), components=_K,
+            T=_T, nf=red_tail_nf, broken=red_tail_broken, fbreak_max=red_tail_fbreak_max,
+            noisedict=noisedict, tobs_scale=ecorr_tobs_scale, stem='red_noise')]
+    if ecorr and not red_tail:
         _tobs = dict(tobs_scale=ecorr_tobs_scale)
         if withinday:
             # the within-day GP carries the ECORR diagonal in its own prior, so it

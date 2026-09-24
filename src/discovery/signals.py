@@ -778,7 +778,7 @@ def withinday_resolution(psr, selection=selection_backend_flags, dt=1.0, day=864
 def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
                      selection=selection_backend_flags, dt=1.0, day=86400.0,
                      ecorr=True, tobs_scale=False, tobs_ref=1800.0,
-                     common=[], name='withinday_gp'):
+                     common=[], name='withinday_gp', resolution_day=None):
     """Achromatic noise correlated within an observing day and independent between days.
 
     Fills the gap between a Fourier GP, whose highest frequency is set by the array
@@ -820,14 +820,19 @@ def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
 
     psr:        Discovery Pulsar object
     covariance: callable ``covariance(tau, ...)`` in seconds, its arguments after ``tau``
-                sampled as ``{psr}_{name}_{arg}``; defaults to
+                sampled as ``{psr}_{name}_{arg}``, or as ``{psr}_{stem}_{arg}`` for an
+                argument its ``stems`` attribute maps to ``stem``; defaults to
                 :func:`make_withinday_powerlaw` bound to the epoch sampling
+    noisedict:  fixed ``{psr}_{backend}_log10_ecorr`` values; those present are held
+                fixed rather than sampled
     dt:         epoch quantisation in seconds, as :func:`quantize` uses
-    day:        block length in seconds
+    day:        block length in seconds; ``np.inf`` gives one block over all epochs
     ecorr:      add the per-backend ECORR diagonal; without it the kernel is singular, so
                 False is for tests only
     selection, scale, tobs_scale, tobs_ref: as :func:`makegp_ecorr`
     name:       parameter-name stem for the kernel
+    resolution_day: grouping in seconds for :func:`withinday_resolution`; defaults to
+                ``day``
     """
 
     covariance = make_withinday_powerlaw() if covariance is None else covariance
@@ -835,7 +840,8 @@ def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
                                                           tobs_ref, 'makegp_withinday')
     log10_ecorrs = [f'{psr.name}_{b}_log10_ecorr' for b in backends]
 
-    f_res = _withinday_fhi(psr, epoch_t, day, 'makegp_withinday')
+    f_res = _withinday_fhi(psr, epoch_t, day if resolution_day is None else resolution_day,
+                           'makegp_withinday')
     if getattr(covariance, 'unbound', False):
         covariance = covariance.bind(f_res)
         print(f'makegp_withinday: {psr.name}: kernel band up to 1/{1 / f_res:.0f} s, the '
@@ -846,10 +852,12 @@ def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
               f'above the 1/{1 / f_res:.0f} s the epochs resolve. There it is degenerate '
               f'with ECORR, so its prior rather than the data sets the split.')
 
+    stems = getattr(covariance, 'stems', {})
+    kargs = [arg for arg in inspect.getfullargspec(covariance).args if arg not in ('tau', 'tau_t')]
     argmap = [(arg if arg in common
                else f'{name}_{arg}' if f'{name}_{arg}' in common
-               else f'{psr.name}_{name}_{arg}')
-              for arg in inspect.getfullargspec(covariance).args if arg not in ('tau', 'tau_t')]
+               else f'{psr.name}_{stems.get(arg, name)}_{arg}')
+              for arg in kargs]
 
     # the days holding a single epoch become one diagonal chunk rather than that many
     # one-by-one factorisations, since the kernel is diagonal on a single epoch
@@ -885,7 +893,7 @@ def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
     def _diag(params):
         if not ecorr:
             return jnp.zeros(total)
-        return sum(10.0 ** (2 * (logscale + params[p])) * pm
+        return sum(10.0 ** (2 * (logscale + (noisedict[p] if p in noisedict else params[p]))) * pm
                    for p, pm in zip(log10_ecorrs, pmasks_j))
 
     blockfuncs, k = [], 0
@@ -905,7 +913,7 @@ def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
     def getphi(params):
         return matrix.jsp.linalg.block_diag(
             *[(jnp.diag(f(params)) if isdiag else f(params)) for isdiag, f in blockfuncs])
-    getphi.params = (log10_ecorrs if ecorr else []) + argmap
+    getphi.params = ([p for p in log10_ecorrs if p not in noisedict] if ecorr else []) + argmap
 
     Phi = matrix.BlockDiagNoiseMatrix2D_var(getphi, blockfuncs)
     Phi.params = getphi.params
@@ -918,6 +926,160 @@ def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
     gp.prior_boxes = {p: boxes[a] for a, p in zip(
         [a for a in inspect.getfullargspec(covariance).args if a not in ('tau', 'tau_t')], argmap)
         if a in boxes}
+    return gp
+
+
+def _step_kernel(tau, w, f, df):
+    """``sum_k w_k cos(2 pi f_k tau) sinc(df_k tau)``, accumulated one mode at a time and
+    recomputed in the gradient, so memory is one lag matrix rather than one per mode."""
+    def step(acc, mode):
+        wk, fk, dk = mode
+        return acc + wk * jnp.cos(2.0 * np.pi * fk * tau) * jnp.sinc(dk * tau), None
+
+    acc, _ = jax.lax.scan(jax.checkpoint(step), jnp.zeros(jnp.shape(tau)), (w, f, df))
+    return acc
+
+
+def make_red_tail(psd, f_lo, f_hi=None, nf=128, broken=False, fbreak_max=None,
+                  stem='red_noise'):
+    """A Fourier red-noise PSD continued above its highest bin, as a covariance in lag.
+
+    ``psd`` is the callable the Fourier GP uses -- ``psd(f, df, *params)`` returning
+    ``P(f) df`` with its absolute normalisation -- integrated over ``nf`` log-spaced bins
+    spanning ``[f_lo, f_hi]``. Bin ``k`` has variance ``w_k``, the Simpson integral of
+    ``P`` across it, and is taken flat across its width ``df_k`` about its midpoint
+    ``f_k``, whose covariance is exactly
+
+        k(tau) = sum_k w_k cos(2 pi f_k tau) sinc(df_k tau)
+
+    so correlations decay across the span instead of recurring, and ``k`` is positive
+    semi-definite. The PSD's own parameters are sampled under ``stem``, the Fourier GP's
+    name, so the two share one spectrum. ``broken`` steepens it above a break,
+    ``P(f) = P(f_b) (f / f_b)**-gamma_hi`` for ``f > f_b``, sampling ``gamma_hi`` and
+    ``log10_fbreak`` under the covariance's own name, with ``f_b`` bounded to
+    ``[f_lo, fbreak_max]``.
+
+    ``covariance.spectrum(f, *params)`` is the one-sided PSD ``P(f)`` in s^2/Hz, the
+    Fourier GP's below ``f_lo`` and the tail's above it, so ``sqrt(f P(f))`` is the rms per
+    e-fold of frequency. ``covariance.weights(*params)`` are the bin variances ``w_k``; the
+    bin holding the break is split there and each part integrated on its own slope, so they
+    are continuous in ``log10_fbreak``.
+
+    psd:        PSD callable ``psd(f, df, *params)``
+    f_lo:       lower band edge in Hz, the upper edge of the Fourier GP's last bin
+    f_hi:       upper band edge in Hz; None binds it to the epoch resolution in
+                :func:`makegp_withinday`
+    nf:         number of log-spaced bins
+    broken:     add the break
+    fbreak_max: upper bound of the break frequency in Hz; defaults to ``f_hi``
+    stem:       parameter stem the PSD's parameters share, the Fourier GP's name
+    """
+    if f_hi is None:
+        return _withinday_unbound(make_red_tail, psd=psd, f_lo=f_lo, nf=nf, broken=broken,
+                                  fbreak_max=fbreak_max, stem=stem)
+    if not f_hi > f_lo:
+        raise ValueError(f'make_red_tail: f_hi = 1/{1 / f_hi:.0f} s is not above f_lo = '
+                         f'1/{1 / f_lo:.0f} s, so the tail has no band.')
+    fb_max = float(f_hi) if fbreak_max is None else float(fbreak_max)
+    if not f_lo < fb_max <= f_hi:
+        raise ValueError(f'make_red_tail: fbreak_max = 1/{1 / fb_max:.0f} s is not inside the '
+                         f'tail band (1/{1 / f_lo:.0f} s, 1/{1 / f_hi:.0f} s].')
+
+    edges = np.exp(np.linspace(np.log(f_lo), np.log(f_hi), int(nf) + 1))
+    fm, dfk = 0.5 * (edges[1:] + edges[:-1]), np.diff(edges)
+    fm_j, df_j, e_j = matrix.jnparray(fm), matrix.jnparray(dfk), matrix.jnparray(edges[:-1])
+    pnames = list(inspect.signature(psd).parameters)[2:]
+    extra = ['gamma_hi', 'log10_fbreak'] if broken else []
+
+    def spectrum(f, *args):
+        f, pars = jnp.asarray(f), args[:len(pnames)]
+        P = psd(f, 1.0, *pars)
+        if broken:
+            gamma_hi, log10_fbreak = args[len(pnames):]
+            fb = 10.0 ** log10_fbreak
+            P = jnp.where(f > fb, psd(fb, 1.0, *pars) * (f / fb) ** (-gamma_hi), P)
+        return P
+
+    def simpson(a, d, P):
+        return d / 6.0 * (P(a) + 4.0 * P(a + 0.5 * d) + P(a + d))
+
+    def weights(*args):
+        pars = args[:len(pnames)]
+        P_lo = lambda f: psd(f, 1.0, *pars)
+        if not broken:
+            return simpson(e_j, df_j, P_lo)
+        # the bin holding the break is split there, each part integrated on its own slope
+        gamma_hi, log10_fbreak = args[len(pnames):]
+        fb = 10.0 ** log10_fbreak
+        P_b = psd(fb, 1.0, *pars)
+        P_hi = lambda f: P_b * (f / fb) ** (-gamma_hi)
+        below = jnp.clip(fb - e_j, 0.0, df_j)
+        return simpson(e_j, below, P_lo) + simpson(e_j + below, df_j - below, P_hi)
+
+    def covariance(tau, *args):
+        return _step_kernel(tau, weights(*args), fm_j, df_j)
+
+    kind = inspect.Parameter.POSITIONAL_OR_KEYWORD
+    sig = inspect.Signature([inspect.Parameter(n, kind) for n in ['tau'] + pnames + extra])
+    covariance.__signature__ = sig
+    spectrum.__signature__ = sig.replace(parameters=[inspect.Parameter('f', kind)]
+                                         + list(sig.parameters.values())[1:])
+    covariance.spectrum, covariance.weights = spectrum, weights
+    covariance.stems = {n: stem for n in pnames}
+    covariance.prior_boxes = ({'log10_fbreak': [float(np.log10(f_lo)), float(np.log10(fb_max))]}
+                              if broken else {})
+    covariance.f_hi, covariance.f_lo = float(f_hi), float(f_lo)
+    covariance.modes = (fm, dfk)
+    return covariance
+
+
+def makegp_red_tail(psr, psd, components, T=None, nf=128, broken=False, fbreak_max=None,
+                    dt=1.0, resolution_day=86400.0, noisedict={}, scale=1.0,
+                    selection=selection_backend_flags, tobs_scale=False, tobs_ref=1800.0,
+                    stem='red_noise', name='red_tail'):
+    """Red noise continued past a Fourier GP's last bin up to the epoch resolution.
+
+    A Fourier GP of ``components`` bins centred on ``k/T`` with width ``1/T`` covers
+    frequencies up to ``(components + 1/2)/T``; this carries the same PSD from there to
+    :func:`withinday_resolution`, so no frequency is counted twice and none is skipped.
+    It is :func:`makegp_withinday` with :func:`make_red_tail` as the kernel and one block
+    over all epochs, so every epoch is correlated with every other and ECORR is the
+    nugget. Like that function it carries the ECORR term and replaces
+    :func:`makegp_ecorr`.
+
+    With ``broken`` False it adds no parameters: the spectrum is the Fourier GP's, so a
+    chain carries only the red-noise and ECORR names and cannot be told from a
+    standard one by its columns. A later stage rebuilding the model has to be told the
+    tail was used.
+
+    The prior is dense over all epochs, so its factorisation grows as the cube of the
+    epoch count and dominates the cost once that count runs to thousands.
+
+    psr:            Discovery Pulsar object
+    psd:            the Fourier GP's PSD callable
+    components, T:  the Fourier GP's bin count and span; T defaults to the pulsar span
+    nf, broken, fbreak_max: as :func:`make_red_tail`
+    dt:             epoch quantisation in seconds
+    resolution_day: grouping in seconds for :func:`withinday_resolution`
+    stem:           the Fourier GP's name, under which the PSD parameters are shared
+    name:           name of this GP, and stem for the break parameters
+    noisedict, scale, selection, tobs_scale, tobs_ref: as :func:`makegp_withinday`
+    """
+    T = getspan(psr) if T is None else T
+    f_lo = (int(components) + 0.5) / T
+    f_res = withinday_resolution(psr, selection, dt, resolution_day, tobs_scale, tobs_ref)
+    if not f_res > f_lo:
+        raise ValueError(f'makegp_red_tail: {psr.name}: the epochs resolve only up to '
+                         f'1/{1 / f_res:.0f} s, below the Fourier GP\'s last bin edge at '
+                         f'1/{1 / f_lo:.0f} s, so there is no band left for the tail.')
+
+    gp = makegp_withinday(psr, covariance=make_red_tail(psd, f_lo, f_hi=f_res, nf=nf,
+                                                        broken=broken, fbreak_max=fbreak_max,
+                                                        stem=stem),
+                          noisedict=noisedict, scale=scale, selection=selection, dt=dt,
+                          day=np.inf, resolution_day=resolution_day, ecorr=True,
+                          tobs_scale=tobs_scale, tobs_ref=tobs_ref, name=name)
+    gp.tail_band = (f_lo, f_res)
     return gp
 
 
