@@ -1083,6 +1083,100 @@ def makegp_red_tail(psr, psd, components, T=None, nf=128, broken=False, fbreak_m
     return gp
 
 
+def make_band_powerlaw(flo_range, f_hi=None, nf=256):
+    """Power law above a sampled outer scale, as a covariance in lag.
+
+    ``S(f) ~ f**-gamma`` on ``[f_lo, f_hi]`` and zero below ``f_lo``, normalised to
+    ``k(0) = sigma**2``. The band is split into ``nf`` log-spaced bins whose edges move with
+    ``f_lo``, each taken flat across its width, so
+
+        k(tau) = sum_k w_k cos(2 pi f_k tau) sinc(df_k tau)
+
+    is the exact covariance of that step spectrum: positive semi-definite, decaying across
+    the span rather than recurring, and differentiable in ``log10_flo`` as well as in
+    ``log10_sigma`` and ``gamma``. ``covariance.spectrum(f, log10_sigma, gamma, log10_flo)``
+    is the one-sided PSD in s^2/Hz, so ``sqrt(f S(f))`` is the rms per e-fold of frequency.
+
+    flo_range: ``(lo, hi)`` in Hz, the prior box of ``f_lo``
+    f_hi:      upper band edge in Hz; None binds it to the epoch resolution in
+               :func:`makegp_withinday`
+    nf:        number of log-spaced bins
+    """
+    if f_hi is None:
+        return _withinday_unbound(make_band_powerlaw, flo_range=flo_range, nf=nf)
+    lo, hi = float(flo_range[0]), float(flo_range[1])
+    if not 0.0 < lo < hi < f_hi:
+        raise ValueError(f'make_band_powerlaw: the f_lo range (1/{1 / lo:.0f} s, '
+                         f'1/{1 / hi:.0f} s) must lie below f_hi = 1/{1 / f_hi:.0f} s.')
+
+    u = matrix.jnparray(np.arange(int(nf) + 1) / int(nf))
+    ln_fhi = float(np.log(f_hi))
+
+    def modes(log10_flo):
+        ln_flo = log10_flo * np.log(10.0)
+        edges = jnp.exp(ln_flo + (ln_fhi - ln_flo) * u)
+        return 0.5 * (edges[1:] + edges[:-1]), jnp.diff(edges)
+
+    def norm(log10_sigma, gamma, fm, dfk):
+        return 10.0 ** (2.0 * log10_sigma) / jnp.sum((fm / f_hi) ** (-gamma) * dfk)
+
+    def covariance(tau, log10_sigma, gamma, log10_flo):
+        fm, dfk = modes(log10_flo)
+        w = norm(log10_sigma, gamma, fm, dfk) * (fm / f_hi) ** (-gamma) * dfk
+        return _step_kernel(tau, w, fm, dfk)
+
+    def spectrum(f, log10_sigma, gamma, log10_flo):
+        f = jnp.asarray(f)
+        fm, dfk = modes(log10_flo)
+        inband = (f >= 10.0 ** log10_flo) & (f <= f_hi)
+        return jnp.where(inband, norm(log10_sigma, gamma, fm, dfk) * (f / f_hi) ** (-gamma), 0.0)
+
+    covariance.spectrum = spectrum
+    covariance.modes_at = modes
+    covariance.prior_boxes = {'log10_flo': [float(np.log10(lo)), float(np.log10(hi))]}
+    covariance.f_hi = float(f_hi)
+    return covariance
+
+
+def makegp_red_hf(psr, flo_range, nf=256, dt=1.0, resolution_day=86400.0, noisedict={},
+                  scale=1.0, selection=selection_backend_flags, tobs_scale=False,
+                  tobs_ref=1800.0, name='red_hf'):
+    """An achromatic process above a sampled outer scale, correlated across all epochs.
+
+    :func:`makegp_withinday` with :func:`make_band_powerlaw` as the kernel and one block
+    over all epochs, so every epoch is correlated with every other and ECORR is the
+    nugget; like that function it carries the ECORR term and replaces
+    :func:`makegp_ecorr`. Its amplitude and slope are its own, independent of any
+    Fourier GP, sampled as ``{psr}_{name}_log10_sigma``, ``_gamma`` and ``_log10_flo``.
+    With ``flo_range`` starting at a Fourier GP's last bin edge the two cover disjoint
+    bands.
+
+    The prior is dense over all epochs, so its factorisation grows as the cube of the
+    epoch count.
+
+    psr:            Discovery Pulsar object
+    flo_range:      ``(lo, hi)`` in Hz, the prior box of the outer scale
+    nf:             number of log-spaced bins
+    dt:             epoch quantisation in seconds
+    resolution_day: grouping in seconds for :func:`withinday_resolution`, which sets the
+                    upper band edge
+    name:           name of this GP and stem of its parameters
+    noisedict, scale, selection, tobs_scale, tobs_ref: as :func:`makegp_withinday`
+    """
+    f_res = withinday_resolution(psr, selection, dt, resolution_day, tobs_scale, tobs_ref)
+    if not f_res > flo_range[1]:
+        raise ValueError(f'makegp_red_hf: {psr.name}: the epochs resolve only up to '
+                         f'1/{1 / f_res:.0f} s, not above the top of the outer-scale range at '
+                         f'1/{1 / flo_range[1]:.0f} s.')
+
+    gp = makegp_withinday(psr, covariance=make_band_powerlaw(flo_range, f_hi=f_res, nf=nf),
+                          noisedict=noisedict, scale=scale, selection=selection, dt=dt,
+                          day=np.inf, resolution_day=resolution_day, ecorr=True,
+                          tobs_scale=tobs_scale, tobs_ref=tobs_ref, name=name)
+    gp.flo_range, gp.f_hi = (float(flo_range[0]), float(flo_range[1])), f_res
+    return gp
+
+
 def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=1.0,
                                      selection=selection_backend_flags, variable=False,
                                      nmodes=3, fref=None,

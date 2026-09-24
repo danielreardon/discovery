@@ -37,6 +37,8 @@ def update_priordict_standard_mpta():
         '(.*_)?withinday_gp_gamma_hi': [0, 5],
         '(.*_)?withinday_gp_gamma':   [0, 4],
         '(.*_)?red_tail_gamma_hi':    [0, 10],
+        '(.*_)?red_hf_log10_sigma':   [-9, -5],
+        '(.*_)?red_hf_gamma':         [0, 7],
         # Per-pulsar GW background parameters
         '(.*_)?bkgrnd_log10_A':     [-18, -11],
         # GP parameters
@@ -411,6 +413,7 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
                         shapiro=False, shapiro_ortho=False, orbital_dm=False, extra_gps=None, # Shapiro delay and orbital DM, and extra GPs. shapiro_ortho=True removes the first two harmonics (Freire & Wex eq. 29), for an orbit held at values fitted without a Shapiro delay
                         return_components=False, # Whether to return the list of model components in addition to the likelihood object (useful for adding additional components)
                         red_tail=False, red_tail_nf=128, red_tail_broken=False, red_tail_fbreak_max=None, # red_tail=True continues the Fourier red-noise spectrum from the upper edge of its last bin to the epoch resolution as a time-domain kernel over all epochs, sharing log10_A and gamma and carrying ECORR as its nugget in place of makegp_ecorr (fftint=False only); red_tail_broken adds a break above which the index is _gamma_hi, sampling {psr}_red_tail_gamma_hi and _log10_fbreak, the break bounded above by red_tail_fbreak_max in Hz (default the epoch resolution)
+                        red_hf=False, red_hf_nf=256, red_hf_flo_max=1.0/3600.0, # red_hf=True adds an achromatic process correlated across all epochs, independent of the red-noise GP, sampling {psr}_red_hf_log10_sigma, _gamma and the outer scale _log10_flo between the Fourier GPs' last bin edge and red_hf_flo_max in Hz; it carries ECORR as its nugget in place of makegp_ecorr (fftint=False only)
                         install_priors=True): # install this module's priordict_standard entries; a delegating caller that has installed its own passes False
     # Follow the model being built, not the import order. update(), not clear(): it
     # preserves front-inserted per-pulsar overrides.
@@ -443,7 +446,19 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
             psr, signals.turnover_psd('red', signals.turnover_set(turnover)), components=_K,
             T=_T, nf=red_tail_nf, broken=red_tail_broken, fbreak_max=red_tail_fbreak_max,
             noisedict=noisedict, tobs_scale=ecorr_tobs_scale, stem='red_noise')]
-    if ecorr and not red_tail:
+    if red_hf:
+        if fftint or not ecorr:
+            raise ValueError("single_pulsar_noise: red_hf=True starts at the Fourier GPs' last bin "
+                             "edge and carries ECORR, so it needs fftint=False and ecorr=True.")
+        if red_tail or withinday or ecorr_nmodes is not None or quadratic:
+            raise ValueError("single_pulsar_noise: red_hf=True replaces the plain per-epoch "
+                             "ECORR, so it cannot be combined with red_tail, withinday or the "
+                             "Legendre or quadratic ECORR variants.")
+        _T, _K = _fourier_grid(psr, max_cadence_days, Tspan)
+        model_components += [signals.makegp_red_hf(
+            psr, ((_K + 0.5) / _T, red_hf_flo_max), nf=red_hf_nf, noisedict=noisedict,
+            tobs_scale=ecorr_tobs_scale)]
+    if ecorr and not red_tail and not red_hf:
         _tobs = dict(tobs_scale=ecorr_tobs_scale)
         if withinday:
             # the within-day GP carries the ECORR diagonal in its own prior, so it
