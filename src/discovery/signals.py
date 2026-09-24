@@ -714,10 +714,7 @@ def make_withinday_brokenpowerlaw(f_lo=1.0 / 86400.0, f_hi=None, nf=96):
         return jnp.sum(w[:, None, None] * jnp.cos(2.0 * np.pi * fj[:, None, None] * tau[None]), axis=0)
 
     # the break must stay inside the modelled band, or one slope stops being identified
-    covariance.prior_boxes = {'log10_sigma': [-9.0, -5.5],
-                              'gamma_lo': [0.0, 5.0],
-                              'gamma_hi': [0.0, 5.0],
-                              'log10_fbreak': [float(np.log10(f_lo)) + 0.2,
+    covariance.prior_boxes = {'log10_fbreak': [float(np.log10(f_lo)) + 0.2,
                                                float(np.log10(f_hi)) - 0.2]}
     covariance.f_hi = float(f_hi)
     return covariance
@@ -832,7 +829,6 @@ def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
     selection, scale, tobs_scale, tobs_ref: as :func:`makegp_ecorr`
     name:       parameter-name stem for the kernel
     """
-    from . import prior as _prior
 
     covariance = make_withinday_powerlaw() if covariance is None else covariance
     backends, Umats, Umatall, epoch_t = _withinday_epochs(psr, selection, dt, tobs_scale,
@@ -911,10 +907,6 @@ def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
             *[(jnp.diag(f(params)) if isdiag else f(params)) for isdiag, f in blockfuncs])
     getphi.params = (log10_ecorrs if ecorr else []) + argmap
 
-    boxes = getattr(covariance, 'prior_boxes', {'log10_sigma': [-9.0, -5.5], 'gamma': [0.0, 4.0]})
-    _prior.priordict_standard.update(
-        {f'{re.escape(psr.name)}_{name}_{arg}': box for arg, box in boxes.items()})
-
     Phi = matrix.BlockDiagNoiseMatrix2D_var(getphi, blockfuncs)
     Phi.params = getphi.params
     gp = matrix.VariableGP(Phi, Umatall)
@@ -922,6 +914,10 @@ def makegp_withinday(psr, covariance=None, noisedict={}, scale=1.0,
     gp.name, gp.pos, gp.gpname, gp.gpcommon = psr.name, psr.pos, name, common
     gp.wd_epochs, gp.wd_blocks, gp.wd_nsingle = epoch_t, spans, n_single
     gp.wd_fhi = f_res
+    boxes = getattr(covariance, 'prior_boxes', {})
+    gp.prior_boxes = {p: boxes[a] for a, p in zip(
+        [a for a in inspect.getfullargspec(covariance).args if a not in ('tau', 'tau_t')], argmap)
+        if a in boxes}
     return gp
 
 

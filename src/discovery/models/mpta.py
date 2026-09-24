@@ -29,6 +29,13 @@ def update_priordict_standard_mpta():
         '(.*_)?tnequad':            [-10, -5],
         '(.*_)?log10_ecorr_q.*':    [-10, -5],
         '(.*_)?log10_ecorr':        [-10, -5],
+        # Within-day GP family; _set_withinday_priors gives each parameter a per-pulsar key
+        # and bounds the break and the outer scale by the band. gamma_lo and gamma_hi precede
+        # gamma, which re.match would let capture them.
+        '(.*_)?withinday_gp_log10_sigma': [-9, -5.5],
+        '(.*_)?withinday_gp_gamma_lo': [0, 5],
+        '(.*_)?withinday_gp_gamma_hi': [0, 5],
+        '(.*_)?withinday_gp_gamma':   [0, 4],
         # Per-pulsar GW background parameters
         '(.*_)?bkgrnd_log10_A':     [-18, -11],
         # GP parameters
@@ -361,6 +368,31 @@ def make_psr_gps_fftint(psr, max_cadence_days=14, bkgrnd_log10_A=None, Tspan=Non
             ([signals.makegp_fftcov_band_alpha(psr, signals.powerlaw, components=psr_knots, T=psr_Tspan, name='bandalpha_gp')] if band_alpha else []))
 
 
+def _set_withinday_priors(psr, gp):
+    """Set per-pulsar priors for a GP built on :func:`signals.makegp_withinday`.
+
+    Every parameter under the GP's own name gets a per-pulsar key: the data-derived bound the
+    GP carries in ``gp.prior_boxes`` where there is one (a break or an outer scale inside the
+    band), else this module's box. The keys go ahead of the existing entries, since
+    ``_matchprior`` returns the first match, and a caller can narrow one in place. Does nothing
+    for other components.
+    """
+    boxes = getattr(gp, 'prior_boxes', None)
+    if boxes is None or not hasattr(gp, 'wd_epochs'):
+        return {}
+    stem = f'{psr.name}_{gp.gpname}_'
+    updates = {}
+    for p in gp.Phi.params:
+        if p.startswith(stem):
+            box = boxes.get(p, None) or prior.getprior_uniform(p)
+            updates[re.escape(p)] = [float(box[0]), float(box[1])]
+
+    rest = {k: v for k, v in prior.priordict_standard.items() if k not in updates}
+    prior.priordict_standard.clear()
+    prior.priordict_standard.update({**updates, **rest})
+    return updates
+
+
 def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noisedict={},
                         white_selection=None, # per-TOA flag whose values split efac and tnequad, e.g. 'chan' for one pair per frequency channel. ECORR is deliberately NOT split: each epoch-channel is a singleton, so a per-channel ECORR would give one basis column per TOA
                         ecorr=True, quadratic=False, ecorr_nmodes=None, ecorr_correlated=False, global_ecorr=False, ecorr_tobs_scale=False, withinday=False, withinday_dt=1.0, withinday_day=86400.0, withinday_flo=1.0/86400.0, withinday_fhi=None, withinday_nf=64, # withinday=True replaces the diagonal ECORR prior with a within-day correlated one on the same epoch basis, sampling {psr}_withinday_gp_log10_sigma and _gamma alongside log10_ecorr, which the kernel needs as its nugget. withinday_fhi=None ends the kernel band at the highest frequency the within-day epochs resolve. ecorr options. ecorr_tobs_scale weights the ECORR basis by sqrt(tobs_ref/tobs), making log10_ecorr the jitter at the reference integration time rather than an average over integrations of unequal length. ecorr_nmodes=N selects an N-mode Legendre ECORR (log-frequency basis; nmodes=1 is standard ECORR); ecorr_correlated=True uses the full-M (correlated-mode) variant that can also model a frequency-asymmetric jitter amplitude
@@ -446,6 +478,9 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     # would otherwise be degenerate with it.
     # fd_selection (e.g. signals.selection_backend_flags) gives each TOA group its
     # own frequency basis, combined into the one marginalised GP.
+    for _gp in model_components:
+        _set_withinday_priors(psr, _gp)
+
     # fd_prior='improper' removes the basis directions unconditionally; 'matern'
     # gives the node amplitudes a Matern-3/2 prior in log-frequency and samples its
     # scale and correlation length, so the data set how much is absorbed.

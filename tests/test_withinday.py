@@ -152,10 +152,20 @@ def test_the_ecorr_diagonal_is_the_nugget_a_densely_sampled_day_needs(psr):
         np.linalg.cholesky(np.asarray(k(np.abs(t[:, None] - t[None, :]), -6.5, 1.0)))
 
 
-def test_prior_boxes_are_registered(psr):
+def _install_priors(psr, gp):
+    """The model's priors for a within-day-family GP: the module boxes and the per-pulsar keys."""
+    from discovery.models import mpta
+    mpta.update_priordict_standard_mpta()
+    mpta._set_withinday_priors(psr, gp)
+
+
+def test_the_model_sets_the_within_day_priors(psr):
     import re
     from discovery import prior
-    s.makegp_withinday(psr)
+    before = dict(prior.priordict_standard)
+    gp = s.makegp_withinday(psr)
+    assert dict(prior.priordict_standard) == before
+    _install_priors(psr, gp)
     e = re.escape(psr.name)
     assert prior.priordict_standard[f'{e}_withinday_gp_log10_sigma'] == [-9.0, -5.5]
     assert prior.priordict_standard[f'{e}_withinday_gp_gamma'] == [0.0, 4.0]
@@ -263,10 +273,14 @@ def test_the_covariance_supplies_its_own_prior_boxes(psr):
     import re
     from discovery import prior
     gp = s.makegp_withinday(psr, covariance=s.make_withinday_brokenpowerlaw())
+    _install_priors(psr, gp)
     e = re.escape(psr.name)
     for arg in ('log10_sigma', 'gamma_lo', 'gamma_hi', 'log10_fbreak'):
         assert f'{psr.name}_withinday_gp_{arg}' in gp.Phi.params
         assert f'{e}_withinday_gp_{arg}' in prior.priordict_standard
+    lo, hi = prior.getprior_uniform(f'{psr.name}_withinday_gp_log10_fbreak')
+    assert lo == pytest.approx(np.log10(1.0 / 86400.0) + 0.2)
+    assert hi == pytest.approx(np.log10(gp.wd_fhi) - 0.2)
 
 
 def test_the_broken_kernel_evaluates_in_a_likelihood(psr):
