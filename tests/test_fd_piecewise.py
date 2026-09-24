@@ -265,9 +265,17 @@ def test_matern_tolerates_a_rank_deficient_basis(psr, restore_priors):
     assert np.all(np.isfinite(gp.Phi.make_inv()({sig: -7.0, ell: -0.5})[0]))
 
 
+def _install_fd_priors(psr, gp):
+    """The model's FD priors: the module dictionary and the per-pulsar bounds."""
+    from discovery.models import mpta
+    mpta.update_priordict_standard_mpta()
+    mpta._set_fd_priors(psr, gp)
+
+
 def test_matern_ell_prior_is_bounded_by_the_observed_band(psr, restore_priors):
     """log10_ell runs from a tenth of the node span to three times it."""
     gp = s.makegp_fd_piecewise_matern(psr, nodes=16)
+    _install_fd_priors(psr, gp)
     sig, ell = _hypernames(psr)
 
     lo, hi = restore_priors.getprior_uniform(ell)
@@ -280,6 +288,7 @@ def test_matern_ell_prior_is_bounded_by_the_observed_band(psr, restore_priors):
 def test_matern_prior_is_positive_definite_across_its_range(psr, restore_priors):
     """Phi stays a valid covariance everywhere the sampler can go."""
     gp = s.makegp_fd_piecewise_matern(psr, nodes=32)
+    _install_fd_priors(psr, gp)
     sig, ell = _hypernames(psr)
     lo, hi = restore_priors.getprior_uniform(ell)
 
@@ -296,6 +305,7 @@ def test_matern_jitter_bounds_the_condition_number(psr, restore_priors):
     conds = {}
     for jitter in (1e-12, 1e-8):
         gp = s.makegp_fd_piecewise_matern(psr, nodes=nodes, jitter=jitter)
+        _install_fd_priors(psr, gp)
         hi = restore_priors.getprior_uniform(ell)[1]
         w = np.linalg.eigvalsh(np.asarray(gp.Phi.getN({sig: -7.0, ell: hi})))
         conds[jitter] = w.max() / w.min()
@@ -312,6 +322,8 @@ def test_matern_inverse_and_gradients_are_finite_across_the_prior(psr, restore_p
     import jax.numpy as jnp
 
     gp = s.makegp_fd_piecewise_matern(psr, nodes=16)
+
+    _install_fd_priors(psr, gp)
     sig, ell = _hypernames(psr)
     slo, shi = restore_priors.getprior_uniform(sig)
     elo, ehi = restore_priors.getprior_uniform(ell)
@@ -348,6 +360,7 @@ def test_matern_blocks_are_independent_under_a_selection(psr, restore_priors):
 def test_matern_effective_dof_rises_with_amplitude(psr, restore_priors):
     """A small sigma leaves the directions in the data; a large one absorbs them."""
     gp = s.makegp_fd_piecewise_matern(psr, nodes=16)
+    _install_fd_priors(psr, gp)
     sig, ell = _hypernames(psr)
     Nvec = _Nvec(psr)
     mid = float(np.mean(restore_priors.getprior_uniform(ell)))
@@ -376,6 +389,7 @@ def test_the_improper_prior_spends_every_direction(psr, restore_priors):
 def test_matern_effective_dof_is_stable_in_node_count(psr, restore_priors, nodes):
     """Raising the node count refines the basis without buying free parameters."""
     gp = s.makegp_fd_piecewise_matern(psr, nodes=nodes)
+    _install_fd_priors(psr, gp)
     sig, ell = _hypernames(psr)
     mid = float(np.mean(restore_priors.getprior_uniform(ell)))
 
@@ -388,6 +402,7 @@ def test_matern_effective_dof_agrees_between_spacings(psr, restore_priors):
     dofs = {}
     for spacing in ('quantile', 'log'):
         gp = s.makegp_fd_piecewise_matern(psr, nodes=64, spacing=spacing)
+        _install_fd_priors(psr, gp)
         sig, ell = _hypernames(psr)
         mid = float(np.mean(restore_priors.getprior_uniform(ell)))
         dofs[spacing] = _edof(gp, {sig: -7.0, ell: mid}, Nvec)
@@ -428,6 +443,8 @@ def test_matern_drives_a_real_likelihood(psr, restore_priors):
     from discovery import prior as _p
 
     gp = s.makegp_fd_piecewise_matern(psr, nodes=16)
+
+    _install_fd_priors(psr, gp)
     psl = ds.PulsarLikelihood([psr.residuals, ds.makenoise_measurement(psr), gp])
 
     t = _p.makelogtransform_uniform(psl.logL)

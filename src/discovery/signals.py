@@ -1432,7 +1432,7 @@ _SQRT3 = float(np.sqrt(3.0))
 
 def makegp_fd_piecewise_matern(psr, nodes=16, spacing='quantile', selection=None, groups=None,
                                project_tm=True, jitter=1e-8, name='fd_gp',
-                               kind='linear', bin_flag=None, normalise=False):
+                               kind='linear', bin_flag=None, normalise=False, project_nodes=False):
     """Piecewise-linear frequency-dependent delay under a Matern-3/2 prior.
 
     Same hat-function basis as :func:`makegp_fd_piecewise`, but the node
@@ -1452,10 +1452,9 @@ def makegp_fd_piecewise_matern(psr, nodes=16, spacing='quantile', selection=None
     Amplitudes stay analytically marginalised.
 
     Samples ``{psr}_{name}_log10_sigma`` (delay units) and
-    ``{psr}_{name}_log10_ell``, registering a per-pulsar prior for the latter
-    bounded by the pulsar's own frequency coverage. With ``selection`` active the
-    blocks are disjoint and Phi is block diagonal, with the hyperparameters
-    shared across blocks.
+    ``{psr}_{name}_log10_ell``, whose priors the model sets (``mpta._set_fd_priors``
+    bounds log10_ell by the node span). With ``selection`` active the blocks are
+    disjoint and Phi is block diagonal, with the hyperparameters shared across blocks.
 
     nodes:      frequency nodes per block
     spacing:    'quantile' (equal TOA counts), 'log' (equal in log-frequency), or
@@ -1477,9 +1476,12 @@ def makegp_fd_piecewise_matern(psr, nodes=16, spacing='quantile', selection=None
                 the bin edges.
     bin_flag:   per-TOA flag whose distinct values define the bins, for
                 kind='constant' with spacing='flag'
+    project_nodes: also remove from the prior the node-space directions whose delay
+                patterns the timing model spans, as :func:`makegp_fd_piecewise_powerlaw`
+                does, so the prior is ``B^T Phi B`` on the remaining node space and
+                ``normalise`` refers to it; ``jitter`` is then relative to the mean
+                diagonal of the projected prior
     """
-    from . import prior as _prior
-
     x = np.log(np.asarray(psr.freqs, dtype=np.float64))
     blocks = _fd_piecewise_selection_blocks(psr, len(x), selection, groups)
 
@@ -1498,6 +1500,7 @@ def makegp_fd_piecewise_matern(psr, nodes=16, spacing='quantile', selection=None
         raise ValueError(f"makegp_fd_piecewise_matern: no usable frequency basis for {psr.name}.")
 
     fmat = np.hstack(mats)
+    fmat_raw = fmat
 
     if project_tm:
         fdpars = [p for p in getattr(psr, 'fitpars', []) if re.fullmatch(r'FD\d+', str(p).upper())]
@@ -1562,19 +1565,290 @@ def makegp_fd_piecewise_matern(psr, nodes=16, spacing='quantile', selection=None
     else:
         Phi = matrix.NoiseMatrix2D_var(getphi)
 
-    # ell below the node spacing is unresolvable by the basis; above the span the
-    # kernel is flat across it and Phi approaches rank one
-    span = float(max(q.max() - q.min() for q in qs))
-    _prior.priordict_standard.update({
-        f'{re.escape(psr.name)}_{name}_log10_sigma': [-10.0, -4.0],
-        f'{re.escape(psr.name)}_{name}_log10_ell': [float(np.log10(0.1 * span)),
-                                                    float(np.log10(3.0 * span))]})
+    if project_nodes:
+        B, removed = _fd_node_projection(psr, fmat_raw, fmat, np.concatenate(qs),
+                                         'makegp_fd_piecewise_matern')
+        project_basis = fmat
+        fmat = fmat @ B
+        Bj = matrix.jnparray(B)
+        gram_b = matrix.jnparray(fmat.T @ fmat)
+        ntoa_b = fmat.shape[0]
+
+        eye_b = matrix.jnparray(np.eye(B.shape[1]))
+
+        def getphi_nodes(params):
+            Ks = Bj.T @ jax.scipy.linalg.block_diag(
+                *[_corr(dist, eye, params) - jitter * eye for dist, eye in zip(dists, eyes)]) @ Bj
+            Ks = Ks + jitter * jnp.mean(jnp.diag(Ks)) * eye_b
+            g = jnp.sum(gram_b * Ks) / ntoa_b if normalise else 1.0
+            return 10.0 ** (2.0 * params[signame]) / g * Ks
+        getphi_nodes.params = [signame, ellname]
+
+        Phi = matrix.NoiseMatrix2D_var(getphi_nodes)
 
     gp = matrix.VariableGP(Phi, fmat)
     gp.index = {f'{psr.name}_{name}_coefficients({fmat.shape[1]})': slice(0, fmat.shape[1])}
     gp.name = psr.name
     gp.gpname = name
     gp.fd_nodes = group_nodes[None] if selection is None else group_nodes
+    if project_nodes:
+        gp.node_basis, gp.node_removed, gp.project_basis = B, removed, project_basis
+
+    return gp
+
+
+def _fd_frequency_only_patterns(psr, fmat_raw, q, tol=1e-9, degree=12):
+    """Node patterns of the timing-model columns that depend on observing frequency alone.
+
+    A column of ``psr.Mmat`` counts when its per-TOA values are reproduced to relative
+    residual ``tol`` either by a function of frequency in the span of Legendre
+    polynomials in ``log(freq)`` up to ``degree`` and ``nu**-2`` -- the phase offset,
+    every ``FDk`` and a constant ``DM`` -- or by the basis itself, like a jump between
+    groups the blocks separate. The first kind is evaluated at the node positions ``q``,
+    the second is its least-squares node representation. Columns that vary in time
+    reproduce neither and are left to the TOA-space projection.
+
+    Returns ``(patterns, labels)``: one node pattern per counted column, and its name.
+    """
+    M = np.asarray(psr.Mmat, dtype=np.float64)
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    lo, hi = float(x.min()), float(x.max())
+
+    def functions(y):
+        u = (2.0 * y - lo - hi) / (hi - lo)
+        return np.column_stack([np.polynomial.legendre.legvander(u, degree), np.exp(-2.0 * (y - lo))])
+
+    at_toas, at_nodes = functions(x), functions(np.asarray(q, dtype=np.float64))
+    names = [str(n) for n in getattr(psr, 'fitpars', [])]
+    if len(names) != M.shape[1]:
+        names = [f'Mmat column {j}' for j in range(M.shape[1])]
+
+    patterns, labels = [], []
+    for j in range(M.shape[1]):
+        m = M[:, j]
+        scale = np.linalg.norm(m)
+        if scale == 0.0:
+            continue
+        coef, *_ = np.linalg.lstsq(at_toas, m, rcond=None)
+        if np.linalg.norm(at_toas @ coef - m) < tol * scale:
+            patterns.append(at_nodes @ coef)
+            labels.append(names[j])
+            continue
+        g, *_ = np.linalg.lstsq(fmat_raw, m, rcond=None)
+        if np.linalg.norm(fmat_raw @ g - m) < tol * scale:
+            patterns.append(g)
+            labels.append(names[j])
+
+    return patterns, labels
+
+
+def _fd_node_projection(psr, fmat_raw, fmat, q, what, tol=1e-10):
+    """Orthonormal basis of the node space left once the timing model's frequency-only
+    directions are removed, and a one-line report of what it retains.
+
+    The removed directions are the node patterns of :func:`_fd_frequency_only_patterns`,
+    orthonormalised with singular values below ``tol`` of the largest dropped, so a prior
+    ``B^T Phi B`` on the returned ``B`` puts exactly no power in them.
+
+    fmat_raw: basis before any projection, used to recognise the columns
+    fmat:     basis the GP ships, used to report the power retained
+    q:        node positions in log(freq), concatenated over blocks
+    """
+    patterns, labels = _fd_frequency_only_patterns(psr, fmat_raw, q)
+    n = fmat.shape[1]
+    if not patterns:
+        print(f'{what}: {psr.name}: no timing-model column depends on frequency alone; '
+              f'node space left whole ({n} directions).')
+        return np.eye(n), labels
+
+    U, S, _ = np.linalg.svd(np.column_stack(patterns), full_matrices=True)
+    r = int(np.sum(S > tol * S[0]))
+    B = U[:, r:]
+    kept = np.linalg.norm(fmat @ B) ** 2 / np.linalg.norm(fmat) ** 2
+    print(f'{what}: {psr.name}: node-space projection removes {r} direction(s) spanned by '
+          f'{len(labels)} frequency-only timing-model column(s) ({", ".join(labels)}); '
+          f'retains rank {n - r} of {n} and {kept:.4f} of the basis power.')
+    if n - r < 0.5 * n:
+        warnings.warn(f'{what}: {psr.name}: the node-space projection leaves {n - r} of {n} node '
+                      f'directions, since the timing model fits {r} frequency-only terms; the prior '
+                      f'then resolves little. Use more nodes.')
+    return B, labels
+
+
+def _fd_powerlaw_correlation(q, f_lo, f_hi, nf):
+    """Band-limited power law in log-frequency as a correlation matrix over nodes ``q``.
+
+    ``S(f) = f**-gamma`` over ``nf`` log-spaced bins of ``[f_lo, f_hi]``, each bin's weight
+    ``w_j`` its Simpson integral and the bin taken flat across its width ``df_j``, so
+
+        k(dq) = sum_j w_j cos(2 pi f_j dq) sinc(df_j dq),
+
+    normalised to ``k(0) = 1``, is the exact covariance of that step spectrum. Returns
+    ``corr(gamma)``.
+    """
+    edges = np.exp(np.linspace(np.log(f_lo), np.log(f_hi), int(nf) + 1))
+    a, b = matrix.jnparray(edges[:-1] / f_hi), matrix.jnparray(edges[1:] / f_hi)
+    m = 0.5 * (a + b)
+    dq = np.asarray(q)[None, :, None] - np.asarray(q)[None, None, :]
+    cosines = matrix.jnparray(np.cos(2.0 * np.pi * f_hi * np.asarray(m)[:, None, None] * dq)
+                              * np.sinc(f_hi * (np.asarray(b) - np.asarray(a))[:, None, None] * dq))
+
+    def corr(gamma):
+        w = (b - a) / 6.0 * (a ** -gamma + 4.0 * m ** -gamma + b ** -gamma)
+        return jnp.tensordot(w / jnp.sum(w), cosines, axes=1)
+
+    return corr
+
+
+def makegp_fd_piecewise_powerlaw(psr, nodes=16, spacing='quantile', selection=None, groups=None,
+                                 project_tm=True, project_nodes=True, independent=False,
+                                 powerlaw=True, flo_pad=2.0, nf=128, jitter=1e-8, name='fd_gp',
+                                 kind='linear', bin_flag=None, normalise=True):
+    """Piecewise frequency-dependent delay under a power-law prior in log-frequency.
+
+    The basis, placements and selections of :func:`makegp_fd_piecewise_matern`, with the
+    Matern kernel replaced by a band-limited power law in ``q = log(nu)``: over "frequencies"
+    ``f`` in cycles per unit ``log(nu)``,
+
+        S(f) = f**-gamma on [f_lo, f_hi],   k(dq) = sum_j w_j cos(2 pi f_j dq) sinc(df_j dq),
+
+    with ``w_j`` the integral of ``S`` over log-spaced bin ``j``, normalised to ``k(0) = 1``
+    and evaluated at the node positions; it is the exact covariance of that step spectrum. ``f_hi`` is the Nyquist
+    frequency of the node grid, ``1/(2 x median node spacing)``, and ``f_lo`` the outer
+    scale, ``1/(flo_pad x node span)``, per block. The kernel is positive semi-definite and
+    differentiable in ``gamma``, and there is no length scale.
+
+    ``gamma`` sets the smoothness. ``gamma = 0`` is a flat spectrum up to the node Nyquist,
+    close to offsets independent from node to node, and only approximately so where the node
+    spacing departs from its median. A Matern kernel of order ``nu`` has a high-frequency
+    tail ``f**-(2 nu + 1)``, so ``gamma = 2, 4, 6`` correspond to ``nu = 1/2, 3/2, 5/2``.
+
+    ``independent`` adds offsets drawn independently per node, ``N(0, sigma_ind**2)``,
+    constant in time, so the prior is ``sigma**2 K_gamma + sigma_ind**2 I`` in node space;
+    at ``gamma = 0`` the two terms are nearly degenerate.
+
+    ``project_nodes`` removes from the prior the node-space directions whose delay patterns
+    the timing model spans (:func:`_fd_node_projection`): the node amplitudes are
+    ``c = B a`` with ``B`` an orthonormal basis of what is left, so the prior is
+    ``B^T Phi B`` and puts exactly no power along the phase offset, the ``FDk`` polynomials
+    or a constant ``DM`` evaluated at the nodes. The TOA-space projection (``project_tm``)
+    still removes the rest of the timing model from the basis. The removed directions are
+    polynomials at the nodes, whose delays a basis reproduces only up to its resolution --
+    within-bin frequency spread for indicators, interpolation between hat nodes -- so they
+    carry that residue with them, and each fitted ``FDk`` costs one node direction.
+
+    ``normalise`` scales each term so its ``log10_sigma`` is the rms delay per TOA that the
+    prior admits after both projections, so ``sigma`` and ``gamma`` are not degenerate
+    through them.
+
+    ``gp.project_basis`` is the basis before the node-space reduction, the whole
+    frequency-dependent span, for other components to project out whatever the prior on it.
+
+    Samples ``{psr}_{name}_log10_sigma`` and ``{psr}_{name}_gamma``, and with
+    ``independent`` ``{psr}_{name}_log10_sigma_ind``, whose priors the model sets; with
+    ``selection`` active the blocks share them.
+
+    nodes, spacing, selection, groups, kind, bin_flag: as :func:`makegp_fd_piecewise_matern`
+    project_tm:    project the timing-model column subspace out of the basis
+    project_nodes: remove the frequency-only timing-model directions from the prior
+    independent:   add the independent per-node term
+    powerlaw:      include the power-law term; False with ``independent`` leaves the
+                   independent term alone, sampling only ``log10_sigma_ind``
+    flo_pad:       outer scale as a multiple of the node span
+    nf:            log-spaced bins in the power-law sum
+    jitter:        diagonal added to the prior after the node projection, relative to its
+                   mean diagonal, so the floor scales with the power the projection leaves
+                   rather than with the raw kernel
+    normalise:     scale so log10_sigma is the rms delay per TOA after projection
+    name:          parameter-name stem
+    """
+    if not (powerlaw or independent):
+        raise ValueError("makegp_fd_piecewise_powerlaw: powerlaw=False needs independent=True, "
+                         "or the prior has no term.")
+
+    x = np.log(np.asarray(psr.freqs, dtype=np.float64))
+    blocks = _fd_piecewise_selection_blocks(psr, len(x), selection, groups)
+
+    mats, qs, group_nodes = [], [], {}
+    for label, sel in blocks:
+        block = _fd_piecewise_block(psr, x, sel, nodes, spacing,
+                                    name if label is None else f'{name}_{label}',
+                                    kind=kind, bin_flag=bin_flag)
+        if block is not None:
+            fmat_g, q = block
+            mats.append(fmat_g)
+            qs.append(q)
+            group_nodes[label] = np.exp(q)
+
+    if not mats:
+        raise ValueError(f"makegp_fd_piecewise_powerlaw: no usable frequency basis for {psr.name}.")
+
+    fmat_raw = np.hstack(mats)
+    fmat = fmat_raw
+    if project_tm:
+        Mmat = np.asarray(psr.Mmat, dtype=np.float64)
+        Q_tm, _ = np.linalg.qr(Mmat / np.sqrt(np.sum(Mmat**2, axis=0)))
+        fmat = fmat_raw - Q_tm @ (Q_tm.T @ fmat_raw)
+
+    q_all = np.concatenate(qs)
+    if project_nodes:
+        B, removed = _fd_node_projection(psr, fmat_raw, fmat, q_all, 'makegp_fd_piecewise_powerlaw')
+    else:
+        B, removed = np.eye(len(q_all)), []
+    fmat_out = fmat @ B
+    if fmat_out.shape[1] == 0:
+        raise ValueError(f"makegp_fd_piecewise_powerlaw: {psr.name}: the timing model spans "
+                         f"every node direction.")
+
+    bands, corrs = [], []
+    for q in (qs if powerlaw else []):
+        dq = np.diff(np.sort(q))
+        f_hi = 1.0 / (2.0 * float(np.median(dq[dq > 0])))
+        f_lo = 1.0 / (float(flo_pad) * float(q.max() - q.min()))
+        if not f_hi > f_lo:
+            raise ValueError(f"makegp_fd_piecewise_powerlaw: {psr.name}: the node Nyquist "
+                             f"1/{1 / f_hi:.3g} is not above the outer scale 1/{1 / f_lo:.3g} "
+                             f"(per unit log freq); lower flo_pad or use more nodes.")
+        bands.append((f_lo, f_hi))
+        corrs.append(_fd_powerlaw_correlation(q, f_lo, f_hi, nf))
+
+    sizes = [len(q) for q in qs]
+    offsets = np.cumsum([0] + sizes)
+    Bj = matrix.jnparray(B)
+    eye_out = matrix.jnparray(np.eye(B.shape[1]))
+
+    signame, gamname = f'{psr.name}_{name}_log10_sigma', f'{psr.name}_{name}_gamma'
+    indname = f'{psr.name}_{name}_log10_sigma_ind'
+    pnames = ([signame, gamname] if powerlaw else []) + ([indname] if independent else [])
+
+    def shape(params):
+        Ks = Bj.T @ jax.scipy.linalg.block_diag(*[c(params[gamname]) for c in corrs]) @ Bj
+        return Ks + jitter * jnp.mean(jnp.diag(Ks)) * eye_out
+
+    ntoa = fmat_out.shape[0]
+    gram = matrix.jnparray(fmat_out.T @ fmat_out)
+    g_ind = float(np.trace(fmat_out.T @ fmat_out)) / ntoa if normalise else 1.0
+
+    def getphi(params):
+        phi = 0.0
+        if powerlaw:
+            Ks = shape(params)
+            g = jnp.sum(gram * Ks) / ntoa if normalise else 1.0
+            phi = 10.0 ** (2.0 * params[signame]) / g * Ks
+        if independent:
+            phi = phi + 10.0 ** (2.0 * params[indname]) / g_ind * eye_out
+        return phi
+    getphi.params = pnames
+
+    Phi = matrix.NoiseMatrix2D_var(getphi)
+
+    gp = matrix.VariableGP(Phi, fmat_out)
+    gp.index = {f'{psr.name}_{name}_coefficients({fmat_out.shape[1]})': slice(0, fmat_out.shape[1])}
+    gp.name = psr.name
+    gp.gpname = name
+    gp.fd_nodes = group_nodes[None] if selection is None else group_nodes
+    gp.node_basis, gp.node_removed, gp.fd_bands = B, removed, bands
+    gp.project_basis = fmat
 
     return gp
 
