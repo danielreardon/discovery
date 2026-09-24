@@ -67,7 +67,7 @@ def test_prior_is_block_diagonal_by_day(psr):
     day = np.floor(gp.wd_epochs / 86400.0)
     cross = day[:, None] != day[None, :]
     assert np.abs(Phi[cross]).max() == 0.0
-    assert np.allclose(Phi, Phi.T)
+    assert np.allclose(Phi, Phi.T, rtol=1e-12, atol=0.0)
 
 
 def test_block_diagonal_factorisation_is_exact(psr):
@@ -300,12 +300,12 @@ def test_resolution_is_half_the_median_within_day_epoch_gap(psr):
     day = np.floor(epochs / 86400.0)
     gaps = np.concatenate([np.diff(epochs[day == d]) for d in np.unique(day)
                            if (day == d).sum() > 1])
-    assert np.isclose(s.withinday_resolution(psr), 1.0 / (2.0 * np.median(gaps)), rtol=1e-12)
+    assert np.isclose(s.withinday_resolution(psr), 1.0 / (2.0 * np.median(gaps)), rtol=1e-8, atol=0.0)
 
 
 def test_the_default_kernel_is_bound_to_the_resolution(psr):
     gp = s.makegp_withinday(psr)
-    assert np.isclose(gp.wd_fhi, s.withinday_resolution(psr), rtol=1e-12)
+    assert np.isclose(gp.wd_fhi, s.withinday_resolution(psr), rtol=1e-12, atol=0.0)
 
 
 def test_an_unbound_kernel_refuses_direct_evaluation(psr):
