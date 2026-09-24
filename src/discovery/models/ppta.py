@@ -88,6 +88,11 @@ PPTA_CONFIG = {
         # Recompute both bounds for a different array span, and quote the f_low/5
         # threshold with any odds read off this box.
         '(.*_)?log10_fc': [-11.54, -7.5],
+        # Frequency-dependent delay GP; mpta._set_fd_priors bounds the Matern log10_ell
+        # per pulsar. log10_sigma_ind comes first, as in mpta, since these keys are
+        # front-inserted and log10_sigma would otherwise capture it.
+        '(.*_)?fd_gp_log10_sigma_ind': [-10, -4],
+        '(.*_)?fd_gp_log10_sigma': [-10, -4],
         # band GP centre and bandwidth are bounded per-pulsar from psr.freqs by
         # _set_band_priors at model-build time.
         '(.*_)?band_gp_log10_A': [-18, -11],
@@ -1069,6 +1074,7 @@ def single_pulsar_noise(
                           fd_groups_dict=md.get("fd_groups"), prior=fd_prior,
                           normalise=fd_normalise)
         if fd_gp is not None:
+            mpta._set_fd_priors(psr, fd_gp)
             ppta_gps += [fd_gp]
 
     # Built after fd_gp because pa_project_fd removes the fd column span from the basis.
