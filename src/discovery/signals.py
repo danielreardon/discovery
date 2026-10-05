@@ -632,6 +632,106 @@ def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
 
         return gp
 
+def makegp_ecorr_legendre_modulated(psr, noisedict={}, enterprise=False, scale=1.0,
+                                    selection=selection_backend_flags, variable=False,
+                                    nmodes=3, modulation=2, fref=None, name='modecorrGPleg',
+                                    tobs_scale=False, tobs_ref=1800.0):
+    """Legendre ECORR GP whose jitter is modulated by a low-order profile across the band.
+
+    Each epoch's jitter is ``j(y) = m(y) u(y)``. ``u`` is the diagonal Legendre process of
+    :func:`makegp_ecorr_legendre` (same epochs, ``y`` mapping, per-backend handling, amplitude
+    names and priors), and
+
+        m(y) = 1 + sum_{d=1..modulation} b_d P_d(y)
+
+    is a per-backend profile with parameters ``{psr.name}_{backend}_ecorr_mod_b{d}``. The
+    within-epoch covariance is ``K(y, y') = m(y) m(y') sum_k sigma_k^2 P_k(y) P_k(y')``: the b_d
+    set the variance profile ``V(y) = m(y)^2 V_u(y)`` (b_1 tilts it, negative b_2 flattens the
+    band edges) and leave the correlation coefficient across the band to the sigma_k. All
+    b_d = 0 is exactly :func:`makegp_ecorr_legendre`.
+
+    The basis is the diagonal model's, with each TOA's row multiplied by m at that TOA, so it
+    depends on the b_d when they are sampled; the prior on the mode amplitudes stays diagonal.
+
+    The standard prior, each b_d uniform in [-0.4, 0.4], keeps m >= 0.6 on [-1, 1] for D = 1 and
+    m >= 0.2 for D = 2. For D = 3 it allows m down to -0.2 at the band edges (|y| >= 0.948)
+    near the corners of the box; a sign change there is a degenerate model, not an error.
+
+    psr:        Discovery Pulsar object
+    noisedict:  fixed parameter values; amplitudes are fixed only if all are given, as in
+                :func:`makegp_ecorr_legendre`, and each b_d given is fixed
+    nmodes:     number of Legendre modes in u (integer >= 1)
+    modulation: degree D of the profile m (integer >= 1)
+    name:       GP name; the coefficients are indexed as ``{psr.name}_{name}_coefficients(n)``
+    Other arguments as :func:`makegp_ecorr_legendre`.
+
+    Raises ValueError if nmodes or modulation is not an integer >= 1, or if a b_d fixed in
+    noisedict lies outside its prior.
+    """
+    if not isinstance(modulation, (int, np.integer)) or isinstance(modulation, bool) or modulation < 1:
+        raise ValueError('makegp_ecorr_legendre_modulated: modulation must be an integer >= 1')
+    if not isinstance(nmodes, (int, np.integer)) or isinstance(nmodes, bool) or nmodes < 1:
+        raise ValueError('makegp_ecorr_legendre_modulated: nmodes must be an integer >= 1')
+    modulation, nmodes = int(modulation), int(nmodes)
+
+    base = makegp_ecorr_legendre(psr, noisedict=noisedict, enterprise=enterprise, scale=scale,
+                                 selection=selection, variable=True, nmodes=nmodes, fref=fref,
+                                 name=name, tobs_scale=tobs_scale, tobs_ref=tobs_ref)
+    Umatall = np.asarray(base.F)
+
+    # per-TOA band coordinate y and backend membership, mapped as in makegp_ecorr_legendre
+    freqs = np.asarray(psr.freqs)
+    backend_flags = selection(psr)
+    backends = [b for b in sorted(set(backend_flags)) if b != '']
+    y = np.zeros(len(freqs))
+    membership = np.zeros((len(freqs), len(backends)))
+    for j, backend in enumerate(backends):
+        mask = np.array(backend_flags == backend)
+        fref_b = float(np.mean(freqs[mask])) if fref is None else float(fref)
+        x = np.log(freqs / fref_b)
+        x_min, x_max = float(x[mask].min()), float(x[mask].max())
+        half_range = 0.5 * (x_max - x_min)
+        if half_range != 0.0:
+            y[mask] = ((x - 0.5 * (x_max + x_min)) / half_range)[mask]
+        membership[mask, j] = 1.0
+    profile = np.polynomial.legendre.legvander(y, modulation)[:, 1:]
+
+    bnames = [[f'{psr.name}_{backend}_ecorr_mod_b{d}' for d in range(1, modulation + 1)]
+              for backend in backends]
+    fixed = {b: float(noisedict[b]) for row in bnames for b in row if b in noisedict}
+    if fixed:
+        from . import prior as _prior
+        outside = {b: v for b, v in fixed.items()
+                   if not _prior.getprior_uniform(b)[0] <= v <= _prior.getprior_uniform(b)[1]}
+        if outside:
+            raise ValueError(f'makegp_ecorr_legendre_modulated: {psr.name}: fixed modulation '
+                             f'value(s) outside the prior: {outside}.')
+    sampled = [b for row in bnames for b in row if b not in fixed]
+
+    def modulation_factor(params, xp):
+        bmat = xp.array([[fixed[b] if b in fixed else params[b] for b in row] for row in bnames])
+        return 1.0 + xp.sum((xp.asarray(membership) @ bmat) * xp.asarray(profile), axis=1)
+
+    if sampled:
+        Uj = matrix.jnparray(Umatall)
+
+        def F(params):
+            return modulation_factor(params, jnp)[:, None] * Uj
+        F.params = sampled
+    else:
+        F = modulation_factor({}, np)[:, None] * Umatall
+
+    if not sampled and not base.Phi.params and not variable:
+        gp = matrix.ConstantGP(matrix.NoiseMatrix1D_novar(np.asarray(base.Phi.getN({}))), F)
+    else:
+        gp = matrix.VariableGP(base.Phi, F)
+        gp.index = {f'{psr.name}_{name}_coefficients({Umatall.shape[1]})': slice(0, Umatall.shape[1])}
+        gp.name, gp.pos = psr.name, psr.pos
+        gp.gpname, gp.gpcommon = name, []
+    gp.modulation, gp.modulation_params = modulation, [b for row in bnames for b in row]
+
+    return gp
+
 def makegp_quadratic_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
                                     selection=selection_backend_flags, variable=False,
                                     fref=None, name='quadecorrGPleg',

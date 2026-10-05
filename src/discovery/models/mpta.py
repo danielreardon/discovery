@@ -472,11 +472,29 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
                         return_components=False, # Whether to return the list of model components in addition to the likelihood object (useful for adding additional components)
                         red_tail=False, red_tail_nf=128, red_tail_broken=False, red_tail_fbreak_max=None, # red_tail=True continues the Fourier red-noise spectrum from the upper edge of its last bin to the epoch resolution as a time-domain kernel over all epochs, sharing log10_A and gamma and carrying ECORR as its nugget in place of makegp_ecorr (fftint=False only); red_tail_broken adds a break above which the index is _gamma_hi, sampling {psr}_red_tail_gamma_hi and _log10_fbreak, the break bounded above by red_tail_fbreak_max in Hz (default the epoch resolution)
                         red_hf=False, red_hf_nf=256, red_hf_flo_max=1.0/3600.0, # red_hf=True adds an achromatic process correlated across all epochs, independent of the red-noise GP, sampling {psr}_red_hf_log10_sigma, _gamma and the outer scale _log10_flo between the Fourier GPs' last bin edge and red_hf_flo_max in Hz; it carries ECORR as its nugget in place of makegp_ecorr (fftint=False only)
-                        install_priors=True): # install this module's priordict_standard entries; a delegating caller that has installed its own passes False
+                        install_priors=True, # install this module's priordict_standard entries; a delegating caller that has installed its own passes False
+                        ecorr_modulation=0): # with ecorr_nmodes=N, D >= 1 multiplies the diagonal Legendre ECORR by a band profile m(y) = 1 + sum_{d<=D} b_d P_d(y) per backend, sampling {psr}_{backend}_ecorr_mod_b{d} (signals.makegp_ecorr_legendre_modulated); 0 leaves ECORR as it is
     # Follow the model being built, not the import order. update(), not clear(): it
     # preserves front-inserted per-pulsar overrides.
     if install_priors:
         update_priordict_standard_mpta()
+    if (not isinstance(ecorr_modulation, (int, np.integer)) or isinstance(ecorr_modulation, bool)
+            or ecorr_modulation < 0):
+        raise ValueError(f"single_pulsar_noise: ecorr_modulation must be an integer >= 0, got "
+                         f"{ecorr_modulation!r}.")
+    _stray_b = sorted(k for k in noisedict if re.fullmatch(rf'{re.escape(psr.name)}_.+_ecorr_mod_b[0-9]+', k))
+    if _stray_b and not ecorr_modulation:
+        raise ValueError(f"single_pulsar_noise: {psr.name}: noisedict carries modulated-ECORR values "
+                         f"{_stray_b[:3]}, but ecorr_modulation=0 would build the model without "
+                         f"them. Pass ecorr_modulation.")
+    if ecorr_modulation:
+        _clash = [k for k, v in (('ecorr_correlated', ecorr_correlated), ('quadratic', quadratic),
+                                 ('withinday', withinday), ('red_tail', red_tail),
+                                 ('red_hf', red_hf)) if v]
+        if not ecorr or ecorr_nmodes is None or _clash:
+            raise ValueError(f"single_pulsar_noise: ecorr_modulation={ecorr_modulation} modulates the "
+                             f"diagonal Legendre ECORR, so it needs ecorr=True and ecorr_nmodes and "
+                             f"cannot be combined with {_clash or 'ecorr=False'}.")
 
     # Set up white noise (efac and tnequad), per backend by default. white_selection names a
     # per-TOA flag to split on instead, so 'chan' gives one efac and one tnequad per
@@ -538,6 +556,8 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
         elif ecorr_nmodes is not None:
             if ecorr_correlated:
                 model_components += [signals.makegp_ecorr_legendre_correlated(psr, noisedict=noisedict, nmodes=ecorr_nmodes, **_tobs)]
+            elif ecorr_modulation:
+                model_components += [signals.makegp_ecorr_legendre_modulated(psr, noisedict=noisedict, nmodes=ecorr_nmodes, modulation=int(ecorr_modulation), **_tobs)]
             else:
                 model_components += [signals.makegp_ecorr_legendre(psr, noisedict=noisedict, nmodes=ecorr_nmodes, **_tobs)]
         elif quadratic:
@@ -681,11 +701,15 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
         model_components += make_psr_gps_fourier(psr, max_cadence_days=max_cadence_days, bkgrnd_log10_A=bkgrnd_log10_A, Tspan=Tspan, background=background, red=red, red2=red2, dm=dm, chrom=chrom, chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=chrom_poly, sw=sw, sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, sw_logf=sw_logf, band=band, band_alpha=band_alpha, band_bw_min=band_bw_min, turnover=turnover, fd_gp=fd_span)
 
 
+    _modulated = [getattr(c, 'modulation', 0) for c in model_components if getattr(c, 'modulation', 0)]
     if extra_gps is not None:
         model_components += extra_gps
 
     m = likelihood.PulsarLikelihood(model_components)
     _check_fd_parameters(psr, m.logL.params, _fd_expected, 'the model')
+    if _modulated != ([int(ecorr_modulation)] if ecorr_modulation else []):
+        raise ValueError(f"single_pulsar_noise: {psr.name}: the model carries modulated ECORR of "
+                         f"degree {_modulated}, but ecorr_modulation={ecorr_modulation}.")
 
     if return_components:
         return m, model_components
@@ -966,6 +990,25 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
         ecorr_correlated = has_param(df, "ecorr_corr_k")
         if ecorr_correlated:
             print(f'detected {ecorr_nmodes} ecorr nmodes for {psr.name}')
+        # Detect the modulated variant from its profile params ..._ecorr_mod_b{d}: D is the highest
+        # d, and a chain without _k params has one mode.
+        didxs = [int(col.rsplit('_b', 1)[-1]) for col in df.columns
+                 if '_ecorr_mod_b' in col and col.rsplit('_b', 1)[-1].isdigit()]
+        ecorr_modulation = max(didxs) if didxs else 0
+        if ecorr_modulation:
+            if ecorr_correlated:
+                raise ValueError(f"common_noise: {psr.name}'s chain carries both ecorr_corr_k and "
+                                 f"ecorr_mod_b columns, which no single ECORR model produces.")
+            ecorr_nmodes = ecorr_nmodes or 1
+            _flags = np.asarray(signals.selection_backend_flags(psr))
+            _missing = [f'{psr.name}_{be}_ecorr_mod_b{d}' for be in sorted(set(_flags.tolist())) if be != ''
+                        for d in range(1, ecorr_modulation + 1)
+                        if f'{psr.name}_{be}_ecorr_mod_b{d}' not in df.columns]
+            if _missing:
+                raise ValueError(f"common_noise: {psr.name}'s chain carries ecorr_mod_b columns up to "
+                                 f"degree {ecorr_modulation} but lacks {_missing}.")
+            print(f'detected {ecorr_nmodes} ecorr nmodes modulated to degree {ecorr_modulation} '
+                  f'for {psr.name}')
         # Detect the solar-wind GP variant: the legacy power-law GP uses
         # sw_gp_log10_A / sw_gp_gamma; the time-domain GP uses
         # sw_gp_log10_ell / sw_gp_log10_sigma. See single_pulsar_noise.
@@ -1077,7 +1120,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
             # deterministic delays + BayesEphem + time-domain solar-wind GP. NO sampled
             # Fourier/fftcov GPs (those go to the commongp).
             core = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=psr_cadence, Tspan=Tspan, background=False, noisedict=noisedict,
-                                       ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_log10_ecorr"), white_selection=white_selection, install_priors=install_priors,
+                                       ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, ecorr_modulation=ecorr_modulation, global_ecorr=has_param(df, f"{psr.name}_log10_ecorr"), white_selection=white_selection, install_priors=install_priors,
                                        red=False, red2=False, dm=False, chrom=False, chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=False, sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
                                        band=False, band_alpha=False,
                                        chrom_annual=has_param(df, "chrom_1yr"), chrom_exponential=has_param(df, "chrom_exp"), chrom_gaussian=has_param(df, "chrom_gauss"), chrom_sphere=has_param(df, "chrom_sphere"), chrom_step=has_param(df, "chrom_step"),
@@ -1092,7 +1135,7 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
         else:
             # background=False, as we are including a common red noise process
             m = single_pulsar_noise(psr, fftint=fftInt, max_cadence_days=psr_cadence, Tspan=Tspan, background=False, noisedict=noisedict,
-                                    ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, global_ecorr=has_param(df, f"{psr.name}_log10_ecorr"), white_selection=white_selection, install_priors=install_priors,
+                                    ecorr_nmodes=ecorr_nmodes, ecorr_correlated=ecorr_correlated, ecorr_modulation=ecorr_modulation, global_ecorr=has_param(df, f"{psr.name}_log10_ecorr"), white_selection=white_selection, install_priors=install_priors,
                                     red=red_flag, red2=(red2 or has_param(df, "red_noise2")),
                                     dm=has_param(df, "dm_gp"), chrom=has_param(df, "chrom_gp"), chrom_alpha=chrom_alpha, chrom_fref=chrom_fref, chrom_poly=(chrom_poly and has_param(df, "chrom_gp")), sw=has_param(df, "sw_gp"), sw_powerlaw=sw_powerlaw, sw_qp=sw_qp, turnover=turnover,
                                     band=has_param(df, "band_gp"), band_alpha=has_param(df, "bandalpha_gp"),

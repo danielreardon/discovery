@@ -31,6 +31,7 @@ priordict_standard = {
     "(.*_)?tnequad": [-8.5, -5],
     "(.*_)?log10_ecorr": [-10, -5],  # also matches the Legendre mode amplitudes ..._log10_ecorr_k{m}
     r"(.*_)?ecorr_corr_k[0-9]+k[0-9]+": [-1, 1],  # (partial) correlations of the Legendre mode covariance (makegp_ecorr_legendre_correlated); C-vine parametrisation, valid PSD for any values in (-1, 1)
+    r"(.*_)?ecorr_mod_b[0-9]+": [-0.4, 0.4],  # band profile m(y) = 1 + sum_d b_d P_d(y) of makegp_ecorr_legendre_modulated
     "(.*_)?rednoise_log10_A.*": [-20, -11],
     "(.*_)?rednoise_gamma.*": [0, 7],
     "(.*_)?rednoise_log10_fb": [-9, -6],
