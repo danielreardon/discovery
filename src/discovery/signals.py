@@ -548,14 +548,32 @@ def makegp_ecorr_legendre(psr, noisedict={}, enterprise=False, scale=1.0,
         # columns of legvander are P_0(y) ... P_{nmodes-1}(y)
         legendre_modes = np.polynomial.legendre.legvander(y, nmodes - 1)
 
+        # For handling the single backend case
+        if len(np.unique(masks)) == 1:
+            # for those pulsar with only one backend
+            first_valid_bin = 0
+        else:
+            # if the mask contains zeros
+            # the zeros in quantize below end up in the
+            # first entry, which we skip later.
+            first_valid_bin = 1
+
         # quantize TOAs that belong to this backend
         bins = quantize(psr.toas * mask)
 
         if enterprise:
-            uniques, counts = np.unique(quantize(psr.toas * mask), return_counts=True)
-            U0 = np.vstack([bins == i for i, cnt in zip(uniques[1:], counts[1:]) if cnt > 1]).T
+            uniques, counts = np.unique(bins, return_counts=True)
+            epoch_masks = [bins == i for i, cnt in zip(
+                uniques[first_valid_bin:],
+                counts[first_valid_bin:]) if cnt > 1]
+
+            if epoch_masks:
+                U0 = np.vstack(epoch_masks).T
+            else:
+                # if there is no ToAs observed at the same time
+                U0 = np.zeros((len(bins), 0))
         else:
-            U0 = np.vstack([bins == i for i in range(1, bins.max() + 1)]).T
+            U0 = np.vstack([bins == i for i in range(first_valid_bin, bins.max() + 1)]).T
 
         U0 = U0.astype(np.float64)
         # multiply the per-epoch indicator columns by each Legendre mode
@@ -1253,12 +1271,30 @@ def makegp_ecorr_legendre_correlated(psr, noisedict={}, enterprise=False, scale=
         # columns of legvander are P_0(y) ... P_{nmodes-1}(y)
         P = np.polynomial.legendre.legvander(y, nmodes - 1)
 
+        # For handling the single backend case
+        if len(np.unique(masks)) == 1:
+            # for those pulsar with only one backend
+            first_valid_bin = 0
+        else:
+            # if the mask contains zeros
+            # the zeros in quantize below end up in the
+            # first entry, which we skip later.
+            first_valid_bin = 1
+
         bins = quantize(psr.toas * mask)
         if enterprise:
-            uniques, counts = np.unique(quantize(psr.toas * mask), return_counts=True)
-            U0 = np.vstack([bins == i for i, cnt in zip(uniques[1:], counts[1:]) if cnt > 1]).T
+            uniques, counts = np.unique(bins, return_counts=True)
+            epoch_masks = [bins == i for i, cnt in zip(
+                uniques[first_valid_bin:],
+                counts[first_valid_bin:]) if cnt > 1]
+
+            if epoch_masks:
+                U0 = np.vstack(epoch_masks).T
+            else:
+                # if there is no ToAs observed at the same time
+                U0 = np.zeros((len(bins), 0))
         else:
-            U0 = np.vstack([bins == i for i in range(1, bins.max() + 1)]).T
+            U0 = np.vstack([bins == i for i in range(first_valid_bin, bins.max() + 1)]).T
         U0 = U0.astype(np.float64)
 
         nep = U0.shape[1]
