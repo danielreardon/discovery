@@ -231,10 +231,10 @@ def _check_state_usable(state, path, min_step_size=1e-9):
     step = getattr(getattr(state, "adapt_state", None), "step_size", None)
     if step is None:
         return
-    step = float(step)
-    if not np.isfinite(step) or step < min_step_size:
+    step = np.asarray(step, dtype=float)
+    if not np.all(np.isfinite(step)) or np.any(step < min_step_size):
         raise RuntimeError(
-            f"NUTS state in {path} has step_size = {step:.3g}, at or below the usable floor "
+            f"NUTS state in {path} has step_size = {step}, at or below the usable floor "
             f"({min_step_size:.0e}). Warmup is skipped on resume, so this state cannot "
             f"re-adapt and the run would make no progress. Delete the checkpoint directory "
             f"to force a fresh warmup, and fix the cause of the collapse first -- a step "
@@ -269,7 +269,8 @@ def run_nuts_with_checkpoints(
     num_samples_per_checkpoint : int
         The number of samples to save in each checkpoint.
     rng_key : jax.random.PRNGKey
-        The random number generator key for JAX.
+        The random number generator key for warmup. Sampling continues from the key carried
+        in the sampler state, and a resumed run from the key in the checkpoint.
     outdir : str | Path
         The directory for output files.
     resume : bool
@@ -320,7 +321,7 @@ def run_nuts_with_checkpoints(
 
         if samples_file.is_file():
             df = pd.read_feather(samples_file)
-            num_samples_saved = df.shape[0]
+            num_samples_saved = df.shape[0] // sampler.num_chains
         else:
             df = None
             num_samples_saved = 0
@@ -340,7 +341,8 @@ def run_nuts_with_checkpoints(
         _check_state_precision(sampler.post_warmup_state, checkpoint_file, "about to be written to")
         with checkpoint_file.open("wb") as f:
             pickle.dump(sampler.post_warmup_state, f)
-        rng_key, _ = jax.random.split(rng_key)
+
+    rng_key = sampler.post_warmup_state.rng_key
 
     num_checkpoints = int(jnp.ceil(total_sample_num / num_samples_per_checkpoint))
     remainder_samples = int(total_sample_num % num_samples_per_checkpoint)
@@ -367,8 +369,7 @@ def run_nuts_with_checkpoints(
             pickle.dump(sampler.last_state, f)
 
         sampler.post_warmup_state = sampler.last_state
-
-        rng_key, _ = jax.random.split(rng_key)
+        rng_key = sampler.last_state.rng_key
 
     return df
 
