@@ -1,0 +1,1434 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Index &#8212; Discovery 0.5 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="_static/plot_directive.css" />
+    <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+    <script src="_static/documentation_options.js?v=db78e746"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'genindex';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="index" title="Index" href="#" />
+    <link rel="search" title="Search" href="search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="_static/searchtools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <script src="searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Discovery 0.5 documentation</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials/curn_example.html">
+    How best to run a CURN model
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="guide/overview.html">
+    Overview
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="quickstart.html">
+    Quick Start
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials/basic_likelihood.html">
+    Basic Likelihood
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="tutorials/params_example.html">
+    Fast likelihood evaluation with Params
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="tutorials/optimal_statistic.html">
+    Optimal Statistic
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="tutorials/simulations.html">
+    Simulations
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="components/noise_signals.html">
+    Noise and Signal Components
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="components/chromatic_noise.html">
+    Chromatic noise analyses
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="components/priors_spectra.html">
+    GP Priors and Spectra
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="components/delays.html">
+    Deterministic Delays
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="guide/data_model.html">
+    Data Model
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="guide/pulsar_data.html">
+    Pulsar Data
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="advanced/conditional_sampling.html">
+    Conditional Sampling of GP Coefficients
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="examples.html">
+    Examples
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials/curn_example.html">
+    How best to run a CURN model
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="guide/overview.html">
+    Overview
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="quickstart.html">
+    Quick Start
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials/basic_likelihood.html">
+    Basic Likelihood
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials/params_example.html">
+    Fast likelihood evaluation with Params
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials/optimal_statistic.html">
+    Optimal Statistic
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials/simulations.html">
+    Simulations
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="components/noise_signals.html">
+    Noise and Signal Components
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="components/chromatic_noise.html">
+    Chromatic noise analyses
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="components/priors_spectra.html">
+    GP Priors and Spectra
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="components/delays.html">
+    Deterministic Delays
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="guide/data_model.html">
+    Data Model
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="guide/pulsar_data.html">
+    Pulsar Data
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="advanced/conditional_sampling.html">
+    Conditional Sampling of GP Coefficients
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="examples.html">
+    Examples
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none"></div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+
+<h1 id="index">Index</h1>
+
+<div class="genindex-jumpbox">
+ <a href="#A"><strong>A</strong></a>
+ | <a href="#B"><strong>B</strong></a>
+ | <a href="#C"><strong>C</strong></a>
+ | <a href="#D"><strong>D</strong></a>
+ | <a href="#E"><strong>E</strong></a>
+ | <a href="#F"><strong>F</strong></a>
+ | <a href="#G"><strong>G</strong></a>
+ | <a href="#H"><strong>H</strong></a>
+ | <a href="#I"><strong>I</strong></a>
+ | <a href="#J"><strong>J</strong></a>
+ | <a href="#K"><strong>K</strong></a>
+ | <a href="#L"><strong>L</strong></a>
+ | <a href="#M"><strong>M</strong></a>
+ | <a href="#N"><strong>N</strong></a>
+ | <a href="#O"><strong>O</strong></a>
+ | <a href="#P"><strong>P</strong></a>
+ | <a href="#Q"><strong>Q</strong></a>
+ | <a href="#R"><strong>R</strong></a>
+ | <a href="#S"><strong>S</strong></a>
+ | <a href="#T"><strong>T</strong></a>
+ | <a href="#U"><strong>U</strong></a>
+ | <a href="#V"><strong>V</strong></a>
+ | <a href="#W"><strong>W</strong></a>
+ | <a href="#Z"><strong>Z</strong></a>
+ 
+</div>
+<h2 id="A">A</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/likelihood.html#discovery.likelihood.ArrayLikelihood">ArrayLikelihood (class in discovery.likelihood)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="B">B</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.brokenpowerlaw">brokenpowerlaw() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.brokenpowerlaw_brokencrn">brokenpowerlaw_brokencrn() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="C">C</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/likelihood.html#discovery.likelihood.ArrayLikelihood.cglogL">cglogL() (discovery.likelihood.ArrayLikelihood method)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.chrom_poly_basis">chrom_poly_basis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/deterministic.html#discovery.deterministic.chromatic_annual">chromatic_annual() (in module discovery.deterministic)</a>
+</li>
+      <li><a href="api/deterministic.html#discovery.deterministic.chromatic_exponential">chromatic_exponential() (in module discovery.deterministic)</a>
+</li>
+      <li><a href="api/deterministic.html#discovery.deterministic.chromatic_gaussian">chromatic_gaussian() (in module discovery.deterministic)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.chromatic_quad_basis">chromatic_quad_basis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/likelihood.html#discovery.likelihood.ArrayLikelihood.clogL">clogL (discovery.likelihood.ArrayLikelihood property)</a>
+
+      <ul>
+        <li><a href="api/likelihood.html#discovery.likelihood.PulsarLikelihood.clogL">(discovery.likelihood.PulsarLikelihood property)</a>
+</li>
+      </ul></li>
+      <li><a href="api/pulsar.html#discovery.pulsar.Pulsar.columns">columns (discovery.pulsar.Pulsar attribute)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.CompoundDelay">CompoundDelay() (in module discovery.matrix)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.CompoundGlobalGP">CompoundGlobalGP() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.CompoundGP">CompoundGP() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/likelihood.html#discovery.likelihood.GlobalLikelihood.conditional">conditional (discovery.likelihood.GlobalLikelihood property)</a>
+
+      <ul>
+        <li><a href="api/likelihood.html#discovery.likelihood.PulsarLikelihood.conditional">(discovery.likelihood.PulsarLikelihood property)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.config">config() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.ConstantGP">ConstantGP (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.ConstantKernel">ConstantKernel (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.ConstantMatrix">ConstantMatrix (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/deterministic.html#discovery.deterministic.cos2comp">cos2comp() (in module discovery.deterministic)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.cov2cov">cov2cov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.custom_blocked_interpolation_basis">custom_blocked_interpolation_basis() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="D">D</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.dipole_orf">dipole_orf() (in module discovery.signals)</a>
+</li>
+      <li>
+    discovery.const
+
+      <ul>
+        <li><a href="api/const.html#module-discovery.const">module</a>
+</li>
+      </ul></li>
+      <li>
+    discovery.deterministic
+
+      <ul>
+        <li><a href="api/deterministic.html#module-discovery.deterministic">module</a>
+</li>
+      </ul></li>
+      <li>
+    discovery.likelihood
+
+      <ul>
+        <li><a href="api/likelihood.html#module-discovery.likelihood">module</a>
+</li>
+      </ul></li>
+      <li>
+    discovery.matrix
+
+      <ul>
+        <li><a href="api/matrix.html#module-discovery.matrix">module</a>
+</li>
+      </ul></li>
+      <li>
+    discovery.prior
+
+      <ul>
+        <li><a href="api/prior.html#module-discovery.prior">module</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    discovery.pulsar
+
+      <ul>
+        <li><a href="api/pulsar.html#module-discovery.pulsar">module</a>
+</li>
+      </ul></li>
+      <li>
+    discovery.signals
+
+      <ul>
+        <li><a href="api/signals.html#module-discovery.signals">module</a>
+</li>
+      </ul></li>
+      <li>
+    discovery.solar
+
+      <ul>
+        <li><a href="api/solar.html#module-discovery.solar">module</a>
+</li>
+      </ul></li>
+      <li><a href="api/solar.html#discovery.solar.dm_solar">dm_solar() (in module discovery.solar)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.dmfourierbasis">dmfourierbasis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.dmfourierbasis_alpha">dmfourierbasis_alpha() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="E">E</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.epochavgbasis">epochavgbasis() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="F">F</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.fourierbasis">fourierbasis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.fourierbasis_chrom">fourierbasis_chrom() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.fourierbasis_dm">fourierbasis_dm() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/solar.html#discovery.solar.fourierbasis_solar_dm">fourierbasis_solar_dm() (in module discovery.solar)</a>
+</li>
+      <li><a href="api/deterministic.html#discovery.deterministic.fpc_fast">fpc_fast() (in module discovery.deterministic)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.freespectrum">freespectrum() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="G">G</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/prior.html#discovery.prior.getprior_uniform">getprior_uniform() (in module discovery.prior)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.getresiduals">getresiduals() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.getspan">getspan() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.getstart">getstart() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/likelihood.html#discovery.likelihood.GlobalLikelihood">GlobalLikelihood (class in discovery.likelihood)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.GlobalVariableGP">GlobalVariableGP (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.GP">GP (class in discovery.matrix)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="H">H</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.hd_orf">hd_orf() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="I">I</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.intarray">intarray() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_novar.inv">inv() (discovery.matrix.NoiseMatrix1D_novar method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_var.inv">(discovery.matrix.NoiseMatrix1D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix2D_novar.inv">(discovery.matrix.NoiseMatrix2D_novar method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="J">J</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.jnparray">jnparray() (in module discovery.matrix)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.jnpkey">jnpkey() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.jnpzeros">jnpzeros() (in module discovery.matrix)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="K">K</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.Kernel">Kernel (class in discovery.matrix)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="L">L</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.linBinning">linBinning() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.linear_blocked_interpolation_basis">linear_blocked_interpolation_basis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.log_fourierbasis">log_fourierbasis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.log_fourierbasis_chrom">log_fourierbasis_chrom() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.log_fourierbasis_chrom_fixed">log_fourierbasis_chrom_fixed() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.log_fourierbasis_dm">log_fourierbasis_dm() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/likelihood.html#discovery.likelihood.ArrayLikelihood.logL">logL (discovery.likelihood.ArrayLikelihood property)</a>
+
+      <ul>
+        <li><a href="api/likelihood.html#discovery.likelihood.GlobalLikelihood.logL">(discovery.likelihood.GlobalLikelihood property)</a>
+</li>
+        <li><a href="api/likelihood.html#discovery.likelihood.PulsarLikelihood.logL">(discovery.likelihood.PulsarLikelihood property)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="M">M</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.make_combined_crn">make_combined_crn() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.make_dmfourierbasis">make_dmfourierbasis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.make_dmtimeinterpbasis">make_dmtimeinterpbasis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.make_fourierbasis_chrom">make_fourierbasis_chrom() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.make_fourierbasis_dm">make_fourierbasis_dm() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_var.make_inv">make_inv() (discovery.matrix.NoiseMatrix1D_var method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix2D_var.make_inv">(discovery.matrix.NoiseMatrix2D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.VectorNoiseMatrix1D_var.make_inv">(discovery.matrix.VectorNoiseMatrix1D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.VectorNoiseMatrix2D_var.make_inv">(discovery.matrix.VectorNoiseMatrix2D_var method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_novar.make_kernelproduct">make_kernelproduct() (discovery.matrix.NoiseMatrix1D_novar method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_var.make_kernelproduct">(discovery.matrix.NoiseMatrix1D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.VectorWoodburyKernel_varP.make_kernelproduct">(discovery.matrix.VectorWoodburyKernel_varP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_novar.make_kernelproduct">(discovery.matrix.WoodburyKernel_novar method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varFP.make_kernelproduct">(discovery.matrix.WoodburyKernel_varFP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varN.make_kernelproduct">(discovery.matrix.WoodburyKernel_varN method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varNP.make_kernelproduct">(discovery.matrix.WoodburyKernel_varNP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_kernelproduct">(discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.VectorWoodburyKernel_varP.make_kernelproduct_gpcomponent">make_kernelproduct_gpcomponent() (discovery.matrix.VectorWoodburyKernel_varP method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varFP.make_kernelproduct_gpcomponent">(discovery.matrix.WoodburyKernel_varFP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varNP.make_kernelproduct_gpcomponent">(discovery.matrix.WoodburyKernel_varNP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_kernelproduct_gpcomponent">(discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.VectorWoodburyKernel_varP.make_kernelproduct_varN">make_kernelproduct_varN() (discovery.matrix.VectorWoodburyKernel_varP method)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.VectorWoodburyKernel_varP.make_kernelproduct_vary">make_kernelproduct_vary() (discovery.matrix.VectorWoodburyKernel_varP method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varFP.make_kernelproduct_vary">(discovery.matrix.WoodburyKernel_varFP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varN.make_kernelproduct_vary">(discovery.matrix.WoodburyKernel_varN method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varNP.make_kernelproduct_vary">(discovery.matrix.WoodburyKernel_varNP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_kernelproduct_vary">(discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_novar.make_kernelsolve">make_kernelsolve() (discovery.matrix.WoodburyKernel_novar method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varFP.make_kernelsolve">(discovery.matrix.WoodburyKernel_varFP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varN.make_kernelsolve">(discovery.matrix.WoodburyKernel_varN method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varNP.make_kernelsolve">(discovery.matrix.WoodburyKernel_varNP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_kernelsolve">(discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varFP.make_kernelsolve_simple">make_kernelsolve_simple() (discovery.matrix.WoodburyKernel_varFP method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varNP.make_kernelsolve_simple">(discovery.matrix.WoodburyKernel_varNP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_kernelsolve_simple">(discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varN.make_kernelsolve_vary">make_kernelsolve_vary() (discovery.matrix.WoodburyKernel_varN method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_kernelsolve_vary">(discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.VectorWoodburyKernel_varP.make_kernelterms">make_kernelterms() (discovery.matrix.VectorWoodburyKernel_varP method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_novar.make_kernelterms">(discovery.matrix.WoodburyKernel_novar method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varFP.make_kernelterms">(discovery.matrix.WoodburyKernel_varFP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varN.make_kernelterms">(discovery.matrix.WoodburyKernel_varN method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varNP.make_kernelterms">(discovery.matrix.WoodburyKernel_varNP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_kernelterms">(discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.VectorWoodburyKernel_varP.make_kernelterms_vary">make_kernelterms_vary() (discovery.matrix.VectorWoodburyKernel_varP method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varN.make_kernelterms_vary">(discovery.matrix.WoodburyKernel_varN method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_kernelterms_vary">(discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/signals.html#discovery.signals.make_rootbasis">make_rootbasis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_novar.make_sample">make_sample() (discovery.matrix.NoiseMatrix1D_novar method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_var.make_sample">(discovery.matrix.NoiseMatrix1D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix2D_var.make_sample">(discovery.matrix.NoiseMatrix2D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_novar.make_sample">(discovery.matrix.WoodburyKernel_novar method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varFP.make_sample">(discovery.matrix.WoodburyKernel_varFP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varN.make_sample">(discovery.matrix.WoodburyKernel_varN method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varNP.make_sample">(discovery.matrix.WoodburyKernel_varNP method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_sample">(discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/solar.html#discovery.solar.make_solardm">make_solardm() (in module discovery.solar)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrixSM_var.make_solve_12d">make_solve_12d() (discovery.matrix.NoiseMatrixSM_var method)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_novar.make_solve_1d">make_solve_1d() (discovery.matrix.NoiseMatrix1D_novar method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_var.make_solve_1d">(discovery.matrix.NoiseMatrix1D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix2D_var.make_solve_1d">(discovery.matrix.NoiseMatrix2D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrixSM_novar.make_solve_1d">(discovery.matrix.NoiseMatrixSM_novar method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrixSM_var.make_solve_1d">(discovery.matrix.NoiseMatrixSM_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.VectorNoiseMatrix1D_var.make_solve_1d">(discovery.matrix.VectorNoiseMatrix1D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_novar.make_solve_1d">(discovery.matrix.WoodburyKernel_novar method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varN.make_solve_1d">(discovery.matrix.WoodburyKernel_varN method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varNP.make_solve_1d">(discovery.matrix.WoodburyKernel_varNP method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_solve_1d_vary">make_solve_1d_vary() (discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_novar.make_solve_2d">make_solve_2d() (discovery.matrix.NoiseMatrix1D_novar method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_var.make_solve_2d">(discovery.matrix.NoiseMatrix1D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrixSM_novar.make_solve_2d">(discovery.matrix.NoiseMatrixSM_novar method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrixSM_var.make_solve_2d">(discovery.matrix.NoiseMatrixSM_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_novar.make_solve_2d">(discovery.matrix.WoodburyKernel_novar method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varN.make_solve_2d">(discovery.matrix.WoodburyKernel_varN method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varNP.make_solve_2d">(discovery.matrix.WoodburyKernel_varNP method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP.make_solve_2d_vary">make_solve_2d_vary() (discovery.matrix.WoodburyKernel_varP method)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_novar.make_sqrt">make_sqrt() (discovery.matrix.NoiseMatrix1D_novar method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_var.make_sqrt">(discovery.matrix.NoiseMatrix1D_var method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/signals.html#discovery.signals.make_timeinterpbasis">make_timeinterpbasis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.make_timeinterpbasis_chromatic">make_timeinterpbasis_chromatic() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.make_timeinterpbasis_dm">make_timeinterpbasis_dm() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.make_uind">make_uind() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makecommongp_avgcov">makecommongp_avgcov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makecommongp_fftcov">makecommongp_fftcov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makecommongp_fourier">makecommongp_fourier() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makecommongp_intcov">makecommongp_intcov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makedelay">makedelay() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/deterministic.html#discovery.deterministic.makedelay_binary">makedelay_binary() (in module discovery.deterministic)</a>
+</li>
+      <li><a href="api/deterministic.html#discovery.deterministic.makedelay_binary_coefficients">makedelay_binary_coefficients() (in module discovery.deterministic)</a>
+</li>
+      <li><a href="api/deterministic.html#discovery.deterministic.makedelay_binary_phases">makedelay_binary_phases() (in module discovery.deterministic)</a>
+</li>
+      <li><a href="api/deterministic.html#discovery.deterministic.makefourier_binary">makefourier_binary() (in module discovery.deterministic)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makefreespectrum_crn">makefreespectrum_crn() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makeglobalgp_avgcov">makeglobalgp_avgcov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makeglobalgp_fftcov">makeglobalgp_fftcov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makeglobalgp_fourier">makeglobalgp_fourier() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makeglobalgp_intcov">makeglobalgp_intcov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_avgcov">makegp_avgcov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_chrom_poly_svd">makegp_chrom_poly_svd() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_ecorr">makegp_ecorr() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_ecorr_simple">makegp_ecorr_simple() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_fftcov">makegp_fftcov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_fftcov_chrom">makegp_fftcov_chrom() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_fftcov_dm">makegp_fftcov_dm() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_fourier">makegp_fourier() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_fourier_allpsr">makegp_fourier_allpsr() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_fourier_delay">makegp_fourier_delay() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_fourier_global">makegp_fourier_global() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_fourier_variance">makegp_fourier_variance() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_improper">makegp_improper() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_improper_varF">makegp_improper_varF() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_intcov">makegp_intcov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_timedomain_dm">makegp_timedomain_dm() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/solar.html#discovery.solar.makegp_timedomain_solar_dm">makegp_timedomain_solar_dm() (in module discovery.solar)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makegp_timing">makegp_timing() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/prior.html#discovery.prior.makelogprior_uniform">makelogprior_uniform() (in module discovery.prior)</a>
+</li>
+      <li><a href="api/prior.html#discovery.prior.makelogtransform_classic">makelogtransform_classic() (in module discovery.prior)</a>
+</li>
+      <li><a href="api/prior.html#discovery.prior.makelogtransform_uniform">makelogtransform_uniform() (in module discovery.prior)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makenoise_measurement">makenoise_measurement() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makenoise_measurement_simple">makenoise_measurement_simple() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.makepowerlaw_crn">makepowerlaw_crn() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.matern_kernel">matern_kernel() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/pulsar.html#discovery.pulsar.Pulsar.metadata">metadata (discovery.pulsar.Pulsar attribute)</a>
+</li>
+      <li>
+    module
+
+      <ul>
+        <li><a href="api/const.html#module-discovery.const">discovery.const</a>
+</li>
+        <li><a href="api/deterministic.html#module-discovery.deterministic">discovery.deterministic</a>
+</li>
+        <li><a href="api/likelihood.html#module-discovery.likelihood">discovery.likelihood</a>
+</li>
+        <li><a href="api/matrix.html#module-discovery.matrix">discovery.matrix</a>
+</li>
+        <li><a href="api/prior.html#module-discovery.prior">discovery.prior</a>
+</li>
+        <li><a href="api/pulsar.html#module-discovery.pulsar">discovery.pulsar</a>
+</li>
+        <li><a href="api/signals.html#module-discovery.signals">discovery.signals</a>
+</li>
+        <li><a href="api/solar.html#module-discovery.solar">discovery.solar</a>
+</li>
+      </ul></li>
+      <li><a href="api/signals.html#discovery.signals.monopole_orf">monopole_orf() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="N">N</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix">NoiseMatrix (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix12D_novar">NoiseMatrix12D_novar() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix12D_var">NoiseMatrix12D_var() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_novar">NoiseMatrix1D_novar (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_var">NoiseMatrix1D_var (class in discovery.matrix)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix2D_novar">NoiseMatrix2D_novar (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix2D_var">NoiseMatrix2D_var (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrixSM_novar">NoiseMatrixSM_novar (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrixSM_var">NoiseMatrixSM_var (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.normalise_tm_basis">normalise_tm_basis() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="O">O</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/deterministic.html#discovery.deterministic.orthometric_shapiro">orthometric_shapiro() (in module discovery.deterministic)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="P">P</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/likelihood.html#discovery.likelihood.GlobalLikelihood.plogL">plogL (discovery.likelihood.GlobalLikelihood property)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.powerlaw">powerlaw() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.powerlaw_brokencrn">powerlaw_brokencrn() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.powerlaw_cutoff">powerlaw_cutoff() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.psd2cov">psd2cov() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.psd2factor">psd2factor() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/pulsar.html#discovery.pulsar.Pulsar">Pulsar (class in discovery.pulsar)</a>
+</li>
+      <li><a href="api/likelihood.html#discovery.likelihood.PulsarLikelihood">PulsarLikelihood (class in discovery.likelihood)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="Q">Q</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.quantize">quantize() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.quasi_periodic_kernel">quasi_periodic_kernel() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="R">R</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/pulsar.html#discovery.pulsar.read_chain">read_chain() (in module discovery.pulsar)</a>
+</li>
+      <li><a href="api/pulsar.html#discovery.pulsar.Pulsar.read_feather">read_feather() (discovery.pulsar.Pulsar class method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.residuals">residuals() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.ridge_kernel">ridge_kernel() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.rngkey">rngkey() (in module discovery.matrix)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="S">S</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/likelihood.html#discovery.likelihood.GlobalLikelihood.sample">sample (discovery.likelihood.GlobalLikelihood property)</a>
+
+      <ul>
+        <li><a href="api/likelihood.html#discovery.likelihood.PulsarLikelihood.sample">(discovery.likelihood.PulsarLikelihood property)</a>
+</li>
+      </ul></li>
+      <li><a href="api/likelihood.html#discovery.likelihood.GlobalLikelihood.sample_conditional">sample_conditional (discovery.likelihood.GlobalLikelihood property)</a>
+
+      <ul>
+        <li><a href="api/likelihood.html#discovery.likelihood.PulsarLikelihood.sample_conditional">(discovery.likelihood.PulsarLikelihood property)</a>
+</li>
+      </ul></li>
+      <li><a href="api/prior.html#discovery.prior.sample_uniform">sample_uniform() (in module discovery.prior)</a>
+</li>
+      <li><a href="api/pulsar.html#discovery.pulsar.save_chain">save_chain() (in module discovery.pulsar)</a>
+</li>
+      <li><a href="api/pulsar.html#discovery.pulsar.Pulsar.save_feather">save_feather() (discovery.pulsar.Pulsar method)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.selection_backend_flags">selection_backend_flags() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.SM_12d_indexed">SM_12d_indexed() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.SM_1d_fused">SM_1d_fused() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.SM_1d_indexed">SM_1d_indexed() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.SM_2d_fused">SM_2d_fused() (in module discovery.matrix)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.SM_2d_indexed">SM_2d_indexed() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.smdp_ind">smdp_ind() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.smup_ind">smup_ind() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.smup_ind_correct">smup_ind_correct() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_novar.solve_1d">solve_1d() (discovery.matrix.NoiseMatrix1D_novar method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_var.solve_1d">(discovery.matrix.NoiseMatrix1D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrixSM_novar.solve_1d">(discovery.matrix.NoiseMatrixSM_novar method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_novar.solve_1d">(discovery.matrix.WoodburyKernel_novar method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_novar.solve_2d">solve_2d() (discovery.matrix.NoiseMatrix1D_novar method)</a>
+
+      <ul>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrix1D_var.solve_2d">(discovery.matrix.NoiseMatrix1D_var method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.NoiseMatrixSM_novar.solve_2d">(discovery.matrix.NoiseMatrixSM_novar method)</a>
+</li>
+        <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_novar.solve_2d">(discovery.matrix.WoodburyKernel_novar method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/signals.html#discovery.signals.square_exponential_kernel">square_exponential_kernel() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="T">T</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/pulsar.html#discovery.pulsar.Pulsar.tensor_columns">tensor_columns (discovery.pulsar.Pulsar attribute)</a>
+</li>
+      <li><a href="api/solar.html#discovery.solar.theta_impact">theta_impact() (in module discovery.solar)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.timeinterpbasis">timeinterpbasis() (in module discovery.signals)</a>
+</li>
+      <li><a href="api/pulsar.html#discovery.pulsar.Pulsar.to_list">to_list() (discovery.pulsar.Pulsar method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="U">U</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/signals.html#discovery.signals.uncorrelated_orf">uncorrelated_orf() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/prior.html#discovery.prior.uniform">uniform() (in module discovery.prior)</a>
+</li>
+      <li><a href="api/signals.html#discovery.signals.unitprior">unitprior() (in module discovery.signals)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="V">V</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.VariableGP">VariableGP (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.VariableKernel">VariableKernel (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.VariableMatrix">VariableMatrix (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/pulsar.html#discovery.pulsar.Pulsar.vector_columns">vector_columns (discovery.pulsar.Pulsar attribute)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.VectorCompoundGP">VectorCompoundGP() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.VectorNoiseMatrix12D_var">VectorNoiseMatrix12D_var() (in module discovery.matrix)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.VectorNoiseMatrix1D_var">VectorNoiseMatrix1D_var (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.VectorNoiseMatrix2D_var">VectorNoiseMatrix2D_var (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.VectorWoodburyKernel_varP">VectorWoodburyKernel_varP (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.vsmdp_ind">vsmdp_ind() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.vsmup_ind">vsmup_ind() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.vsmup_ind_correct">vsmup_ind_correct() (in module discovery.matrix)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="W">W</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/likelihood.html#discovery.likelihood.PulsarLikelihood.white_noise_matrix">white_noise_matrix (discovery.likelihood.PulsarLikelihood property)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel">WoodburyKernel() (in module discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_novar">WoodburyKernel_novar (class in discovery.matrix)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varFP">WoodburyKernel_varFP (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varN">WoodburyKernel_varN (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varNP">WoodburyKernel_varNP (class in discovery.matrix)</a>
+</li>
+      <li><a href="api/matrix.html#discovery.matrix.WoodburyKernel_varP">WoodburyKernel_varP (class in discovery.matrix)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="Z">Z</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/matrix.html#discovery.matrix.zero_out_negative_eigenvalues">zero_out_negative_eigenvalues() (in module discovery.matrix)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, Michele Vallisneri.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.19.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

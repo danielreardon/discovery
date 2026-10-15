@@ -1,0 +1,1396 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>discovery.likelihood &#8212; Discovery 0.5 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+    <script src="../../_static/documentation_options.js?v=db78e746"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/discovery/likelihood';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../../_static/searchtools.js"></script>
+    <script src="../../_static/language_data.js"></script>
+    <script src="../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Discovery 0.5 documentation</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/curn_example.html">
+    How best to run a CURN model
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../guide/overview.html">
+    Overview
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../quickstart.html">
+    Quick Start
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/basic_likelihood.html">
+    Basic Likelihood
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../tutorials/params_example.html">
+    Fast likelihood evaluation with Params
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../tutorials/optimal_statistic.html">
+    Optimal Statistic
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../tutorials/simulations.html">
+    Simulations
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../components/noise_signals.html">
+    Noise and Signal Components
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../components/chromatic_noise.html">
+    Chromatic noise analyses
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../components/priors_spectra.html">
+    GP Priors and Spectra
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../components/delays.html">
+    Deterministic Delays
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../guide/data_model.html">
+    Data Model
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../guide/pulsar_data.html">
+    Pulsar Data
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../advanced/conditional_sampling.html">
+    Conditional Sampling of GP Coefficients
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../examples.html">
+    Examples
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/curn_example.html">
+    How best to run a CURN model
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../guide/overview.html">
+    Overview
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../quickstart.html">
+    Quick Start
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/basic_likelihood.html">
+    Basic Likelihood
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/params_example.html">
+    Fast likelihood evaluation with Params
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/optimal_statistic.html">
+    Optimal Statistic
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/simulations.html">
+    Simulations
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../components/noise_signals.html">
+    Noise and Signal Components
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../components/chromatic_noise.html">
+    Chromatic noise analyses
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../components/priors_spectra.html">
+    GP Priors and Spectra
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../components/delays.html">
+    Deterministic Delays
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../guide/data_model.html">
+    Data Model
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../guide/pulsar_data.html">
+    Pulsar Data
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../advanced/conditional_sampling.html">
+    Conditional Sampling of GP Coefficients
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../examples.html">
+    Examples
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">discovery.likelihood</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for discovery.likelihood</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+<span class="c1"># from dataclasses import dataclass</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">matrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">signals</span>
+
+<span class="c1"># import jax</span>
+
+<span class="c1"># Kernel</span>
+<span class="c1">#   ConstantKernel</span>
+<span class="c1">#       define solve_1d, perhaps solve_2d (operate on numpy)</span>
+<span class="c1">#   VariableKernel</span>
+<span class="c1">#       define make_solve_1d, perhaps make_solve_2d (return functions that operate on jax)</span>
+<span class="c1">#</span>
+<span class="c1">#   all define make_kernelproduct (make_kernelterms)</span>
+<span class="c1">#</span>
+<span class="c1"># GP</span>
+<span class="c1">#   ConstantGP</span>
+<span class="c1">#       consists of a ConstantKernel and a numpy matrix</span>
+<span class="c1">#   VariableGP</span>
+<span class="c1">#       consists of a VariableKernel and a numpy matrix</span>
+<span class="c1">#</span>
+<span class="c1"># WoodburyKernel can return a ConstantKernel or a VariableKernel</span>
+
+<span class="c1"># npta = je.PulsarLikelihood(je.residuals(psr),</span>
+<span class="c1">#                            je.makenoise_measurement(psr, noisedict),</span>
+<span class="c1">#                            je.makegp_ecorr(psr, noisedict),</span>
+<span class="c1">#                            je.makegp_timing(psr),</span>
+<span class="c1">#                            je.makegp_fourier('red_noise', psr, je.powerlaw, 10),</span>
+<span class="c1">#                            je.makegp_fourier('red_noise', psr,</span>
+<span class="c1">#                                              je.makepowerlaw_crn(5), 10, T=Tspan,</span>
+<span class="c1">#                                              common=['crn_log10_A', 'crn_gamma']),</span>
+<span class="c1">#                            concat=True)</span>
+
+<div class="viewcode-block" id="PulsarLikelihood">
+<a class="viewcode-back" href="../../api/likelihood.html#discovery.likelihood.PulsarLikelihood">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PulsarLikelihood</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">concat</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="n">y</span>     <span class="o">=</span> <span class="p">[</span><span class="n">arg</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">jax</span><span class="o">.</span><span class="n">Array</span><span class="p">)]</span>
+        <span class="n">delay</span> <span class="o">=</span> <span class="p">[</span><span class="n">arg</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span> <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">arg</span><span class="p">)]</span>
+        <span class="n">noise</span> <span class="o">=</span> <span class="p">[</span><span class="n">arg</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">Kernel</span><span class="p">)]</span>
+        <span class="n">cgps</span>  <span class="o">=</span> <span class="p">[</span><span class="n">arg</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">ConstantGP</span><span class="p">)]</span>
+        <span class="n">vgps</span>  <span class="o">=</span> <span class="p">[</span><span class="n">arg</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">VariableGP</span><span class="p">)]</span>
+        <span class="c1"># pgps  = [arg for arg in args if isinstance(arg, matrix.ComponentGP)]</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">delay</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"I need exactly one residual vector or one or more delay functions."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">noise</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Only one residual vector and one noise Kernel allowed."</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">noise</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"I need exactly one noise Kernel."</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">y</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">]</span>
+
+        <span class="n">noise</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">noise</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">y</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">cgps</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cgps</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">concat</span><span class="p">:</span>
+                <span class="n">cgp</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">CompoundGP</span><span class="p">(</span><span class="n">cgps</span><span class="p">)</span>
+                <span class="n">csm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">WoodburyKernel</span><span class="p">(</span><span class="n">noise</span><span class="p">,</span> <span class="n">cgp</span><span class="o">.</span><span class="n">F</span><span class="p">,</span> <span class="n">cgp</span><span class="o">.</span><span class="n">Phi</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">csm</span> <span class="o">=</span> <span class="n">noise</span>
+                <span class="k">for</span> <span class="n">cgp</span> <span class="ow">in</span> <span class="n">cgps</span><span class="p">:</span>
+                    <span class="n">csm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">WoodburyKernel</span><span class="p">(</span><span class="n">csm</span><span class="p">,</span> <span class="n">cgp</span><span class="o">.</span><span class="n">F</span><span class="p">,</span> <span class="n">cgp</span><span class="o">.</span><span class="n">Phi</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">csm</span> <span class="o">=</span> <span class="n">noise</span>
+
+        <span class="k">if</span> <span class="n">vgps</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">vgp</span> <span class="ow">in</span> <span class="n">vgps</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">vgp</span><span class="p">,</span> <span class="s1">'gpname'</span><span class="p">)</span> <span class="ow">and</span> <span class="n">vgp</span><span class="o">.</span><span class="n">gpname</span> <span class="o">==</span> <span class="s1">'gw'</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">gw</span> <span class="o">=</span> <span class="n">vgp</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vgps</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">concat</span><span class="p">:</span>
+                <span class="n">vgp</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">CompoundGP</span><span class="p">(</span><span class="n">vgps</span><span class="p">)</span>
+                <span class="n">vsm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">WoodburyKernel</span><span class="p">(</span><span class="n">csm</span><span class="p">,</span> <span class="n">vgp</span><span class="o">.</span><span class="n">F</span><span class="p">,</span> <span class="n">vgp</span><span class="o">.</span><span class="n">Phi</span><span class="p">)</span>
+                <span class="n">vsm</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">vgp</span><span class="p">,</span> <span class="s1">'index'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="n">vsm</span><span class="o">.</span><span class="n">mean</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">vgp</span><span class="p">,</span> <span class="s1">'mean'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">vsm</span> <span class="o">=</span> <span class="n">csm</span>
+                <span class="k">for</span> <span class="n">vgp</span> <span class="ow">in</span> <span class="n">vgps</span><span class="p">:</span>
+                    <span class="n">vsm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">WoodburyKernel</span><span class="p">(</span><span class="n">vsm</span><span class="p">,</span> <span class="n">vgp</span><span class="o">.</span><span class="n">F</span><span class="p">,</span> <span class="n">vgp</span><span class="o">.</span><span class="n">Phi</span><span class="p">)</span>
+                    <span class="n">vsm</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">vgp</span><span class="p">,</span> <span class="s1">'index'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="n">vsm</span><span class="o">.</span><span class="n">mean</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">vgp</span><span class="p">,</span> <span class="s1">'mean'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">vsm</span> <span class="o">=</span> <span class="n">csm</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">delay</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">y</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">CompoundDelay</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">delay</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">delay</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span> <span class="o">=</span> <span class="n">y</span><span class="p">,</span> <span class="n">delay</span><span class="p">,</span> <span class="n">vsm</span>
+
+        <span class="c1"># a bit kludgy, we'll find a better way</span>
+        <span class="k">for</span> <span class="n">gp</span> <span class="ow">in</span> <span class="n">cgps</span> <span class="o">+</span> <span class="n">vgps</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">gp</span><span class="p">,</span> <span class="s1">'name'</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">gp</span><span class="o">.</span><span class="n">name</span>
+
+    <span class="c1"># allow replacement of residuals</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s1">'residuals'</span> <span class="ow">and</span> <span class="s1">'logL'</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">value</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">delay</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">CompoundDelay</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">delay</span><span class="p">)</span>
+
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">logL</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample_conditional</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">cond</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conditional</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">index</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">sample_cond</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+            <span class="n">mu</span><span class="p">,</span> <span class="n">cf</span> <span class="o">=</span> <span class="n">cond</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+            <span class="n">key</span><span class="p">,</span> <span class="n">subkey</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnpsplit</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">+</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve_triangular</span><span class="p">(</span><span class="n">cf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnpnormal</span><span class="p">(</span><span class="n">subkey</span><span class="p">,</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span> <span class="n">lower</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">key</span><span class="p">,</span> <span class="p">{</span><span class="n">par</span><span class="p">:</span> <span class="n">c</span><span class="p">[</span><span class="n">sli</span><span class="p">]</span> <span class="k">for</span> <span class="n">par</span><span class="p">,</span> <span class="n">sli</span> <span class="ow">in</span> <span class="n">index</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+        <span class="n">sample_cond</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">cond</span><span class="o">.</span><span class="n">params</span>
+
+        <span class="k">return</span> <span class="n">sample_cond</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">conditional</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">delay</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">'No PulsarLikelihood.conditional with delays so far.'</span><span class="p">)</span>
+
+        <span class="c1"># if there's only one woodbury to do (N + T Phi T)</span>
+        <span class="c1"># as opposed to (N + T Phi T + ... + T Phi T)</span>
+        <span class="n">N_Nmat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">N_var</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="p">,</span> <span class="s1">'N_var'</span><span class="p">)</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">N</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">N_Nmat</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">NoiseMatrix</span><span class="p">):</span>
+            <span class="c1"># NOTE: signature differs from the non-simple branches below.</span>
+            <span class="c1"># make_kernelsolve_simple returns ksolve(params) -&gt; (mu, cf) with cf</span>
+            <span class="c1"># already the lower cho_factor of Sigma = Pinv + FtNmF, so cond just</span>
+            <span class="c1"># forwards them. The non-simple branches get raw (FtNmy, FtNmF)</span>
+            <span class="c1"># components and assemble Sigma + factor inside cond themselves.</span>
+            <span class="n">ksolve</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">make_kernelsolve_simple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">cond</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                <span class="n">mu</span><span class="p">,</span> <span class="n">cf</span> <span class="o">=</span> <span class="n">ksolve</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">mu</span><span class="p">,</span> <span class="n">cf</span>
+            <span class="c1"># ksolve.params already unions N_var, P_var and any parameters the</span>
+            <span class="c1"># design matrix depends on (e.g. a free chromatic index).</span>
+            <span class="n">cond</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">ksolve</span><span class="o">.</span><span class="n">params</span>
+            <span class="k">return</span> <span class="n">cond</span>
+        <span class="n">P_var_inv</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">P_var</span><span class="p">,</span> <span class="s1">'Phi_inv'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">P_var</span><span class="o">.</span><span class="n">make_inv</span><span class="p">()</span>
+
+        <span class="n">ksolve</span> <span class="o">=</span> <span class="n">N_Nmat</span><span class="o">.</span><span class="n">make_kernelsolve</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">F</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">ksolve</span><span class="o">.</span><span class="n">params</span><span class="p">:</span>
+            <span class="n">FtNmy</span><span class="p">,</span> <span class="n">FtNmF</span> <span class="o">=</span> <span class="n">ksolve</span><span class="p">(</span><span class="n">params</span><span class="o">=</span><span class="p">{})</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">cond</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                <span class="n">Pinv</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">P_var_inv</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+                <span class="n">Sm</span> <span class="o">=</span> <span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">Pinv</span><span class="p">)</span> <span class="k">if</span> <span class="n">Pinv</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">Pinv</span><span class="p">)</span> <span class="o">+</span> <span class="n">FtNmF</span>
+                <span class="n">cf</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_factor</span><span class="p">(</span><span class="n">Sm</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">mu</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">cf</span><span class="p">,</span> <span class="n">FtNmy</span><span class="p">)</span>
+
+                <span class="k">return</span> <span class="n">mu</span><span class="p">,</span> <span class="n">cf</span>
+
+            <span class="n">cond</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">P_var_inv</span><span class="o">.</span><span class="n">params</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">cond</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                <span class="n">FtNmy</span><span class="p">,</span> <span class="n">FtNmF</span> <span class="o">=</span> <span class="n">ksolve</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+                <span class="n">Pinv</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">P_var_inv</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+                <span class="n">Sm</span> <span class="o">=</span> <span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">Pinv</span><span class="p">)</span> <span class="k">if</span> <span class="n">Pinv</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">Pinv</span><span class="p">)</span> <span class="o">+</span> <span class="n">FtNmF</span>
+                <span class="n">cf</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_factor</span><span class="p">(</span><span class="n">Sm</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">mu</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">cf</span><span class="p">,</span> <span class="n">FtNmy</span><span class="p">)</span>
+
+                <span class="k">return</span> <span class="n">mu</span><span class="p">,</span> <span class="n">cf</span>
+
+            <span class="n">cond</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">ksolve</span><span class="o">.</span><span class="n">params</span> <span class="o">+</span> <span class="n">P_var_inv</span><span class="o">.</span><span class="n">params</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">cond</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">clogL</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">delay</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">'No PulsarLikelihood.clogL with delays so far.'</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">make_kernelproduct_gpcomponent</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logL</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">make_kernelproduct</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">):</span>
+            <span class="n">noiseonly</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">make_sample</span><span class="p">()</span>
+            <span class="n">delays</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">delay</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">make_sample</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+                <span class="n">key</span><span class="p">,</span> <span class="n">noise</span> <span class="o">=</span> <span class="n">noiseonly</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">key</span><span class="p">,</span> <span class="n">noise</span> <span class="o">+</span> <span class="nb">sum</span><span class="p">(</span><span class="n">delay</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">delay</span> <span class="ow">in</span> <span class="n">delays</span><span class="p">)</span>
+            <span class="n">make_sample</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">noiseonly</span><span class="o">.</span><span class="n">params</span> <span class="o">+</span> <span class="nb">sum</span><span class="p">([</span><span class="n">delay</span><span class="o">.</span><span class="n">params</span> <span class="k">for</span> <span class="n">delay</span> <span class="ow">in</span> <span class="n">delays</span><span class="p">],</span> <span class="p">[])))</span>
+
+            <span class="k">return</span> <span class="n">make_sample</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">make_sample</span><span class="p">()</span>
+    
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">white_noise_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Return the diagonal white noise matrix for this pulsar.</span>
+<span class="sd">        It will be scaled by EFAC and ECORR, but will NOT include EQUAD."""</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">_return_next_layer_or_wn</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+<span class="w">            </span><span class="sd">"""</span>
+<span class="sd">            for sorting through the depths of this model</span>
+<span class="sd">            """</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">obj</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">'N'</span><span class="p">):</span> 
+                <span class="k">return</span> <span class="n">obj</span><span class="o">.</span><span class="n">N</span>
+            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">'N_var'</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">obj</span><span class="o">.</span><span class="n">N_var</span>
+            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">'getN'</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">obj</span><span class="o">.</span><span class="n">getN</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="bp">self</span>
+        <span class="c1"># keep going until we hit a function</span>
+        <span class="c1"># or an array</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Callable</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">NoiseMatrixSM_novar</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">NoiseMatrixSM_var</span><span class="p">):</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">"WARNING: Kernel ecorr is included, but the 'white_noise_matrix' property just returns the diagonal, scaled TOA errors"</span><span class="p">)</span>
+            <span class="n">obj</span> <span class="o">=</span> <span class="n">_return_next_layer_or_wn</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">obj</span></div>
+
+
+<div class="viewcode-block" id="GlobalLikelihood">
+<a class="viewcode-back" href="../../api/likelihood.html#discovery.likelihood.GlobalLikelihood">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GlobalLikelihood</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">psls</span><span class="p">,</span> <span class="n">globalgp</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">psls</span> <span class="o">=</span> <span class="n">psls</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">CompoundGlobalGP</span><span class="p">(</span><span class="n">globalgp</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">globalgp</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="n">globalgp</span>
+
+    <span class="c1"># allow replacement of residuals</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s1">'residuals'</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">psl</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+                <span class="n">psl</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">y</span>
+
+            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">'os'</span><span class="p">,</span> <span class="s1">'os_rhosigma'</span><span class="p">,</span> <span class="s1">'logL'</span><span class="p">,</span> <span class="s1">'sample_conditional'</span><span class="p">,</span> <span class="s1">'conditional'</span><span class="p">]:</span>
+                <span class="k">if</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
+                    <span class="nb">delattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sls</span> <span class="o">=</span> <span class="p">[</span><span class="n">psl</span><span class="o">.</span><span class="n">sample</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sls</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">'No PulsarLikelihoods in GlobalLikelihood: '</span> <span class="o">+</span>
+                    <span class="s1">'if you provided them using a generator, it may have been consumed already. '</span> <span class="o">+</span>
+                    <span class="s1">'In that case you can use a list.'</span><span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">sampler</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+                <span class="n">ys</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">sl</span> <span class="ow">in</span> <span class="n">sls</span><span class="p">:</span>
+                    <span class="n">key</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">sl</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+                    <span class="n">ys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+
+                <span class="k">return</span> <span class="n">key</span><span class="p">,</span> <span class="n">ys</span>
+
+            <span class="n">sampler</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="nb">set</span><span class="p">(</span><span class="n">sl</span><span class="o">.</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">sl</span> <span class="ow">in</span> <span class="n">sls</span><span class="p">]))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">sls</span> <span class="o">=</span> <span class="p">[</span><span class="n">psl</span><span class="o">.</span><span class="n">sample</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sls</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">'No PulsarLikelihoods in GlobalLikelihood: '</span> <span class="o">+</span>
+                    <span class="s1">'if you provided them using a generator, it may have been consumed already. '</span> <span class="o">+</span>
+                    <span class="s1">'In that case you can use a list.'</span><span class="p">)</span>
+
+            <span class="n">Phi_sample</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Phi</span><span class="o">.</span><span class="n">make_sample</span><span class="p">()</span>
+
+            <span class="n">Fs</span> <span class="o">=</span> <span class="p">[</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnparray</span><span class="p">(</span><span class="n">F</span><span class="p">)</span> <span class="k">for</span> <span class="n">F</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">]</span>
+
+            <span class="n">i0</span><span class="p">,</span> <span class="n">slcs</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">F</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">:</span>
+                <span class="n">slcs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="n">i0</span><span class="p">,</span> <span class="n">i0</span> <span class="o">+</span> <span class="n">F</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+                <span class="n">i0</span> <span class="o">=</span> <span class="n">i0</span> <span class="o">+</span> <span class="n">F</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">sampler</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+                <span class="n">key</span><span class="p">,</span> <span class="n">c</span> <span class="o">=</span> <span class="n">Phi_sample</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+
+                <span class="n">ys</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">sl</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">slc</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">sls</span><span class="p">,</span> <span class="n">Fs</span><span class="p">,</span> <span class="n">slcs</span><span class="p">):</span>
+                    <span class="n">key</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">sl</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+                    <span class="n">ys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y</span> <span class="o">+</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">F</span><span class="p">,</span> <span class="n">c</span><span class="p">[</span><span class="n">slc</span><span class="p">]))</span>
+
+                <span class="c1"># ys = [key, _ := sl(key, params) + jnp.dot(F, c[slc]) for sl, F, slc in zip(sls, Fs, slcs)]</span>
+                <span class="k">return</span> <span class="n">key</span><span class="p">,</span> <span class="n">ys</span>
+
+            <span class="n">sampler</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="nb">sum</span><span class="p">([</span><span class="n">sl</span><span class="o">.</span><span class="n">params</span> <span class="k">for</span> <span class="n">sl</span> <span class="ow">in</span> <span class="n">sls</span><span class="p">],</span> <span class="p">[])</span> <span class="o">+</span> <span class="n">Phi_sample</span><span class="o">.</span><span class="n">params</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">sampler</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logL</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logls</span> <span class="o">=</span> <span class="p">[</span><span class="n">psl</span><span class="o">.</span><span class="n">logL</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">logls</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">'No PulsarLikelihoods in GlobalLikelihood: '</span> <span class="o">+</span>
+                    <span class="s1">'if you provided them using a generator, it may have been consumed already. '</span> <span class="o">+</span>
+                    <span class="s1">'In that case you can use a list.'</span><span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">loglike</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">logl</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">logl</span> <span class="ow">in</span> <span class="n">logls</span><span class="p">)</span>
+
+            <span class="n">loglike</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="nb">set</span><span class="p">(</span><span class="n">logl</span><span class="o">.</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">logl</span> <span class="ow">in</span> <span class="n">logls</span><span class="p">]))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">P_var_inv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Phi_inv</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Phi</span><span class="o">.</span><span class="n">make_inv</span><span class="p">()</span>
+            <span class="n">kterms</span> <span class="o">=</span> <span class="p">[</span><span class="n">psl</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">make_kernelterms</span><span class="p">(</span><span class="n">psl</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="n">Fmat</span><span class="p">)</span> <span class="k">for</span> <span class="n">psl</span><span class="p">,</span> <span class="n">Fmat</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">)]</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kterms</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">'No PulsarLikelihoods in GlobalLikelihood: '</span> <span class="o">+</span>
+                    <span class="s1">'if you provided them using a generator, it may have been consumed already. '</span> <span class="o">+</span>
+                    <span class="s1">'In that case you can use a list.'</span><span class="p">)</span>
+
+            <span class="c1"># npsr = len(self.globalgp.Fs)</span>
+            <span class="c1"># ngp = self.globalgp.Fs[0].shape[1]</span>
+
+            <span class="n">kmeans</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="p">,</span> <span class="s1">'means'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">loglike</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                <span class="n">terms</span> <span class="o">=</span> <span class="p">[</span><span class="n">kterm</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">kterm</span> <span class="ow">in</span> <span class="n">kterms</span><span class="p">]</span>
+
+                <span class="n">p0</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">([</span><span class="n">term</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">term</span> <span class="ow">in</span> <span class="n">terms</span><span class="p">])</span>
+                <span class="n">FtNmy</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">term</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">term</span> <span class="ow">in</span> <span class="n">terms</span><span class="p">])</span>
+
+                <span class="n">Pinv</span><span class="p">,</span> <span class="n">ldP</span> <span class="o">=</span> <span class="n">P_var_inv</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+                <span class="c1"># for i, term in enumerate(terms):</span>
+                <span class="c1">#     Pinv = Pinv.at[i*ngp:(i+1)*ngp,i*ngp:(i+1)*ngp].add(term[2])</span>
+                <span class="c1"># cf = matrix.jsp.linalg.cho_factor(Pinv)</span>
+
+                <span class="c1"># this seems a bit slower than the .at/.set scheme in plogL below</span>
+                <span class="n">FtNmF</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">block_diag</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">term</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">term</span> <span class="ow">in</span> <span class="n">terms</span><span class="p">])</span>
+                <span class="n">cf</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_factor</span><span class="p">(</span><span class="n">Pinv</span> <span class="o">+</span> <span class="n">FtNmF</span><span class="p">)</span>
+
+                <span class="n">logp</span> <span class="o">=</span> <span class="n">p0</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">FtNmy</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">cf</span><span class="p">,</span> <span class="n">FtNmy</span><span class="p">)</span> <span class="o">-</span> <span class="n">ldP</span> <span class="o">-</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">cf</span><span class="p">[</span><span class="mi">0</span><span class="p">]))))</span>
+
+                <span class="k">if</span> <span class="n">kmeans</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># -0.5 a0t.FtNmF.a0 + 0.5 a0t.FtNmF.Sm.FtNmF.a0 + a0t.FtNmy - a0t.FtNmF.Sm.FtNmy</span>
+                    <span class="c1"># -0.5 (a0t.FtNmF).a0 + (FtNmy)t.a0 + 0.5 (a0t.FtNmF).Sm.FtNmF.a0 - (FtNmy)t.Sm.FtNmF.a0</span>
+                    <span class="c1"># -0.5 (a0t.FtNmF).(a0 - Sm.FtNmF.a0) + (FtNmy)t.(a0 - Sm.FtNmF.a0)</span>
+
+                    <span class="n">a0</span> <span class="o">=</span> <span class="n">kmeans</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+                    <span class="n">FtNmFa0</span> <span class="o">=</span> <span class="n">FtNmF</span> <span class="o">@</span> <span class="n">a0</span>
+                    <span class="n">logp</span> <span class="o">=</span> <span class="n">logp</span> <span class="o">-</span> <span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">FtNmFa0</span><span class="o">.</span><span class="n">T</span> <span class="o">-</span> <span class="n">FtNmy</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="o">@</span> <span class="p">(</span><span class="n">a0</span> <span class="o">-</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">cf</span><span class="p">,</span> <span class="n">FtNmFa0</span><span class="p">))</span>
+
+                <span class="k">return</span> <span class="n">logp</span>
+
+            <span class="n">params_kterms</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="nb">set</span><span class="p">(</span><span class="n">kterm</span><span class="o">.</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">kterm</span> <span class="ow">in</span> <span class="n">kterms</span><span class="p">]))</span>
+            <span class="n">params_kmeans</span> <span class="o">=</span> <span class="n">kmeans</span><span class="o">.</span><span class="n">params</span> <span class="k">if</span> <span class="n">kmeans</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span>
+            <span class="n">loglike</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">params_kterms</span> <span class="o">+</span> <span class="n">params_kmeans</span> <span class="o">+</span> <span class="n">P_var_inv</span><span class="o">.</span><span class="n">params</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">loglike</span>
+
+    <span class="c1"># MPI parallel likelihood</span>
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">plogL</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">mpi4py</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">mpi4jax</span>
+
+        <span class="n">mpicomm</span> <span class="o">=</span> <span class="n">mpi4py</span><span class="o">.</span><span class="n">MPI</span><span class="o">.</span><span class="n">COMM_WORLD</span>
+        <span class="n">jaxcomm</span> <span class="o">=</span> <span class="n">mpicomm</span><span class="o">.</span><span class="n">Clone</span><span class="p">()</span>
+
+        <span class="n">size</span> <span class="o">=</span> <span class="n">mpicomm</span><span class="o">.</span><span class="n">Get_size</span><span class="p">()</span>
+        <span class="n">rank</span> <span class="o">=</span> <span class="n">mpicomm</span><span class="o">.</span><span class="n">Get_rank</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logls</span> <span class="o">=</span> <span class="p">[</span><span class="n">psl</span><span class="o">.</span><span class="n">logL</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">]</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">loglike</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                <span class="n">slogl</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">logl</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">logl</span> <span class="ow">in</span> <span class="n">logls</span><span class="p">)</span>
+                <span class="n">slogl</span><span class="p">,</span> <span class="n">tk</span> <span class="o">=</span> <span class="n">mpi4jax</span><span class="o">.</span><span class="n">allreduce</span><span class="p">(</span><span class="n">slogl</span><span class="p">,</span> <span class="n">mpi4py</span><span class="o">.</span><span class="n">MPI</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span> <span class="n">comm</span><span class="o">=</span><span class="n">jaxcomm</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">slogl</span>
+
+            <span class="n">local_list</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="nb">set</span><span class="p">(</span><span class="n">logl</span><span class="o">.</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">logl</span> <span class="ow">in</span> <span class="n">logls</span><span class="p">]))</span>
+            <span class="n">loglike</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">([</span><span class="n">p</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">mpicomm</span><span class="o">.</span><span class="n">allgather</span><span class="p">(</span><span class="n">local_list</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">l</span><span class="p">]))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># handle the case where there are more matrices in self.globalgp than likelihoods</span>
+            <span class="n">Fmats</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">Fmat</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">Fmat</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">)}</span>
+            <span class="n">kterms</span> <span class="o">=</span> <span class="p">[</span><span class="n">psl</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">make_kernelterms</span><span class="p">(</span><span class="n">psl</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="n">Fmats</span><span class="p">[</span><span class="n">psl</span><span class="o">.</span><span class="n">name</span><span class="p">])</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">npsr</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">)</span>
+                <span class="n">ngp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+                <span class="n">P_var_inv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Phi_inv</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Phi</span><span class="o">.</span><span class="n">make_inv</span><span class="p">()</span>
+
+                <span class="k">def</span><span class="w"> </span><span class="nf">loglike</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                    <span class="n">b0</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">size</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+                    <span class="n">b1</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">npsr</span><span class="p">,</span> <span class="n">ngp</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+                    <span class="n">b2</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">npsr</span><span class="p">,</span> <span class="n">ngp</span><span class="p">,</span> <span class="n">ngp</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+                    <span class="n">t0</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">kterm</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">kterm</span> <span class="ow">in</span> <span class="n">kterms</span><span class="p">])</span>
+
+                    <span class="n">b0</span> <span class="o">=</span> <span class="n">b0</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">t0</span><span class="p">))</span>
+                    <span class="n">b1</span> <span class="o">=</span> <span class="n">b1</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="mi">0</span><span class="p">::</span><span class="n">size</span><span class="p">,:]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">t1</span><span class="p">))</span>
+                    <span class="n">b2</span> <span class="o">=</span> <span class="n">b2</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="mi">0</span><span class="p">::</span><span class="n">size</span><span class="p">,:,:]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">t2</span><span class="p">))</span>
+
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="p">):</span>
+                        <span class="n">b</span><span class="p">,</span> <span class="n">tk</span> <span class="o">=</span> <span class="n">mpi4jax</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">b0</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">source</span><span class="o">=</span><span class="n">i</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">comm</span><span class="o">=</span><span class="n">jaxcomm</span><span class="p">)</span>
+                        <span class="n">b0</span> <span class="o">=</span> <span class="n">b0</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">b</span><span class="p">)</span>
+                        <span class="n">b</span><span class="p">,</span> <span class="n">tk</span> <span class="o">=</span> <span class="n">mpi4jax</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">b1</span><span class="p">[</span><span class="n">i</span><span class="p">::</span><span class="n">size</span><span class="p">,:],</span> <span class="n">source</span><span class="o">=</span><span class="n">i</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">token</span><span class="o">=</span><span class="n">tk</span><span class="p">,</span> <span class="n">comm</span><span class="o">=</span><span class="n">jaxcomm</span><span class="p">)</span>
+                        <span class="n">b1</span> <span class="o">=</span> <span class="n">b1</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">i</span><span class="p">::</span><span class="n">size</span><span class="p">,:]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">b</span><span class="p">)</span>
+                        <span class="n">b</span><span class="p">,</span> <span class="n">tk</span> <span class="o">=</span> <span class="n">mpi4jax</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">b2</span><span class="p">[</span><span class="n">i</span><span class="p">::</span><span class="n">size</span><span class="p">,:,:],</span> <span class="n">source</span><span class="o">=</span><span class="n">i</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">token</span><span class="o">=</span><span class="n">tk</span><span class="p">,</span> <span class="n">comm</span><span class="o">=</span><span class="n">jaxcomm</span><span class="p">)</span>
+                        <span class="n">b2</span> <span class="o">=</span> <span class="n">b2</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">i</span><span class="p">::</span><span class="n">size</span><span class="p">,:,:]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">b</span><span class="p">)</span>
+
+                    <span class="n">p0</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">b0</span><span class="p">)</span>
+                    <span class="n">FtNmy</span> <span class="o">=</span> <span class="n">b1</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+
+                    <span class="n">Pinv</span><span class="p">,</span> <span class="n">ldP</span> <span class="o">=</span> <span class="n">P_var_inv</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+                    <span class="n">cf</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_factor</span><span class="p">(</span><span class="n">Pinv</span> <span class="o">+</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">block_diag</span><span class="p">(</span><span class="o">*</span><span class="n">b2</span><span class="p">))</span>
+
+                    <span class="n">ret</span> <span class="o">=</span> <span class="n">p0</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">FtNmy</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">cf</span><span class="p">,</span> <span class="n">FtNmy</span><span class="p">)</span> <span class="o">-</span> <span class="n">ldP</span> <span class="o">-</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">cf</span><span class="p">[</span><span class="mi">0</span><span class="p">]))))</span>
+                    <span class="n">ret</span><span class="p">,</span> <span class="n">tk</span> <span class="o">=</span> <span class="n">mpi4jax</span><span class="o">.</span><span class="n">bcast</span><span class="p">(</span><span class="n">ret</span><span class="p">,</span> <span class="n">root</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">comm</span><span class="o">=</span><span class="n">jaxcomm</span><span class="p">)</span>
+
+                    <span class="k">return</span> <span class="n">ret</span>
+
+                <span class="n">local_list</span> <span class="o">=</span> <span class="n">P_var_inv</span><span class="o">.</span><span class="n">params</span> <span class="o">+</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="nb">set</span><span class="p">(</span><span class="n">kterm</span><span class="o">.</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">kterm</span> <span class="ow">in</span> <span class="n">kterms</span><span class="p">]))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">loglike</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                    <span class="n">t0</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">kterm</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">kterm</span> <span class="ow">in</span> <span class="n">kterms</span><span class="p">])</span>
+
+                    <span class="n">tk</span> <span class="o">=</span> <span class="n">mpi4jax</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">t0</span><span class="p">),</span> <span class="n">dest</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">comm</span><span class="o">=</span><span class="n">jaxcomm</span><span class="p">)</span>
+                    <span class="n">tk</span> <span class="o">=</span> <span class="n">mpi4jax</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">t1</span><span class="p">),</span> <span class="n">dest</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">token</span><span class="o">=</span><span class="n">tk</span><span class="p">,</span> <span class="n">comm</span><span class="o">=</span><span class="n">jaxcomm</span><span class="p">)</span>
+                    <span class="n">tk</span> <span class="o">=</span> <span class="n">mpi4jax</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">t2</span><span class="p">),</span> <span class="n">dest</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">token</span><span class="o">=</span><span class="n">tk</span><span class="p">,</span> <span class="n">comm</span><span class="o">=</span><span class="n">jaxcomm</span><span class="p">)</span>
+
+                    <span class="n">ret</span><span class="p">,</span> <span class="n">tk</span> <span class="o">=</span> <span class="n">mpi4jax</span><span class="o">.</span><span class="n">bcast</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">root</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">comm</span><span class="o">=</span><span class="n">jaxcomm</span><span class="p">)</span>
+
+                    <span class="k">return</span> <span class="n">ret</span>
+
+                <span class="n">local_list</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="nb">set</span><span class="p">(</span><span class="n">kterm</span><span class="o">.</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">kterm</span> <span class="ow">in</span> <span class="n">kterms</span><span class="p">]))</span>
+
+            <span class="n">loglike</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">([</span><span class="n">p</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">mpicomm</span><span class="o">.</span><span class="n">allgather</span><span class="p">(</span><span class="n">local_list</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">l</span><span class="p">]))</span>
+
+        <span class="k">return</span> <span class="n">loglike</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample_conditional</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">cond</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conditional</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">index</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">sample_cond</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+            <span class="n">mu</span><span class="p">,</span> <span class="n">cf</span> <span class="o">=</span> <span class="n">cond</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+            <span class="c1"># conditional normal draws are obtained as `mu + y` after solving `cf.T y = x` for a normal deviate `x`</span>
+            <span class="n">key</span><span class="p">,</span> <span class="n">subkey</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnpsplit</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">+</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve_triangular</span><span class="p">(</span><span class="n">cf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnpnormal</span><span class="p">(</span><span class="n">subkey</span><span class="p">,</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span> <span class="n">lower</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">key</span><span class="p">,</span> <span class="p">{</span><span class="n">par</span><span class="p">:</span> <span class="n">c</span><span class="p">[</span><span class="n">sli</span><span class="p">]</span> <span class="k">for</span> <span class="n">par</span><span class="p">,</span> <span class="n">sli</span> <span class="ow">in</span> <span class="n">index</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+        <span class="n">sample_cond</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">cond</span><span class="o">.</span><span class="n">params</span>
+
+        <span class="k">return</span> <span class="n">sample_cond</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">conditional</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Nothing to predict in GlobalLikelihood without a globalgp!"</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">P_var_inv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Phi_inv</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Phi</span><span class="o">.</span><span class="n">make_inv</span><span class="p">()</span>
+            <span class="n">ndim</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Phi</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">NoiseMatrix1D_var</span><span class="p">)</span> <span class="k">else</span> <span class="mi">2</span>
+
+            <span class="n">ksolves</span> <span class="o">=</span> <span class="p">[</span><span class="n">psl</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">make_kernelsolve</span><span class="p">(</span><span class="n">psl</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="n">Fmat</span><span class="p">)</span> <span class="k">for</span> <span class="n">psl</span><span class="p">,</span> <span class="n">Fmat</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">)]</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ksolves</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">'No PulsarLikelihoods in GlobalLikelihood: '</span> <span class="o">+</span>
+                    <span class="s1">'if you provided them using a generator, it may have been consumed already. '</span> <span class="o">+</span>
+                    <span class="s1">'In that case you can use a list.'</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">ksolves</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">params</span><span class="p">:</span>
+                <span class="n">solves</span> <span class="o">=</span> <span class="p">[</span><span class="n">ksolve</span><span class="p">({})</span> <span class="k">for</span> <span class="n">ksolve</span> <span class="ow">in</span> <span class="n">ksolves</span><span class="p">]</span>
+                <span class="n">FtNmy</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">solve</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">solve</span> <span class="ow">in</span> <span class="n">solves</span><span class="p">])</span>
+
+                <span class="c1"># FtNmF = matrix.jsp.linalg.block_diag(*[solve[1] for solve in solves])</span>
+                <span class="n">FtNmFs</span> <span class="o">=</span> <span class="p">[</span><span class="n">solve</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">solve</span> <span class="ow">in</span> <span class="n">solves</span><span class="p">]</span>
+                <span class="n">ngp</span> <span class="o">=</span> <span class="n">FtNmFs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+                <span class="k">def</span><span class="w"> </span><span class="nf">cond</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                    <span class="n">Pinv</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">P_var_inv</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+                    <span class="n">Sm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">Pinv</span><span class="p">)</span> <span class="k">if</span> <span class="n">Pinv</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">Pinv</span>
+                    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">FtNmF</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">FtNmFs</span><span class="p">):</span>
+                        <span class="n">Sm</span> <span class="o">=</span> <span class="n">Sm</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">i</span><span class="o">*</span><span class="n">ngp</span><span class="p">:(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="n">ngp</span><span class="p">,</span> <span class="n">i</span><span class="o">*</span><span class="n">ngp</span><span class="p">:(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="n">ngp</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">FtNmF</span><span class="p">)</span>
+
+                    <span class="n">cf</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_factor</span><span class="p">(</span><span class="n">Sm</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="n">mu</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">cf</span><span class="p">,</span> <span class="n">FtNmy</span><span class="p">)</span>
+
+                    <span class="k">return</span> <span class="n">mu</span><span class="p">,</span> <span class="n">cf</span>
+
+                <span class="n">cond</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">P_var_inv</span><span class="o">.</span><span class="n">params</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">cond</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                    <span class="c1"># each solve is a tuple TtSy, TtST</span>
+                    <span class="n">solves</span> <span class="o">=</span> <span class="p">[</span><span class="n">ksolve</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">ksolve</span> <span class="ow">in</span> <span class="n">ksolves</span><span class="p">]</span>
+
+                    <span class="n">FtNmy</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">solve</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">solve</span> <span class="ow">in</span> <span class="n">solves</span><span class="p">])</span>
+
+                    <span class="n">Pinv</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">P_var_inv</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+                    <span class="c1"># phiinv = (matrix.jnp.diag(Pinv) if Pinv.ndim == 1 else Pinv)</span>
+                    <span class="c1"># tnt = matrix.jsp.linalg.block_diag(*[solve[1] for solve in solves])</span>
+                    <span class="c1"># Sm = phiinv + tnt</span>
+                    <span class="n">Sm</span> <span class="o">=</span> <span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">Pinv</span><span class="p">)</span> <span class="k">if</span> <span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">Pinv</span><span class="p">)</span> <span class="o">+</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">block_diag</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">solve</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">solve</span> <span class="ow">in</span> <span class="n">solves</span><span class="p">])</span>
+
+                    <span class="c1"># the variance of the normal is S = Sm^-1; but if we want normal deviates y</span>
+                    <span class="c1"># with that variance, we can use the Cholesky decomposition</span>
+                    <span class="c1"># S = L L^T =&gt; Sm = L^-T L^-1, and then solve L^-T y = x for randn x</span>
+                    <span class="c1"># where cf = L^-1. See enterprise/signals/utils.py:ConditionalGP</span>
+
+                    <span class="c1"># to get the actual covariance, one would use cho_solve(cf, identity matrix)</span>
+
+                    <span class="n">cf</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_factor</span><span class="p">(</span><span class="n">Sm</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="n">mu</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">cf</span><span class="p">,</span> <span class="n">FtNmy</span><span class="p">)</span>
+
+                    <span class="k">return</span> <span class="n">mu</span><span class="p">,</span> <span class="n">cf</span>
+                    <span class="c1"># return mu, cf, phiinv, tnt</span>
+
+                <span class="n">cond</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="nb">sum</span><span class="p">([</span><span class="n">ksolve</span><span class="o">.</span><span class="n">params</span> <span class="k">for</span> <span class="n">ksolve</span> <span class="ow">in</span> <span class="n">ksolves</span><span class="p">],</span> <span class="p">[])</span> <span class="o">+</span> <span class="n">P_var_inv</span><span class="o">.</span><span class="n">params</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">cond</span></div>
+
+
+
+<div class="viewcode-block" id="ArrayLikelihood">
+<a class="viewcode-back" href="../../api/likelihood.html#discovery.likelihood.ArrayLikelihood">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ArrayLikelihood</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">psls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">commongp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">globalgp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">psls</span> <span class="o">=</span> <span class="n">psls</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">commongp</span> <span class="o">=</span> <span class="n">commongp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="o">=</span> <span class="n">globalgp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transform</span> <span class="o">=</span> <span class="n">transform</span>
+
+    <span class="c1"># @functools.cached_property</span>
+    <span class="c1"># def cloglast(self):</span>
+    <span class="c1">#     commongp = matrix.VectorCompoundGP(self.commongp[:-1])</span>
+    <span class="c1">#     lastgp = self.commongp[-1]</span>
+
+    <span class="c1">#     Ns, self.ys = zip(*[(psl.N, psl.y) for psl in self.psls])</span>
+    <span class="c1">#     csm = matrix.VectorWoodburyKernel_varP(Ns, commongp.F, commongp.Phi)</span>
+
+    <span class="c1">#     vsm = matrix.VectorWoodburyKernel_varP(Ns, lastgp.F, lastgp.Phi)</span>
+    <span class="c1">#     if hasattr(lastgp, 'prior'):</span>
+    <span class="c1">#         vsm.prior = lastgp.prior</span>
+    <span class="c1">#     if hasattr(lastgp, 'index'):</span>
+    <span class="c1">#         vsm.index = lastgp.index</span>
+
+    <span class="c1">#     return vsm.make_kernelproduct_gpcomponent(self.ys)</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">clogL</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">commongp</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">loglike</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">psl</span><span class="o">.</span><span class="n">clogL</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">)</span>
+            <span class="n">loglike</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="nb">set</span><span class="p">(</span><span class="n">psl</span><span class="o">.</span><span class="n">clogL</span><span class="o">.</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">]))</span>
+
+            <span class="k">return</span> <span class="n">loglike</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">commongp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># commongp = matrix.VectorCompoundGP(self.globalgp)</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">"ArrayLikelihood does not support a globalgp without a commongp"</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># merge common GPs if necessary</span>
+            <span class="n">commongp</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">VectorCompoundGP</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">commongp</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># merge common GPs and global GP</span>
+            <span class="n">cgp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">commongp</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">commongp</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">commongp</span><span class="p">]</span>
+            <span class="n">commongp</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">VectorCompoundGP</span><span class="p">(</span><span class="n">cgp</span> <span class="o">+</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="p">])</span>
+
+        <span class="n">Ns</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ys</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">[(</span><span class="n">psl</span><span class="o">.</span><span class="n">N</span><span class="p">,</span> <span class="n">psl</span><span class="o">.</span><span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">VectorWoodburyKernel_varP</span><span class="p">(</span><span class="n">Ns</span><span class="p">,</span> <span class="n">commongp</span><span class="o">.</span><span class="n">F</span><span class="p">,</span> <span class="n">commongp</span><span class="o">.</span><span class="n">Phi</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">commongp</span><span class="p">,</span> <span class="s1">'prior'</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span><span class="o">.</span><span class="n">prior</span> <span class="o">=</span> <span class="n">commongp</span><span class="o">.</span><span class="n">prior</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">commongp</span><span class="p">,</span> <span class="s1">'index'</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">commongp</span><span class="o">.</span><span class="n">index</span>
+
+        <span class="n">loglike</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span><span class="o">.</span><span class="n">make_kernelproduct_gpcomponent</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ys</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">loglike</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logL</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">commongp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">loglike</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">psl</span><span class="o">.</span><span class="n">logL</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">)</span>
+                <span class="n">loglike</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="nb">set</span><span class="p">(</span><span class="n">psl</span><span class="o">.</span><span class="n">logL</span><span class="o">.</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">]))</span>
+
+                <span class="k">return</span> <span class="n">loglike</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">"Currently ArrayLikelihood does not support a globalgp without a commongp"</span><span class="p">)</span>
+
+        <span class="n">commongp</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">VectorCompoundGP</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">commongp</span><span class="p">)</span>
+
+        <span class="n">Ns</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ys</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">[(</span><span class="n">psl</span><span class="o">.</span><span class="n">N</span><span class="p">,</span> <span class="n">psl</span><span class="o">.</span><span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">VectorWoodburyKernel_varP</span><span class="p">(</span><span class="n">Ns</span><span class="p">,</span> <span class="n">commongp</span><span class="o">.</span><span class="n">F</span><span class="p">,</span> <span class="n">commongp</span><span class="o">.</span><span class="n">Phi</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">commongp</span><span class="p">,</span> <span class="s1">'index'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span><span class="o">.</span><span class="n">means</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">commongp</span><span class="p">,</span> <span class="s1">'means'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">loglike</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span><span class="o">.</span><span class="n">make_kernelproduct</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ys</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">P_var_inv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Phi_inv</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Phi</span><span class="o">.</span><span class="n">make_inv</span><span class="p">()</span>
+            <span class="n">kterms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span><span class="o">.</span><span class="n">make_kernelterms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">)</span>
+
+            <span class="n">npsr</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">)</span>
+            <span class="n">ngp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="n">kmeans</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="p">,</span> <span class="s1">'means'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">loglike</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                <span class="n">terms</span> <span class="o">=</span> <span class="n">kterms</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+                <span class="n">p0</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">terms</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="n">FtNmy</span> <span class="o">=</span> <span class="n">terms</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">npsr</span> <span class="o">*</span> <span class="n">ngp</span><span class="p">)</span>
+
+                <span class="n">Pinv</span><span class="p">,</span> <span class="n">ldP</span> <span class="o">=</span> <span class="n">P_var_inv</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+                <span class="c1"># alternatives to block_diag (with similar runtimes on CPU, slower on GPU)</span>
+                <span class="c1"># for i in range(npsr):</span>
+                <span class="c1">#    Pinv = Pinv.at[i*ngp:(i+1)*ngp,i*ngp:(i+1)*ngp].add(terms[2][i,:,:])</span>
+                <span class="c1">#    cf = matrix.jsp.linalg.cho_factor(Pinv)</span>
+                <span class="c1">#</span>
+                <span class="c1">#    Pinv = jax.lax.fori_loop(0, npsr,</span>
+                <span class="c1">#               lambda i, Pinv: jax.lax.dynamic_update_slice(Pinv,</span>
+                <span class="c1">#                   jax.lax.dynamic_slice(Pinv, (i*ngp,i*ngp), (ngp,ngp)) +</span>
+                <span class="c1">#                   jax.lax.squeeze(jax.lax.dynamic_slice(terms[2], (i,0,0), (1,ngp,ngp)), [0]),</span>
+                <span class="c1">#                   (i*ngp,i*ngp)),</span>
+                <span class="c1">#               Pinv)</span>
+                <span class="c1">#    cf = matrix.jsp.linalg.cho_factor(Pinv)</span>
+
+                <span class="n">FtNmF</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">block_diag</span><span class="p">(</span><span class="o">*</span><span class="n">terms</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+                <span class="n">cf</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">matrix_factor</span><span class="p">(</span><span class="n">Pinv</span> <span class="o">+</span> <span class="n">FtNmF</span><span class="p">)</span>
+
+                <span class="n">logp</span> <span class="o">=</span> <span class="n">p0</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">FtNmy</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">matrix</span><span class="o">.</span><span class="n">matrix_solve</span><span class="p">(</span><span class="n">cf</span><span class="p">,</span> <span class="n">FtNmy</span><span class="p">)</span> <span class="o">-</span> <span class="n">ldP</span> <span class="o">-</span> <span class="n">matrix</span><span class="o">.</span><span class="n">matrix_norm</span> <span class="o">*</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">cf</span><span class="p">[</span><span class="mi">0</span><span class="p">]))))</span>
+
+                <span class="k">if</span> <span class="n">kmeans</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">a0</span> <span class="o">=</span> <span class="n">kmeans</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+                    <span class="n">FtNmFa0</span> <span class="o">=</span> <span class="n">FtNmF</span> <span class="o">@</span> <span class="n">a0</span>
+                    <span class="n">logp</span> <span class="o">=</span> <span class="n">logp</span> <span class="o">-</span> <span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">FtNmFa0</span><span class="o">.</span><span class="n">T</span> <span class="o">-</span> <span class="n">FtNmy</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="o">@</span> <span class="p">(</span><span class="n">a0</span> <span class="o">-</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">cf</span><span class="p">,</span> <span class="n">FtNmFa0</span><span class="p">))</span>
+
+                <span class="k">return</span> <span class="n">logp</span>
+
+            <span class="n">params_kmeans</span> <span class="o">=</span> <span class="n">kmeans</span><span class="o">.</span><span class="n">params</span> <span class="k">if</span> <span class="n">kmeans</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span>
+            <span class="n">loglike</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">kterms</span><span class="o">.</span><span class="n">params</span> <span class="o">+</span> <span class="n">params_kmeans</span> <span class="o">+</span> <span class="n">P_var_inv</span><span class="o">.</span><span class="n">params</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">loglike</span>
+
+<div class="viewcode-block" id="ArrayLikelihood.cglogL">
+<a class="viewcode-back" href="../../api/likelihood.html#discovery.likelihood.ArrayLikelihood.cglogL">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cglogL</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cgmaxiter</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">make_logdet</span><span class="o">=</span><span class="s1">'CG-MDL'</span><span class="p">,</span> <span class="n">detmatvecs</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">detsamples</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">clip</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">commongp</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">VectorCompoundGP</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">commongp</span><span class="p">)</span>
+
+        <span class="n">Ns</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ys</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">[(</span><span class="n">psl</span><span class="o">.</span><span class="n">N</span><span class="p">,</span> <span class="n">psl</span><span class="o">.</span><span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">psl</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">psls</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">VectorWoodburyKernel_varP</span><span class="p">(</span><span class="n">Ns</span><span class="p">,</span> <span class="n">commongp</span><span class="o">.</span><span class="n">F</span><span class="p">,</span> <span class="n">commongp</span><span class="o">.</span><span class="n">Phi</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">commongp</span><span class="p">,</span> <span class="s1">'index'</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">loglike</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span><span class="o">.</span><span class="n">make_kernelproduct</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ys</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">factors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">factors</span>
+            <span class="n">kterms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vsm</span><span class="o">.</span><span class="n">make_kernelterms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">)</span>
+
+            <span class="n">npsr</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">)</span>
+            <span class="n">ngp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">globalgp</span><span class="o">.</span><span class="n">Fs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="n">logdet_estimator</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">make_logdet_estimator</span><span class="p">(</span><span class="n">npsr</span> <span class="o">*</span> <span class="n">ngp</span><span class="p">,</span> <span class="n">detmatvecs</span><span class="p">,</span> <span class="n">detsamples</span><span class="p">,</span> <span class="n">clip</span><span class="p">)</span>
+            <span class="n">rndkey</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">loglike</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                <span class="n">terms</span> <span class="o">=</span> <span class="n">kterms</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+                <span class="n">p0</span><span class="p">,</span> <span class="n">FtNmy</span><span class="p">,</span> <span class="n">FtNmF</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">terms</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">terms</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">terms</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+
+                <span class="c1"># get Cholesky factors of orf and phi matrices</span>
+                <span class="n">orfcf</span><span class="p">,</span> <span class="n">phicf</span> <span class="o">=</span> <span class="n">factors</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+
+                <span class="c1"># compute log Phi (not needed for Gseries)</span>
+                <span class="n">ldP</span> <span class="o">=</span> <span class="p">(</span><span class="n">npsr</span> <span class="o">*</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">phicf</span><span class="p">[</span><span class="mi">0</span><span class="p">])))</span> <span class="o">+</span>
+                       <span class="n">ngp</span>  <span class="o">*</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">orfcf</span><span class="p">[</span><span class="mi">0</span><span class="p">]))))</span>
+
+                <span class="c1"># reconstruct the inverse matrices</span>
+                <span class="n">orfinv</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">orfcf</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">npsr</span><span class="p">))</span>
+                <span class="n">phiinv</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">phicf</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">ngp</span><span class="p">))</span>
+
+                <span class="c1"># define a preconditioner solve M^-1 y with block-diag M_i = FtNmF_i + orfinv[i,i] phi</span>
+                <span class="n">precf</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_factor</span><span class="p">(</span><span class="n">FtNmF</span> <span class="o">+</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">orfinv</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">phiinv</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">precond</span><span class="p">(</span><span class="n">FtNmy</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">precf</span><span class="p">,</span> <span class="n">FtNmy</span><span class="p">)</span>
+
+                <span class="c1"># define the application of Gamma^-1 x phi^-1 + FtNmF to a "vector" FtNmy (npsr, ngp)</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">matvec</span><span class="p">(</span><span class="n">FtNmy</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">orfcf</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">phicf</span><span class="p">,</span> <span class="n">FtNmy</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="o">+</span>
+                            <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">FtNmF</span> <span class="o">@</span> <span class="n">FtNmy</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">]))</span> <span class="c1"># matrix.jnp.einsum('kij,kj-&gt;ki', FtNmF, FtNmy))</span>
+
+                <span class="n">sol</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">cgsolve</span><span class="p">(</span><span class="n">matvec</span><span class="p">,</span> <span class="n">FtNmy</span><span class="p">,</span> <span class="n">M</span><span class="o">=</span><span class="n">precond</span><span class="p">,</span> <span class="n">maxiter</span><span class="o">=</span><span class="n">cgmaxiter</span><span class="p">)</span>
+
+                <span class="n">jnp</span><span class="p">,</span> <span class="n">jspa</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jsp</span><span class="o">.</span><span class="n">linalg</span>
+
+                <span class="k">if</span> <span class="n">make_logdet</span> <span class="o">==</span> <span class="s1">'G-series'</span><span class="p">:</span>
+                    <span class="c1"># expand in G</span>
+                    <span class="c1"># log |Phi| = m log |Gamma^-1| + n log |phi^-1| + sum_i Gamma_ii Tr (phi G_i)</span>
+                    <span class="c1">#                                                 - 1/2 sum_i Gamma_ii^2 Tr (phi G_i)^2</span>
+                    <span class="c1">#                                                 + 1/3 sum_i Gamma_ii^3 Tr (phi G_i)^3</span>
+                    <span class="c1"># furthermore the first term cancels with ldP, so ldP not needed</span>
+
+                    <span class="n">phiG</span> <span class="o">=</span> <span class="n">phicf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="p">(</span><span class="n">phicf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">@</span> <span class="n">FtNmF</span><span class="p">)</span>
+                    <span class="n">orfdiag</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">orfcf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">orfcf</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                    <span class="n">logdet</span> <span class="o">=</span> <span class="p">(</span><span class="n">orfdiag</span> <span class="o">@</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">phiG</span><span class="p">,</span> <span class="n">axis1</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">axis2</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+                            <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">orfdiag</span><span class="o">**</span><span class="mi">2</span> <span class="o">@</span> <span class="n">jax</span><span class="o">.</span><span class="n">numpy</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">phiG</span> <span class="o">@</span> <span class="n">phiG</span><span class="p">,</span> <span class="n">axis1</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">axis2</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+                            <span class="o">+</span><span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="mf">3.0</span><span class="p">)</span> <span class="o">*</span> <span class="n">orfdiag</span><span class="o">**</span><span class="mi">3</span> <span class="o">@</span> <span class="n">jax</span><span class="o">.</span><span class="n">numpy</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">phiG</span> <span class="o">@</span> <span class="n">phiG</span> <span class="o">@</span> <span class="n">phiG</span><span class="p">,</span> <span class="n">axis1</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">axis2</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+
+                    <span class="k">return</span> <span class="n">p0</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">FtNmy</span> <span class="o">*</span> <span class="n">sol</span><span class="p">)</span> <span class="o">-</span> <span class="n">logdet</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">make_logdet</span> <span class="o">==</span> <span class="s1">'D-series'</span><span class="p">:</span>
+                    <span class="c1"># let Phi = D + B with D diagonal</span>
+                    <span class="c1"># then log |D + B| = log |D| - 1/2 Tr((D^-1 B)^2) + 1/3 Tr((D^-1 B)^3) - ...</span>
+                    <span class="c1"># (first order Tr(D^-1 B) vanishes)</span>
+
+                    <span class="n">cfD</span> <span class="o">=</span> <span class="n">jspa</span><span class="o">.</span><span class="n">cho_factor</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">orfinv</span><span class="p">)[:,</span><span class="kc">None</span><span class="p">,</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">phiinv</span><span class="p">[</span><span class="kc">None</span><span class="p">,:,:]</span> <span class="o">+</span> <span class="n">FtNmF</span><span class="p">)</span>
+                    <span class="n">i1</span><span class="p">,</span> <span class="n">i2</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">diag_indices</span><span class="p">(</span><span class="n">ngp</span><span class="p">,</span> <span class="n">ndim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="n">logD</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">cfD</span><span class="p">[</span><span class="mi">0</span><span class="p">][:,</span> <span class="n">i1</span><span class="p">,</span> <span class="n">i2</span><span class="p">])))</span>
+
+                    <span class="n">E</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="k">lambda</span> <span class="n">c</span><span class="p">,</span> <span class="n">m</span><span class="p">:</span> <span class="n">jspa</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">((</span><span class="n">c</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span> <span class="n">m</span><span class="p">),</span> <span class="n">in_axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="kc">None</span><span class="p">))(</span><span class="n">cfD</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">phiinv</span><span class="p">)</span>
+
+                    <span class="n">traces</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">'nij,mji-&gt;nm'</span><span class="p">,</span> <span class="n">E</span><span class="p">,</span> <span class="n">E</span><span class="p">)</span>
+                    <span class="n">gamma_prod</span> <span class="o">=</span> <span class="n">orfinv</span> <span class="o">*</span> <span class="n">orfinv</span><span class="o">.</span><span class="n">T</span>
+                    <span class="n">off_diag_mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">npsr</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+
+                    <span class="n">traces3</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">'aij,bjk,ckl-&gt;abc'</span><span class="p">,</span> <span class="n">E</span><span class="p">,</span> <span class="n">E</span><span class="p">,</span> <span class="n">E</span><span class="p">)</span>
+                    <span class="n">gamma_prod3</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">'ij,jk,ki-&gt;ijk'</span><span class="p">,</span> <span class="n">orfinv</span><span class="p">,</span> <span class="n">orfinv</span><span class="p">,</span> <span class="n">orfinv</span><span class="p">)</span>
+                    <span class="n">i_idx</span><span class="p">,</span> <span class="n">j_idx</span><span class="p">,</span> <span class="n">k_idx</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">npsr</span><span class="p">),</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">npsr</span><span class="p">),</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">npsr</span><span class="p">),</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">"ij"</span><span class="p">)</span>
+                    <span class="n">off_diag_mask3</span> <span class="o">=</span> <span class="p">(</span><span class="n">i_idx</span> <span class="o">!=</span> <span class="n">j_idx</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">j_idx</span> <span class="o">!=</span> <span class="n">k_idx</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">k_idx</span> <span class="o">!=</span> <span class="n">i_idx</span><span class="p">)</span>
+
+                    <span class="n">logdet</span> <span class="o">=</span> <span class="n">logD</span> <span class="o">-</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">gamma_prod</span> <span class="o">*</span> <span class="n">traces</span> <span class="o">*</span> <span class="n">off_diag_mask</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="mf">3.0</span><span class="p">)</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">gamma_prod3</span> <span class="o">*</span> <span class="n">traces3</span> <span class="o">*</span> <span class="n">off_diag_mask3</span><span class="p">)</span>
+
+                    <span class="k">return</span> <span class="n">p0</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">FtNmy</span> <span class="o">*</span> <span class="n">sol</span><span class="p">)</span> <span class="o">-</span> <span class="n">ldP</span> <span class="o">-</span> <span class="n">logdet</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">make_logdet</span> <span class="o">==</span> <span class="s1">'CG-MDL'</span><span class="p">:</span>
+                    <span class="c1"># Lanczos-Hutchinson for log |K + F Phi F^T| = log |K| + log |I + F^T K^{-1} F Phi|</span>
+
+                    <span class="k">def</span><span class="w"> </span><span class="nf">detmatvec</span><span class="p">(</span><span class="n">y</span><span class="p">):</span>
+                        <span class="n">Y</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">npsr</span><span class="p">,</span> <span class="n">ngp</span><span class="p">))</span>
+                        <span class="n">AY</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">'akl,al-&gt;ak'</span><span class="p">,</span>
+                                        <span class="n">FtNmF</span><span class="p">,</span> <span class="n">jnp</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">'ab,bc,cl-&gt;al'</span><span class="p">,</span>
+                                                          <span class="n">orfcf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">orfcf</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">jnp</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">'li,ij,aj-&gt;al'</span><span class="p">,</span>
+                                                                                           <span class="n">phicf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">phicf</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">Y</span><span class="p">)))</span> <span class="o">+</span> <span class="n">Y</span>
+                        <span class="k">return</span> <span class="n">AY</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">npsr</span> <span class="o">*</span> <span class="n">ngp</span><span class="p">)</span>
+
+                    <span class="n">logdet</span> <span class="o">=</span> <span class="n">logdet_estimator</span><span class="p">(</span><span class="n">detmatvec</span><span class="p">,</span> <span class="n">rndkey</span><span class="p">)</span>
+
+                    <span class="k">return</span> <span class="n">p0</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">FtNmy</span> <span class="o">*</span> <span class="n">sol</span><span class="p">)</span> <span class="o">-</span> <span class="n">logdet</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">make_logdet</span> <span class="o">==</span> <span class="s1">'CG-Woodbury'</span><span class="p">:</span>
+                    <span class="c1"># Lanczos-Hutchinson for Sigma with preconditioner</span>
+
+                    <span class="n">i1</span><span class="p">,</span> <span class="n">i2</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">diag_indices</span><span class="p">(</span><span class="n">precf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">ndim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="n">logpre</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">precf</span><span class="p">[</span><span class="mi">0</span><span class="p">][:,</span> <span class="n">i1</span><span class="p">,</span> <span class="n">i2</span><span class="p">])))</span>
+
+                    <span class="k">def</span><span class="w"> </span><span class="nf">prematvec</span><span class="p">(</span><span class="n">y</span><span class="p">):</span>
+                        <span class="n">Y</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">npsr</span><span class="p">,</span> <span class="n">ngp</span><span class="p">))</span>
+                        <span class="n">AY</span> <span class="o">=</span> <span class="n">jspa</span><span class="o">.</span><span class="n">cho_solve</span><span class="p">(</span><span class="n">precf</span><span class="p">,</span> <span class="n">matvec</span><span class="p">(</span><span class="n">Y</span><span class="p">))</span>
+                        <span class="k">return</span> <span class="n">AY</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">npsr</span> <span class="o">*</span> <span class="n">ngp</span><span class="p">)</span>
+
+                    <span class="n">logdet</span> <span class="o">=</span> <span class="n">logdet_estimator</span><span class="p">(</span><span class="n">prematvec</span><span class="p">,</span> <span class="n">rndkey</span><span class="p">)</span> <span class="o">+</span> <span class="n">logpre</span>
+
+                    <span class="k">return</span> <span class="n">p0</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">jnp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">FtNmy</span> <span class="o">*</span> <span class="n">sol</span><span class="p">)</span> <span class="o">-</span> <span class="n">ldP</span> <span class="o">-</span> <span class="n">logdet</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Unknown logdet method: </span><span class="si">{}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">make_logdet</span><span class="p">))</span>
+
+            <span class="n">loglike</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">kterms</span><span class="o">.</span><span class="n">params</span> <span class="o">+</span> <span class="n">factors</span><span class="o">.</span><span class="n">params</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">loglike</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, Michele Vallisneri.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.19.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

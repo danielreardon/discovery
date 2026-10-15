@@ -1,0 +1,1169 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>discovery.deterministic &#8212; Discovery 0.5 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=a95f357e85573c9b56d5" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../_static/scripts/fontawesome.js?digest=a95f357e85573c9b56d5"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5" />
+
+    <script src="../../_static/documentation_options.js?v=db78e746"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/discovery/deterministic';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../../_static/searchtools.js"></script>
+    <script src="../../_static/language_data.js"></script>
+    <script src="../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Discovery 0.5 documentation</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/curn_example.html">
+    How best to run a CURN model
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../guide/overview.html">
+    Overview
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../quickstart.html">
+    Quick Start
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/basic_likelihood.html">
+    Basic Likelihood
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../tutorials/params_example.html">
+    Fast likelihood evaluation with Params
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../tutorials/optimal_statistic.html">
+    Optimal Statistic
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../tutorials/simulations.html">
+    Simulations
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../components/noise_signals.html">
+    Noise and Signal Components
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../components/chromatic_noise.html">
+    Chromatic noise analyses
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../components/priors_spectra.html">
+    GP Priors and Spectra
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../components/delays.html">
+    Deterministic Delays
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../guide/data_model.html">
+    Data Model
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../guide/pulsar_data.html">
+    Pulsar Data
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../advanced/conditional_sampling.html">
+    Conditional Sampling of GP Coefficients
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../examples.html">
+    Examples
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/curn_example.html">
+    How best to run a CURN model
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../guide/overview.html">
+    Overview
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../quickstart.html">
+    Quick Start
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/basic_likelihood.html">
+    Basic Likelihood
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/params_example.html">
+    Fast likelihood evaluation with Params
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/optimal_statistic.html">
+    Optimal Statistic
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../tutorials/simulations.html">
+    Simulations
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../components/noise_signals.html">
+    Noise and Signal Components
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../components/chromatic_noise.html">
+    Chromatic noise analyses
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../components/priors_spectra.html">
+    GP Priors and Spectra
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../components/delays.html">
+    Deterministic Delays
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../guide/data_model.html">
+    Data Model
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../guide/pulsar_data.html">
+    Pulsar Data
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../advanced/conditional_sampling.html">
+    Conditional Sampling of GP Coefficients
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../examples.html">
+    Examples
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">discovery.deterministic</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for discovery.deterministic</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">matrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">const</span>
+
+
+<div class="viewcode-block" id="fpc_fast">
+<a class="viewcode-back" href="../../api/deterministic.html#discovery.deterministic.fpc_fast">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fpc_fast</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">gwtheta</span><span class="p">,</span> <span class="n">gwphi</span><span class="p">):</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">pos</span>
+
+    <span class="n">sin_phi</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">gwphi</span><span class="p">)</span>
+    <span class="n">cos_phi</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">gwphi</span><span class="p">)</span>
+    <span class="n">sin_theta</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">gwtheta</span><span class="p">)</span>
+    <span class="n">cos_theta</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">gwtheta</span><span class="p">)</span>
+
+    <span class="n">m_dot_pos</span> <span class="o">=</span> <span class="n">sin_phi</span> <span class="o">*</span> <span class="n">x</span> <span class="o">-</span> <span class="n">cos_phi</span> <span class="o">*</span> <span class="n">y</span>
+    <span class="n">n_dot_pos</span> <span class="o">=</span> <span class="o">-</span><span class="n">cos_theta</span> <span class="o">*</span> <span class="n">cos_phi</span> <span class="o">*</span> <span class="n">x</span> <span class="o">-</span> <span class="n">cos_theta</span> <span class="o">*</span> <span class="n">sin_phi</span> <span class="o">*</span> <span class="n">y</span> <span class="o">+</span> <span class="n">sin_theta</span> <span class="o">*</span> <span class="n">z</span>
+    <span class="n">omhat_dot_pos</span> <span class="o">=</span> <span class="o">-</span><span class="n">sin_theta</span> <span class="o">*</span> <span class="n">cos_phi</span> <span class="o">*</span> <span class="n">x</span> <span class="o">-</span> <span class="n">sin_theta</span> <span class="o">*</span> <span class="n">sin_phi</span> <span class="o">*</span> <span class="n">y</span> <span class="o">-</span> <span class="n">cos_theta</span> <span class="o">*</span> <span class="n">z</span>
+
+    <span class="n">denom</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="n">omhat_dot_pos</span>
+
+    <span class="n">fplus</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">m_dot_pos</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="n">n_dot_pos</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">denom</span>
+    <span class="n">fcross</span> <span class="o">=</span> <span class="p">(</span><span class="n">m_dot_pos</span> <span class="o">*</span> <span class="n">n_dot_pos</span><span class="p">)</span> <span class="o">/</span> <span class="n">denom</span>
+
+    <span class="k">return</span> <span class="n">fplus</span><span class="p">,</span> <span class="n">fcross</span></div>
+
+
+
+<div class="viewcode-block" id="makedelay_binary">
+<a class="viewcode-back" href="../../api/deterministic.html#discovery.deterministic.makedelay_binary">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">makedelay_binary</span><span class="p">(</span><span class="n">pulsarterm</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">delay_binary</span><span class="p">(</span><span class="n">toas</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">log10_h0</span><span class="p">,</span> <span class="n">log10_f0</span><span class="p">,</span> <span class="n">ra</span><span class="p">,</span> <span class="n">sindec</span><span class="p">,</span> <span class="n">cosinc</span><span class="p">,</span> <span class="n">psi</span><span class="p">,</span> <span class="n">phi_earth</span><span class="p">,</span> <span class="n">phi_psr</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""BBH residuals from Ellis et. al 2012, 2013"""</span>
+
+        <span class="n">h0</span> <span class="o">=</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_h0</span>
+        <span class="n">f0</span> <span class="o">=</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_f0</span>
+
+        <span class="n">dec</span><span class="p">,</span> <span class="n">inc</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arcsin</span><span class="p">(</span><span class="n">sindec</span><span class="p">),</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">cosinc</span><span class="p">)</span>
+
+        <span class="c1"># calculate antenna pattern (note: pos is pulsar sky position unit vector)</span>
+        <span class="n">fplus</span><span class="p">,</span> <span class="n">fcross</span> <span class="o">=</span> <span class="n">fpc_fast</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">-</span> <span class="n">dec</span><span class="p">,</span> <span class="n">ra</span><span class="p">)</span>  <span class="c1"># careful with dec -&gt; gwtheta conversion</span>
+
+        <span class="k">if</span> <span class="n">pulsarterm</span><span class="p">:</span>
+            <span class="n">phi_avg</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">phi_earth</span> <span class="o">+</span> <span class="n">phi_psr</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">phi_avg</span> <span class="o">=</span> <span class="n">phi_earth</span>
+
+        <span class="n">tref</span> <span class="o">=</span> <span class="mf">86400.0</span> <span class="o">*</span> <span class="mf">51544.5</span>  <span class="c1"># MJD J2000 in seconds</span>
+
+        <span class="n">phase</span> <span class="o">=</span> <span class="n">phi_avg</span> <span class="o">+</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">f0</span> <span class="o">*</span> <span class="p">(</span><span class="n">toas</span> <span class="o">-</span> <span class="n">tref</span><span class="p">)</span>
+        <span class="n">cphase</span><span class="p">,</span> <span class="n">sphase</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phase</span><span class="p">),</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phase</span><span class="p">)</span>
+
+        <span class="c1"># fix this for no pulsarterm</span>
+
+        <span class="k">if</span> <span class="n">pulsarterm</span><span class="p">:</span>
+            <span class="n">phi_diff</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">phi_earth</span> <span class="o">-</span> <span class="n">phi_psr</span><span class="p">)</span>
+            <span class="n">sin_diff</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi_diff</span><span class="p">)</span>
+
+            <span class="n">delta_sin</span> <span class="o">=</span>  <span class="mf">2.0</span> <span class="o">*</span> <span class="n">cphase</span> <span class="o">*</span> <span class="n">sin_diff</span>
+            <span class="n">delta_cos</span> <span class="o">=</span> <span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">sphase</span> <span class="o">*</span> <span class="n">sin_diff</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">delta_sin</span> <span class="o">=</span> <span class="n">sphase</span>
+            <span class="n">delta_cos</span> <span class="o">=</span> <span class="n">cphase</span>
+
+        <span class="n">At</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">inc</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">delta_sin</span>
+        <span class="n">Bt</span> <span class="o">=</span>  <span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">inc</span><span class="p">)</span> <span class="o">*</span> <span class="n">delta_cos</span>
+
+        <span class="n">alpha</span> <span class="o">=</span> <span class="n">h0</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">f0</span><span class="p">)</span>
+
+        <span class="c1"># calculate rplus and rcross</span>
+        <span class="n">rplus</span>  <span class="o">=</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span><span class="o">-</span><span class="n">At</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psi</span><span class="p">)</span> <span class="o">+</span> <span class="n">Bt</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psi</span><span class="p">))</span>
+        <span class="n">rcross</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span> <span class="n">At</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psi</span><span class="p">)</span> <span class="o">+</span> <span class="n">Bt</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psi</span><span class="p">))</span>
+
+        <span class="c1"># calculate residuals</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="o">-</span><span class="n">fplus</span> <span class="o">*</span> <span class="n">rplus</span> <span class="o">-</span> <span class="n">fcross</span> <span class="o">*</span> <span class="n">rcross</span>
+
+        <span class="k">return</span> <span class="n">res</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pulsarterm</span><span class="p">:</span>
+        <span class="n">delay_binary</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">delay_binary</span><span class="p">,</span> <span class="n">phi_psr</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">delay_binary</span></div>
+
+
+
+<div class="viewcode-block" id="makedelay_binary_phases">
+<a class="viewcode-back" href="../../api/deterministic.html#discovery.deterministic.makedelay_binary_phases">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">makedelay_binary_phases</span><span class="p">(</span><span class="n">pulsarterm</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Factory for computing cphase and sphase vectors from binary parameters."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">delay_binary_phases</span><span class="p">(</span><span class="n">toas</span><span class="p">,</span> <span class="n">log10_f0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Compute cosine and sine phase vectors.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            cphase: cosine phase vector (toas,)</span>
+<span class="sd">            sphase: sine phase vector (toas,)</span>
+<span class="sd">        """</span>
+        <span class="n">f0</span> <span class="o">=</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_f0</span>
+        <span class="n">tref</span> <span class="o">=</span> <span class="mf">86400.0</span> <span class="o">*</span> <span class="mf">51544.5</span>  <span class="c1"># MJD J2000 in seconds</span>
+
+        <span class="c1"># Compute base phase vectors from frequency evolution only</span>
+        <span class="n">phase_base</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">f0</span> <span class="o">*</span> <span class="p">(</span><span class="n">toas</span> <span class="o">-</span> <span class="n">tref</span><span class="p">)</span>
+        <span class="n">cphase</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phase_base</span><span class="p">)</span>
+        <span class="n">sphase</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phase_base</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">cphase</span><span class="p">,</span> <span class="n">sphase</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">delay_binary_phases</span></div>
+
+
+
+<div class="viewcode-block" id="makedelay_binary_coefficients">
+<a class="viewcode-back" href="../../api/deterministic.html#discovery.deterministic.makedelay_binary_coefficients">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">makedelay_binary_coefficients</span><span class="p">(</span><span class="n">pulsarterm</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Factory for computing coefficients to multiply phase vectors."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">delay_binary_coefficients</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">log10_h0</span><span class="p">,</span> <span class="n">log10_f0</span><span class="p">,</span> <span class="n">ra</span><span class="p">,</span> <span class="n">sindec</span><span class="p">,</span> <span class="n">cosinc</span><span class="p">,</span> <span class="n">psi</span><span class="p">,</span> <span class="n">phi_earth</span><span class="p">,</span> <span class="n">phi_psr</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Compute antenna pattern factors and phase coefficients.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            coeffs: dictionary with keys:</span>
+<span class="sd">                - 'fplus', 'fcross': antenna pattern factors</span>
+<span class="sd">                - 'rplus_coeff_c', 'rplus_coeff_s': coefficients for cphase/sphase in rplus</span>
+<span class="sd">                - 'rcross_coeff_c', 'rcross_coeff_s': coefficients for cphase/sphase in rcross</span>
+
+<span class="sd">            Full response is reconstructed as:</span>
+<span class="sd">            res = -fplus * (rplus_coeff_c * cphase + rplus_coeff_s * sphase)</span>
+<span class="sd">                  -fcross * (rcross_coeff_c * cphase + rcross_coeff_s * sphase)</span>
+<span class="sd">        """</span>
+        <span class="n">h0</span> <span class="o">=</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_h0</span>
+        <span class="n">f0</span> <span class="o">=</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_f0</span>
+
+        <span class="n">dec</span><span class="p">,</span> <span class="n">inc</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arcsin</span><span class="p">(</span><span class="n">sindec</span><span class="p">),</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">cosinc</span><span class="p">)</span>
+
+        <span class="c1"># calculate antenna pattern (note: pos is pulsar sky position unit vector)</span>
+        <span class="n">fplus</span><span class="p">,</span> <span class="n">fcross</span> <span class="o">=</span> <span class="n">fpc_fast</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">-</span> <span class="n">dec</span><span class="p">,</span> <span class="n">ra</span><span class="p">)</span>  <span class="c1"># careful with dec -&gt; gwtheta conversion</span>
+
+        <span class="c1"># Calculate coefficients that multiply cphase and sphase</span>
+        <span class="c1"># Apply addition theorem: cos(phi_avg + phase_base) = cos(phi_avg)*cos(phase_base) - sin(phi_avg)*sin(phase_base)</span>
+        <span class="c1"># Original cphase_orig = cos(phi_avg + phase_base)</span>
+        <span class="c1"># Original sphase_orig = sin(phi_avg + phase_base)</span>
+        <span class="k">if</span> <span class="n">pulsarterm</span><span class="p">:</span>
+            <span class="n">phi_avg</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">phi_earth</span> <span class="o">+</span> <span class="n">phi_psr</span><span class="p">)</span>
+            <span class="n">phi_diff</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">phi_earth</span> <span class="o">-</span> <span class="n">phi_psr</span><span class="p">)</span>
+
+            <span class="n">cos_avg</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phi_avg</span><span class="p">)</span>
+            <span class="n">sin_avg</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi_avg</span><span class="p">)</span>
+            <span class="n">sin_diff</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi_diff</span><span class="p">)</span>
+
+            <span class="c1"># cphase_orig = cos_avg * cphase - sin_avg * sphase</span>
+            <span class="c1"># sphase_orig = sin_avg * cphase + cos_avg * sphase</span>
+            <span class="c1"># delta_sin =  2.0 * cphase_orig * sin_diff</span>
+            <span class="c1"># delta_cos = -2.0 * sphase_orig * sin_diff</span>
+
+            <span class="n">c_coeff_sin</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">cos_avg</span> <span class="o">*</span> <span class="n">sin_diff</span>    <span class="c1"># coefficient for cphase in delta_sin</span>
+            <span class="n">s_coeff_sin</span> <span class="o">=</span> <span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">sin_avg</span> <span class="o">*</span> <span class="n">sin_diff</span>   <span class="c1"># coefficient for sphase in delta_sin</span>
+            <span class="n">c_coeff_cos</span> <span class="o">=</span> <span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">sin_avg</span> <span class="o">*</span> <span class="n">sin_diff</span>   <span class="c1"># coefficient for cphase in delta_cos</span>
+            <span class="n">s_coeff_cos</span> <span class="o">=</span> <span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">cos_avg</span> <span class="o">*</span> <span class="n">sin_diff</span>   <span class="c1"># coefficient for sphase in delta_cos</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># cphase_orig = cos(phi_earth + phase_base) = cos(phi_earth)*cphase - sin(phi_earth)*sphase</span>
+            <span class="c1"># sphase_orig = sin(phi_earth + phase_base) = sin(phi_earth)*cphase + cos(phi_earth)*sphase</span>
+            <span class="c1"># delta_sin = sphase_orig</span>
+            <span class="c1"># delta_cos = cphase_orig</span>
+            <span class="n">cos_earth</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phi_earth</span><span class="p">)</span>
+            <span class="n">sin_earth</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi_earth</span><span class="p">)</span>
+
+            <span class="n">c_coeff_sin</span> <span class="o">=</span> <span class="n">sin_earth</span>    <span class="c1"># coefficient for cphase in delta_sin</span>
+            <span class="n">s_coeff_sin</span> <span class="o">=</span> <span class="n">cos_earth</span>    <span class="c1"># coefficient for sphase in delta_sin</span>
+            <span class="n">c_coeff_cos</span> <span class="o">=</span> <span class="n">cos_earth</span>    <span class="c1"># coefficient for cphase in delta_cos</span>
+            <span class="n">s_coeff_cos</span> <span class="o">=</span> <span class="o">-</span><span class="n">sin_earth</span>   <span class="c1"># coefficient for sphase in delta_cos</span>
+
+        <span class="c1"># At = -1.0 * (1.0 + cos(inc)^2) * delta_sin</span>
+        <span class="c1"># Bt = 2.0 * cos(inc) * delta_cos</span>
+        <span class="n">cos_inc</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">inc</span><span class="p">)</span>
+        <span class="n">At_coeff_c</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">cos_inc</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">c_coeff_sin</span>
+        <span class="n">At_coeff_s</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">cos_inc</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">s_coeff_sin</span>
+        <span class="n">Bt_coeff_c</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">cos_inc</span> <span class="o">*</span> <span class="n">c_coeff_cos</span>
+        <span class="n">Bt_coeff_s</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">cos_inc</span> <span class="o">*</span> <span class="n">s_coeff_cos</span>
+
+        <span class="n">alpha</span> <span class="o">=</span> <span class="n">h0</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">f0</span><span class="p">)</span>
+        <span class="n">cos_2psi</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psi</span><span class="p">)</span>
+        <span class="n">sin_2psi</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psi</span><span class="p">)</span>
+
+        <span class="c1"># rplus = alpha * (-At * cos(2*psi) + Bt * sin(2*psi))</span>
+        <span class="c1"># rcross = alpha * (At * sin(2*psi) + Bt * cos(2*psi))</span>
+
+        <span class="c1"># Coefficient for cphase in rplus: alpha * (-At_coeff_c * cos(2*psi) + Bt_coeff_c * sin(2*psi))</span>
+        <span class="n">rplus_coeff_c</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span><span class="o">-</span><span class="n">At_coeff_c</span> <span class="o">*</span> <span class="n">cos_2psi</span> <span class="o">+</span> <span class="n">Bt_coeff_c</span> <span class="o">*</span> <span class="n">sin_2psi</span><span class="p">)</span>
+        <span class="c1"># Coefficient for sphase in rplus: alpha * (-At_coeff_s * cos(2*psi) + Bt_coeff_s * sin(2*psi))</span>
+        <span class="n">rplus_coeff_s</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span><span class="o">-</span><span class="n">At_coeff_s</span> <span class="o">*</span> <span class="n">cos_2psi</span> <span class="o">+</span> <span class="n">Bt_coeff_s</span> <span class="o">*</span> <span class="n">sin_2psi</span><span class="p">)</span>
+
+        <span class="c1"># Coefficient for cphase in rcross: alpha * (At_coeff_c * sin(2*psi) + Bt_coeff_c * cos(2*psi))</span>
+        <span class="n">rcross_coeff_c</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span><span class="n">At_coeff_c</span> <span class="o">*</span> <span class="n">sin_2psi</span> <span class="o">+</span> <span class="n">Bt_coeff_c</span> <span class="o">*</span> <span class="n">cos_2psi</span><span class="p">)</span>
+        <span class="c1"># Coefficient for sphase in rcross: alpha * (At_coeff_s * sin(2*psi) + Bt_coeff_s * cos(2*psi))</span>
+        <span class="n">rcross_coeff_s</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span><span class="n">At_coeff_s</span> <span class="o">*</span> <span class="n">sin_2psi</span> <span class="o">+</span> <span class="n">Bt_coeff_s</span> <span class="o">*</span> <span class="n">cos_2psi</span><span class="p">)</span>
+
+        <span class="n">Ac</span> <span class="o">=</span> <span class="o">-</span><span class="n">fplus</span> <span class="o">*</span> <span class="n">rplus_coeff_c</span> <span class="o">-</span> <span class="n">fcross</span> <span class="o">*</span> <span class="n">rcross_coeff_c</span>
+        <span class="n">As</span> <span class="o">=</span> <span class="o">-</span><span class="n">fplus</span> <span class="o">*</span> <span class="n">rplus_coeff_s</span> <span class="o">-</span> <span class="n">fcross</span> <span class="o">*</span> <span class="n">rcross_coeff_s</span>
+
+        <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">Ac</span><span class="p">,</span> <span class="n">As</span><span class="p">])</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pulsarterm</span><span class="p">:</span>
+        <span class="n">delay_binary_coefficients</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">delay_binary_coefficients</span><span class="p">,</span> <span class="n">phi_psr</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">delay_binary_coefficients</span></div>
+
+
+
+
+<div class="viewcode-block" id="cos2comp">
+<a class="viewcode-back" href="../../api/deterministic.html#discovery.deterministic.cos2comp">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">cos2comp</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">f0</span><span class="p">,</span> <span class="n">phi</span><span class="p">,</span> <span class="n">t0</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Project signal A * cos(2pi f t + phi) onto Fourier basis</span>
+<span class="sd">    cos(2pi k t/T), sin(2pi k t/T) for t in [t0, t0+T]."""</span>
+
+    <span class="n">T</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">df</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">Delta_omega</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="p">(</span><span class="n">f0</span> <span class="o">-</span> <span class="n">f</span><span class="p">[::</span><span class="mi">2</span><span class="p">])</span>
+    <span class="n">Sigma_omega</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="p">(</span><span class="n">f0</span> <span class="o">+</span> <span class="n">f</span><span class="p">[::</span><span class="mi">2</span><span class="p">])</span>
+
+    <span class="n">phase_Delta_start</span> <span class="o">=</span> <span class="n">phi</span> <span class="o">+</span> <span class="n">Delta_omega</span> <span class="o">*</span> <span class="n">t0</span>
+    <span class="n">phase_Delta_end</span>   <span class="o">=</span> <span class="n">phi</span> <span class="o">+</span> <span class="n">Delta_omega</span> <span class="o">*</span> <span class="p">(</span><span class="n">t0</span> <span class="o">+</span> <span class="n">T</span><span class="p">)</span>
+
+    <span class="n">phase_Sigma_start</span> <span class="o">=</span> <span class="n">phi</span> <span class="o">+</span> <span class="n">Sigma_omega</span> <span class="o">*</span> <span class="n">t0</span>
+    <span class="n">phase_Sigma_end</span>   <span class="o">=</span> <span class="n">phi</span> <span class="o">+</span> <span class="n">Sigma_omega</span> <span class="o">*</span> <span class="p">(</span><span class="n">t0</span> <span class="o">+</span> <span class="n">T</span><span class="p">)</span>
+
+    <span class="n">ck</span> <span class="o">=</span> <span class="p">(</span><span class="n">A</span> <span class="o">/</span> <span class="n">T</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span>
+        <span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phase_Delta_end</span><span class="p">)</span> <span class="o">-</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phase_Delta_start</span><span class="p">))</span> <span class="o">/</span> <span class="n">Delta_omega</span> <span class="o">+</span>
+        <span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phase_Sigma_end</span><span class="p">)</span> <span class="o">-</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phase_Sigma_start</span><span class="p">))</span> <span class="o">/</span> <span class="n">Sigma_omega</span>
+    <span class="p">)</span>
+
+    <span class="n">sk</span> <span class="o">=</span> <span class="p">(</span><span class="n">A</span> <span class="o">/</span> <span class="n">T</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span>
+        <span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phase_Delta_end</span><span class="p">)</span> <span class="o">-</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phase_Delta_start</span><span class="p">))</span> <span class="o">/</span> <span class="n">Delta_omega</span> <span class="o">-</span>
+        <span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phase_Sigma_end</span><span class="p">)</span> <span class="o">-</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phase_Sigma_start</span><span class="p">))</span> <span class="o">/</span> <span class="n">Sigma_omega</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">stack</span><span class="p">((</span><span class="n">sk</span><span class="p">,</span> <span class="n">ck</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="makefourier_binary">
+<a class="viewcode-back" href="../../api/deterministic.html#discovery.deterministic.makefourier_binary">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">makefourier_binary</span><span class="p">(</span><span class="n">pulsarterm</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fourier_binary</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">mintoa</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">log10_h0</span><span class="p">,</span> <span class="n">log10_f0</span><span class="p">,</span> <span class="n">ra</span><span class="p">,</span> <span class="n">sindec</span><span class="p">,</span> <span class="n">cosinc</span><span class="p">,</span> <span class="n">psi</span><span class="p">,</span> <span class="n">phi_earth</span><span class="p">,</span> <span class="n">phi_psr</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""BBH residuals from Ellis et. al 2012, 2013"""</span>
+
+        <span class="n">h0</span> <span class="o">=</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_h0</span>
+        <span class="n">f0</span> <span class="o">=</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_f0</span>
+
+        <span class="n">dec</span><span class="p">,</span> <span class="n">inc</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arcsin</span><span class="p">(</span><span class="n">sindec</span><span class="p">),</span> <span class="n">jnp</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">cosinc</span><span class="p">)</span>
+
+        <span class="c1"># calculate antenna pattern (note: pos is pulsar sky position unit vector)</span>
+        <span class="n">fplus</span><span class="p">,</span> <span class="n">fcross</span> <span class="o">=</span> <span class="n">fpc_fast</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">-</span> <span class="n">dec</span><span class="p">,</span> <span class="n">ra</span><span class="p">)</span>  <span class="c1"># careful with dec -&gt; gwtheta conversion</span>
+
+        <span class="k">if</span> <span class="n">pulsarterm</span><span class="p">:</span>
+            <span class="n">phi_avg</span>  <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">phi_earth</span> <span class="o">+</span> <span class="n">phi_psr</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">phi_avg</span> <span class="o">=</span> <span class="n">phi_earth</span>
+
+        <span class="n">tref</span> <span class="o">=</span> <span class="mf">86400.0</span> <span class="o">*</span> <span class="mf">51544.5</span>  <span class="c1"># MJD J2000 in seconds</span>
+
+        <span class="n">cphase</span> <span class="o">=</span> <span class="n">cos2comp</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">f0</span><span class="p">,</span> <span class="n">phi_avg</span> <span class="o">-</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">f0</span> <span class="o">*</span> <span class="n">tref</span><span class="p">,</span> <span class="n">mintoa</span><span class="p">)</span>
+        <span class="n">sphase</span> <span class="o">=</span> <span class="n">cos2comp</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">f0</span><span class="p">,</span> <span class="n">phi_avg</span> <span class="o">-</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">f0</span> <span class="o">*</span> <span class="n">tref</span> <span class="o">-</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">jnp</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="n">mintoa</span><span class="p">)</span>
+
+        <span class="c1"># fix this for no pulsarterm</span>
+
+        <span class="k">if</span> <span class="n">pulsarterm</span><span class="p">:</span>
+            <span class="n">phi_diff</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">phi_earth</span> <span class="o">-</span> <span class="n">phi_psr</span><span class="p">)</span>
+            <span class="n">sin_diff</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi_diff</span><span class="p">)</span>
+
+            <span class="n">delta_sin</span> <span class="o">=</span>  <span class="mf">2.0</span> <span class="o">*</span> <span class="n">cphase</span> <span class="o">*</span> <span class="n">sin_diff</span>
+            <span class="n">delta_cos</span> <span class="o">=</span> <span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">sphase</span> <span class="o">*</span> <span class="n">sin_diff</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">delta_sin</span> <span class="o">=</span> <span class="n">sphase</span>
+            <span class="n">delta_cos</span> <span class="o">=</span> <span class="n">cphase</span>
+
+        <span class="n">At</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">inc</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">delta_sin</span>
+        <span class="n">Bt</span> <span class="o">=</span>  <span class="mf">2.0</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">inc</span><span class="p">)</span> <span class="o">*</span> <span class="n">delta_cos</span>
+
+        <span class="n">alpha</span> <span class="o">=</span> <span class="n">h0</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">f0</span><span class="p">)</span>
+
+        <span class="c1"># calculate rplus and rcross</span>
+        <span class="n">rplus</span>  <span class="o">=</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span><span class="o">-</span><span class="n">At</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psi</span><span class="p">)</span> <span class="o">+</span> <span class="n">Bt</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psi</span><span class="p">))</span>
+        <span class="n">rcross</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span> <span class="n">At</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psi</span><span class="p">)</span> <span class="o">+</span> <span class="n">Bt</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psi</span><span class="p">))</span>
+
+        <span class="c1"># calculate residuals</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="o">-</span><span class="n">fplus</span> <span class="o">*</span> <span class="n">rplus</span> <span class="o">-</span> <span class="n">fcross</span> <span class="o">*</span> <span class="n">rcross</span>
+
+        <span class="k">return</span> <span class="n">res</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pulsarterm</span><span class="p">:</span>
+        <span class="n">fourier_binary</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">fourier_binary</span><span class="p">,</span> <span class="n">phi_psr</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">fourier_binary</span></div>
+
+
+
+<div class="viewcode-block" id="chromatic_exponential">
+<a class="viewcode-back" href="../../api/deterministic.html#discovery.deterministic.chromatic_exponential">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">chromatic_exponential</span><span class="p">(</span><span class="n">psr</span><span class="p">,</span> <span class="n">fref</span><span class="o">=</span><span class="mf">1400.0</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">"""</span>
+<span class="sd">    Factory function for chromatic exponential delay model.</span>
+
+<span class="sd">    Creates a delay function that models chromatic exponential events (e.g., profile</span>
+<span class="sd">    state changes) with frequency-dependent amplitude scaling.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    psr : Pulsar</span>
+<span class="sd">        Pulsar object containing toas and freqs attributes</span>
+<span class="sd">    fref : float, optional</span>
+<span class="sd">        Reference frequency in MHz for normalization (default: 1400.0)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    delay : callable</span>
+<span class="sd">        Function with signature (t0, log10_Amp, log10_tau, sign_param, alpha) -&gt; ndarray</span>
+<span class="sd">        Computes chromatic exponential delay:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \Delta(t) = \pm A_0 \exp\left(-\frac{t - t_0}{\tau}\right) \left(\frac{f_{\text{ref}}}{f}\right)^\alpha H(t - t_0)</span>
+
+<span class="sd">        where :math:`H(t - t_0)` is the Heaviside step function.</span>
+<span class="sd">    """</span>
+    <span class="n">toas</span><span class="p">,</span> <span class="n">fnorm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnparray</span><span class="p">(</span><span class="n">psr</span><span class="o">.</span><span class="n">toas</span> <span class="o">/</span> <span class="n">const</span><span class="o">.</span><span class="n">day</span><span class="p">),</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnparray</span><span class="p">(</span><span class="n">fref</span> <span class="o">/</span> <span class="n">psr</span><span class="o">.</span><span class="n">freqs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">delay</span><span class="p">(</span><span class="n">t0</span><span class="p">,</span> <span class="n">log10_Amp</span><span class="p">,</span> <span class="n">log10_tau</span><span class="p">,</span> <span class="n">sign_param</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">"""</span>
+<span class="sd">        Compute chromatic exponential delay.</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \Delta(t) = \pm A_0 \exp\left(-\frac{t - t_0}{\tau}\right) \left(\frac{f_{\text{ref}}}{f}\right)^\alpha H(t - t_0)</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t0 : float</span>
+<span class="sd">            Event epoch :math:`t_0` in days (MJD)</span>
+<span class="sd">        log10_Amp : float</span>
+<span class="sd">            Log10 of amplitude :math:`A_0` in seconds</span>
+<span class="sd">        log10_tau : float</span>
+<span class="sd">            Log10 of exponential decay timescale :math:`\tau` in days</span>
+<span class="sd">        sign_param : float</span>
+<span class="sd">            Sign of the delay (positive or negative)</span>
+<span class="sd">        alpha : float</span>
+<span class="sd">            Chromatic index :math:`\alpha` (spectral index for frequency dependence)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        delay : ndarray</span>
+<span class="sd">            Array of timing residuals :math:`\Delta(t)` in seconds with shape matching psr.toas</span>
+<span class="sd">        """</span>
+        <span class="n">dt</span> <span class="o">=</span> <span class="n">toas</span> <span class="o">-</span> <span class="n">t0</span>
+        <span class="n">tau</span> <span class="o">=</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_tau</span>
+        <span class="n">amp</span> <span class="o">=</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_Amp</span>
+        <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">sign_param</span><span class="p">)</span> <span class="o">*</span> <span class="n">amp</span> <span class="o">*</span> <span class="n">fnorm</span><span class="o">**</span><span class="n">alpha</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">dt</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dt</span> <span class="o">/</span> <span class="n">tau</span><span class="p">),</span> <span class="mf">0.0</span> <span class="p">)</span>
+
+    <span class="n">delay</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">=</span> <span class="s2">"chromatic_exponential_delay"</span>
+    <span class="k">return</span> <span class="n">delay</span></div>
+
+
+
+<div class="viewcode-block" id="chromatic_annual">
+<a class="viewcode-back" href="../../api/deterministic.html#discovery.deterministic.chromatic_annual">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">chromatic_annual</span><span class="p">(</span><span class="n">psr</span><span class="p">,</span> <span class="n">fref</span><span class="o">=</span><span class="mf">1400.0</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">"""</span>
+<span class="sd">    Factory function for chromatic annual delay model.</span>
+
+<span class="sd">    Creates a delay function that models chromatic annual sinusoidal variations</span>
+<span class="sd">    (e.g., annual DM or scattering variations) with frequency-dependent amplitude scaling.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    psr : Pulsar</span>
+<span class="sd">        Pulsar object containing toas and freqs attributes</span>
+<span class="sd">    fref : float, optional</span>
+<span class="sd">        Reference frequency in MHz for normalization (default: 1400.0)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    delay : callable</span>
+<span class="sd">        Function with signature (log10_Amp, phase, alpha) -&gt; ndarray</span>
+<span class="sd">        Computes chromatic annual delay:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \Delta(t) = A_0 \sin(2\pi f_{\text{yr}} t + \phi) \left(\frac{f_{\text{ref}}}{f}\right)^\alpha</span>
+
+<span class="sd">        where :math:`f_{\text{yr}}` is the annual frequency (1/year).</span>
+<span class="sd">    """</span>
+    <span class="n">toas</span><span class="p">,</span> <span class="n">fnorm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnparray</span><span class="p">(</span><span class="n">psr</span><span class="o">.</span><span class="n">toas</span><span class="p">),</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnparray</span><span class="p">(</span><span class="n">fref</span> <span class="o">/</span> <span class="n">psr</span><span class="o">.</span><span class="n">freqs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">delay</span><span class="p">(</span><span class="n">log10_Amp</span><span class="p">,</span> <span class="n">phase</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">"""</span>
+<span class="sd">        Compute chromatic annual delay.</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \Delta(t) = A_0 \sin(2\pi f_{\text{yr}} t + \phi) \left(\frac{f_{\text{ref}}}{f}\right)^\alpha</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        log10_Amp : float</span>
+<span class="sd">            Log10 of amplitude :math:`A_0` in seconds</span>
+<span class="sd">        phase : float</span>
+<span class="sd">            Phase offset :math:`\phi` in radians</span>
+<span class="sd">        alpha : float</span>
+<span class="sd">            Chromatic index :math:`\alpha` (spectral index for frequency dependence)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        delay : ndarray</span>
+<span class="sd">            Array of timing residuals :math:`\Delta(t)` in seconds with shape matching psr.toas</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_Amp</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">jnp</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">const</span><span class="o">.</span><span class="n">fyr</span> <span class="o">*</span> <span class="n">toas</span> <span class="o">+</span> <span class="n">phase</span><span class="p">)</span> <span class="o">*</span> <span class="n">fnorm</span><span class="o">**</span><span class="n">alpha</span>
+
+    <span class="n">delay</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">=</span> <span class="s2">"chromatic_annual_delay"</span>
+    <span class="k">return</span> <span class="n">delay</span></div>
+
+
+
+<div class="viewcode-block" id="chromatic_gaussian">
+<a class="viewcode-back" href="../../api/deterministic.html#discovery.deterministic.chromatic_gaussian">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">chromatic_gaussian</span><span class="p">(</span><span class="n">psr</span><span class="p">,</span> <span class="n">fref</span><span class="o">=</span><span class="mf">1400.0</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">"""</span>
+<span class="sd">    Factory function for chromatic Gaussian delay model.</span>
+
+<span class="sd">    Creates a delay function that models chromatic Gaussian events (e.g., transient</span>
+<span class="sd">    DM variations, localized profile events) with frequency-dependent amplitude scaling.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    psr : Pulsar</span>
+<span class="sd">        Pulsar object containing toas and freqs attributes</span>
+<span class="sd">    fref : float, optional</span>
+<span class="sd">        Reference frequency in MHz for normalization (default: 1400.0)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    delay : callable</span>
+<span class="sd">        Function with signature (t0, log10_Amp, log10_sigma, sign_param, alpha) -&gt; ndarray</span>
+<span class="sd">        Computes chromatic Gaussian delay:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \Delta(t) = \pm A_0 \exp\left(-\frac{(t - t_0)^2}{2\sigma^2}\right) \left(\frac{f_{\text{ref}}}{f}\right)^\alpha</span>
+<span class="sd">    """</span>
+    <span class="n">toas</span><span class="p">,</span> <span class="n">fnorm</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnparray</span><span class="p">(</span><span class="n">psr</span><span class="o">.</span><span class="n">toas</span> <span class="o">/</span> <span class="n">const</span><span class="o">.</span><span class="n">day</span><span class="p">),</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnparray</span><span class="p">(</span><span class="n">fref</span> <span class="o">/</span> <span class="n">psr</span><span class="o">.</span><span class="n">freqs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">delay</span><span class="p">(</span><span class="n">t0</span><span class="p">,</span> <span class="n">log10_Amp</span><span class="p">,</span> <span class="n">log10_sigma</span><span class="p">,</span> <span class="n">sign_param</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">"""</span>
+<span class="sd">        Compute chromatic Gaussian delay.</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \Delta(t) = \pm A_0 \exp\left(-\frac{(t - t_0)^2}{2\sigma^2}\right) \left(\frac{f_{\text{ref}}}{f}\right)^\alpha</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t0 : float</span>
+<span class="sd">            Event epoch :math:`t_0` in days (MJD)</span>
+<span class="sd">        log10_Amp : float</span>
+<span class="sd">            Log10 of amplitude :math:`A_0` in seconds</span>
+<span class="sd">        log10_sigma : float</span>
+<span class="sd">            Log10 of Gaussian width :math:`\sigma` in days</span>
+<span class="sd">        sign_param : float</span>
+<span class="sd">            Sign of the delay (positive or negative)</span>
+<span class="sd">        alpha : float</span>
+<span class="sd">            Chromatic index :math:`\alpha` (spectral index for frequency dependence)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        delay : ndarray</span>
+<span class="sd">            Array of timing residuals :math:`\Delta(t)` in seconds with shape matching psr.toas</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">sign_param</span><span class="p">)</span> <span class="o">*</span> <span class="mi">10</span><span class="o">**</span><span class="n">log10_Amp</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">toas</span> <span class="o">-</span> <span class="n">t0</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="mi">10</span><span class="o">**</span><span class="n">log10_sigma</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span> <span class="o">*</span> <span class="n">fnorm</span><span class="o">**</span><span class="n">alpha</span>
+
+    <span class="n">delay</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">=</span> <span class="s2">"chromatic_gaussian_delay"</span>
+    <span class="k">return</span> <span class="n">delay</span></div>
+
+
+
+<div class="viewcode-block" id="orthometric_shapiro">
+<a class="viewcode-back" href="../../api/deterministic.html#discovery.deterministic.orthometric_shapiro">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">orthometric_shapiro</span><span class="p">(</span><span class="n">psr</span><span class="p">,</span> <span class="n">binphase</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">"""</span>
+<span class="sd">    Factory function for orthometric Shapiro delay model.</span>
+
+<span class="sd">    Creates a delay function that models Shapiro delay in binary pulsars using</span>
+<span class="sd">    the orthometric parameterization from Freire &amp; Wex (2010).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    psr : Pulsar</span>
+<span class="sd">        Pulsar object containing toas attribute</span>
+<span class="sd">    binphase : array-like</span>
+<span class="sd">        Binary orbital phase :math:`\Phi` at each TOA (same shape as psr.toas)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    delay : callable</span>
+<span class="sd">        Function with signature (h3, stig) -&gt; ndarray</span>
+<span class="sd">        Computes orthometric Shapiro delay (Equation 29 in Freire &amp; Wex 2010):</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \Delta_s = -\frac{2 h_3}{\zeta^3} \log(1 + \zeta^2 - 2 \zeta \sin\Phi)</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If binphase shape does not match psr.toas shape</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    Freire, P. C. C., &amp; Wex, N. (2010). The orthometric parametrization of the</span>
+<span class="sd">    Shapiro delay and an improved test of general relativity with binary pulsars.</span>
+<span class="sd">    MNRAS, 409(1), 199-212.</span>
+<span class="sd">    """</span>
+    <span class="n">toas</span><span class="p">,</span> <span class="n">binphase</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnparray</span><span class="p">(</span><span class="n">psr</span><span class="o">.</span><span class="n">toas</span> <span class="o">/</span> <span class="n">const</span><span class="o">.</span><span class="n">day</span><span class="p">),</span> <span class="n">matrix</span><span class="o">.</span><span class="n">jnparray</span><span class="p">(</span><span class="n">binphase</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">binphase</span><span class="p">)</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">toas</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Input binphase must have the same shape as toas"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">delay</span><span class="p">(</span><span class="n">h3</span><span class="p">,</span> <span class="n">stig</span><span class="p">):</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">"""</span>
+<span class="sd">        Compute orthometric Shapiro delay.</span>
+
+<span class="sd">        Implements Equation (29) from Freire &amp; Wex (2010):</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \Delta_s = -\frac{2 h_3}{\zeta^3} \log(1 + \zeta^2 - 2 \zeta \sin\Phi)</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        h3 : float</span>
+<span class="sd">            Orthometric amplitude parameter :math:`h_3` (related to companion mass and inclination)</span>
+<span class="sd">        stig : float</span>
+<span class="sd">            Orthometric shape parameter :math:`\zeta` (related to orbital inclination)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        delay : ndarray</span>
+<span class="sd">            Shapiro timing delay :math:`\Delta_s` in seconds with shape matching psr.toas</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="o">-</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">h3</span> <span class="o">/</span> <span class="n">stig</span><span class="o">**</span><span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">stig</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">stig</span> <span class="o">*</span> <span class="n">jnp</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">binphase</span><span class="p">))</span>
+
+    <span class="n">delay</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">=</span> <span class="s2">"orthometric_shapiro_delay"</span>
+    <span class="k">return</span> <span class="n">delay</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=a95f357e85573c9b56d5"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=a95f357e85573c9b56d5"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, Michele Vallisneri.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.19.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>
