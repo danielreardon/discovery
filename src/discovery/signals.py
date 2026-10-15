@@ -1902,6 +1902,9 @@ def make_dmtimeinterpbasis(alpha=2.0, tndm=False, start_time=None, order=1):
 
     return dmbasis
 
+# Range psd2cov clips the PSD to (evaluated with df = 1)
+PSD2COV_CLIP = (1e-18, 1e4)
+
 def psd2cov(psdfunc, components, T, oversample=4, fmax_factor=1, cutoff=4):
     if not (isinstance(oversample, int) and isinstance(fmax_factor, int)):
         raise ValueError('psd2cov: oversample and fmax_factor must be integers.')
@@ -1928,9 +1931,7 @@ def psd2cov(psdfunc, components, T, oversample=4, fmax_factor=1, cutoff=4):
         fs = matrix.jnparray(freqs)
 
     def covmat(*args):
-        clip_max = 1e4
-        clip_min = 1e-18
-        psd_hi = jnp.clip(psdfunc(fs, 1.0, *args[2:]), clip_min, clip_max)
+        psd_hi = jnp.clip(psdfunc(fs, 1.0, *args[2:]), *PSD2COV_CLIP)
         
         if cutoff is not None:
             psd = jnp.concatenate([jnp.full((i_cutoff,), psd_hi[0], dtype=psd_hi.dtype), psd_hi])
@@ -1947,45 +1948,146 @@ def psd2cov(psdfunc, components, T, oversample=4, fmax_factor=1, cutoff=4):
 
     return covmat
 
-def makegp_fftcov(psr, prior, components, T=None, t0=None, order=1, oversample=4, fmax_factor=1, cutoff=4, fourierbasis=None, common=[], name='fftcovGP', noisedict={}):
-    T = getspan(psr) if T is None else T
-    return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff), components, T=T,
-                          fourierbasis=(make_timeinterpbasis(start_time=t0, order=order) if fourierbasis is None else fourierbasis),
-                          common=common, name=name, noisedict=noisedict)
+# How makegp_fftcov, makegp_fftcov_dm and makegp_fftcov_chrom represent the Toeplitz prior Phi of psd2cov,
+# read when a GP is built and overridden per GP by method=:
+# 'root': basis Bmat @ R.T with a unit prior, where Phi = R.T @ R (K x K, from make_rootbasis);
+# 'inverse': Phi from psd2cov, inverted.
+FFTCOV_METHOD = 'root'
 
-def makegp_fftcov_dm(psr, prior, components, T=None, t0=None, order=1, oversample=4, fmax_factor=1, cutoff=4, common=[], name='dm_gp', fref=1400.0, noisedict={}):
+def psd2factor(components, T, oversample=4, fmax_factor=1, cutoff=4):
+    """Real Fourier factor of the covariance psd2cov builds.
+
+    Returns ``(f, w, C)``: frequencies ``f`` (Hz), weights ``w`` and the cos and sin columns ``C``
+    (components x len(f)) on the knots, such that ``C @ diag(w * psd) @ C.T``, with
+    ``psd = jnp.clip(psdfunc(f, 1.0, ...), *PSD2COV_CLIP)``, equals ``psd2cov(psdfunc, components, T,
+    oversample, fmax_factor, cutoff)(...)`` for a ``psdfunc`` evaluated elementwise in ``f``. The bins below the
+    cutoff take the frequency of the first kept bin, ``freqs[ceil(oversample / cutoff)]``.
+    """
+    if not (isinstance(oversample, int) and isinstance(fmax_factor, int)):
+        raise ValueError('psd2factor: oversample and fmax_factor must be integers.')
+    if components % 2 == 0:
+        raise ValueError('psd2factor: number of components must be odd.')
+    if cutoff is not None and not isinstance(cutoff, int):
+        raise ValueError('psd2factor: cutoff must be None or an integer.')
+    if isinstance(cutoff, int) and cutoff > oversample:
+        raise ValueError('psd2factor: cutoff must be <= oversample.')
+    if oversample < 2:
+        raise ValueError('psd2factor: oversample must be at least 2.')
+    if components < 3:
+        raise ValueError('psd2factor: number of components must be at least 3.')
+
+    scaled_components = (components - 1) * fmax_factor + 1
+    n_freqs = int((scaled_components - 1) / 2 * oversample + 1)
+    freqs = np.linspace(0, (scaled_components - 1) / T / 2, n_freqs)
+    df = 1 / T / oversample
+    L = 2 * (n_freqs - 1)
+
+    k = np.arange(n_freqs)
+    fk = freqs if cutoff is None else freqs[np.maximum(k, int(np.ceil(oversample / cutoff)))]
+    edge = (k == 0) | (k == n_freqs - 1)
+    w = np.where(edge, df / 2, df)
+    theta = 2 * np.pi * np.outer(np.arange(components) * fmax_factor, k) / L
+
+    C = np.concatenate([np.cos(theta), np.sin(theta[:, ~edge])], axis=1)
+    return np.concatenate([fk, fk[~edge]]), np.concatenate([w, w[~edge]]), C
+
+def unitprior(f, df):
+    return jnp.ones_like(f)
+
+def make_rootbasis(timeinterpbasis, psdfunc, oversample=4, fmax_factor=1, cutoff=4):
+    """Basis ``Bmat @ R.T`` for a unit prior, with ``R.T @ R`` equal to the covariance of :func:`psd2cov`.
+
+    ``R`` (K x K) is the triangular factor, with a positive diagonal, of the QR of ``(C * sqrt(w * psd)).T``, with
+    ``f, w, C`` from :func:`psd2factor` and ``psd = jnp.clip(psdfunc(f, 1.0, ...), *PSD2COV_CLIP)``; ``psdfunc``
+    must be elementwise in ``f``. The basis is a function of the positional parameters of the time-interpolation
+    basis (if any) followed by those of ``psdfunc``; keyword-only parameters keep their defaults or bound values. The GP's coefficients are then
+    whitened coordinates ``z ~ N(0, I)``, with the process at the TOAs given by ``Bmat @ R.T @ z``; they are not
+    amplitudes at the knots, and a realisation needs the basis evaluated at the same parameters.
+    """
+    positional = (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    psdparams = [p.replace(kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=inspect.Parameter.empty)
+                 for name, p in inspect.signature(psdfunc).parameters.items()
+                 if name not in ('f', 'df') and p.kind in positional]
+    if any(p.annotation == typing.Sequence for p in psdparams):
+        raise ValueError('make_rootbasis: psdfunc must be elementwise in f, without vector parameters.')
+
+    def rootbasis(psr, components, T=None):
+        T = getspan(psr) if T is None else T
+        t, dt, Bmat = timeinterpbasis(psr, components, T=T)
+        f, w, C = (matrix.jnparray(a) for a in psd2factor(components, T, oversample, fmax_factor, cutoff))
+
+        bparams = ([p.replace(kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, default=inspect.Parameter.empty)
+                    for p in inspect.signature(Bmat).parameters.values() if p.kind in positional]
+                   if callable(Bmat) else [])
+        clash = {p.name for p in bparams} & {p.name for p in psdparams}
+        if clash:
+            raise ValueError(f'make_rootbasis: basis and PSD parameters share names {sorted(clash)}.')
+        nb = len(bparams)
+        Bfixed = None if callable(Bmat) else matrix.jnparray(Bmat)
+
+        def fmat(*args):
+            psd = w * jnp.clip(psdfunc(f, 1.0, *args[nb:]), *PSD2COV_CLIP)
+            R = jnp.linalg.qr((C * jnp.sqrt(psd)).T, mode='r')
+            R = R * jnp.where(jnp.diag(R) < 0, -1.0, 1.0)[:, None]
+            return (Bmat(*args[:nb]) if callable(Bmat) else Bfixed) @ R.T
+        fmat.__signature__ = inspect.Signature(bparams + psdparams)
+
+        return t, dt, fmat
+
+    return rootbasis
+
+def _fftcov_gp(psr, prior, oversample, fmax_factor, cutoff, components, T=None, fourierbasis=None, method=None,
+               **kwargs):
+    method = FFTCOV_METHOD if method is None else method
+    if method == 'root':
+        return makegp_fourier(psr, unitprior, components, T=T,
+                              fourierbasis=make_rootbasis(fourierbasis, prior, oversample, fmax_factor, cutoff), **kwargs)
+    if method == 'inverse':
+        return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff), components, T=T,
+                              fourierbasis=fourierbasis, **kwargs)
+    raise ValueError(f"fftint method must be 'root' or 'inverse', not {method!r}.")
+
+def makegp_fftcov(psr, prior, components, T=None, t0=None, order=1, oversample=4, fmax_factor=1, cutoff=4, fourierbasis=None, common=[], name='fftcovGP', noisedict={}, method=None):
+    T = getspan(psr) if T is None else T
+    return _fftcov_gp(psr, prior, oversample, fmax_factor, cutoff, components, T=T,
+                          fourierbasis=(make_timeinterpbasis(start_time=t0, order=order) if fourierbasis is None else fourierbasis),
+                          common=common, name=name, noisedict=noisedict, method=method)
+
+def makegp_fftcov_dm(psr, prior, components, T=None, t0=None, order=1, oversample=4, fmax_factor=1, cutoff=4, common=[], name='dm_gp', fref=1400.0, noisedict={}, method=None):
     """FFT-covariance (time-domain) GP for DM noise (fixed chromatic index alpha = 2).
 
     DM counterpart of :func:`makegp_fftcov`: the achromatic time-interpolation basis
     is replaced by :func:`make_timeinterpbasis_dm`, scaling each row by the cold-plasma
     dispersion factor ``(fref / psr.freqs) ** 2``. ``prior`` is a power-spectral-density
-    function (e.g. :func:`powerlaw`) that is converted to a time-domain covariance via
+    function (e.g. :func:`powerlaw`) that defines the time-domain covariance of
     :func:`psd2cov`. For a free chromatic index use :func:`makegp_fftcov_chrom`.
 
     Passing a ``noisedict`` with all the prior hyperparameters (fixed hyperparameter analysis)
     returns a cached :class:`matrix.ConstantGP` instead of a :class:`matrix.VariableGP`.
+    ``method`` (``'root'`` or ``'inverse'``; ``None`` reads :data:`FFTCOV_METHOD`) selects how the
+    covariance enters the GP: as the basis of :func:`make_rootbasis` with a unit prior, or as the prior.
     """
     T = getspan(psr) if T is None else T
-    return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
-                          components, T=T, fourierbasis=make_timeinterpbasis_dm(start_time=t0, order=order, fref=fref), common=common, name=name, noisedict=noisedict)
+    return _fftcov_gp(psr, prior, oversample, fmax_factor, cutoff,
+                          components, T=T, fourierbasis=make_timeinterpbasis_dm(start_time=t0, order=order, fref=fref), common=common, name=name, noisedict=noisedict, method=method)
 
-def makegp_fftcov_chrom(psr, prior, components, T=None, t0=None, order=1, oversample=4, fmax_factor=1, cutoff=4, common=[], name='chrom_gp', fref=1400.0, noisedict={}):
+def makegp_fftcov_chrom(psr, prior, components, T=None, t0=None, order=1, oversample=4, fmax_factor=1, cutoff=4, common=[], name='chrom_gp', fref=1400.0, noisedict={}, method=None):
     """FFT-covariance (time-domain) GP for chromatic noise with a variable index.
 
     Chromatic counterpart of :func:`makegp_fftcov`: the achromatic time-interpolation
     basis is replaced by :func:`make_timeinterpbasis_chromatic`, scaling each row by
     ``(fref / psr.freqs) ** alpha`` with the chromatic index ``alpha`` a free parameter.
-    ``prior`` is a power-spectral-density function (e.g. :func:`powerlaw`) converted to a
-    time-domain covariance via :func:`psd2cov`. For the alpha = 2 (DM) case use
+    ``prior`` is a power-spectral-density function (e.g. :func:`powerlaw`) that defines the
+    time-domain covariance of :func:`psd2cov`. For the alpha = 2 (DM) case use
     :func:`makegp_fftcov_dm`.
 
     Passing a ``noisedict`` with all the prior hyperparameters and the chromatic index
     (fixed hyperparameter analysis) returns a cached :class:`matrix.ConstantGP` instead of a
-    :class:`matrix.VariableGP`.
+    :class:`matrix.VariableGP`. ``method`` is as in :func:`makegp_fftcov_dm`.
     """
     T = getspan(psr) if T is None else T
-    return makegp_fourier(psr, psd2cov(prior, components, T, oversample, fmax_factor, cutoff),
-                          components, T=T, fourierbasis=make_timeinterpbasis_chromatic(start_time=t0, order=order, fref=fref), common=common, name=name, noisedict=noisedict)
+    return _fftcov_gp(psr, prior, oversample, fmax_factor, cutoff,
+                          components, T=T, fourierbasis=make_timeinterpbasis_chromatic(start_time=t0, order=order, fref=fref), common=common, name=name, noisedict=noisedict, method=method)
 
 def makecommongp_fftcov(psrs, prior, components, T, t0=None, order=1, oversample=4, fmax_factor=1, cutoff=4, fourierbasis=None, common=[], vector=False, name='fftcovCommonGP'):
     return makecommongp_fourier(psrs, psd2cov(prior, components, T, oversample, fmax_factor, cutoff), components, T,

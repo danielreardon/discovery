@@ -168,6 +168,10 @@ way to estimate the dense (non-diagonal) covariance matrix from the power spectr
 - ``oversample``: FFT oversampling factor (default=3)
 - ``fmax_factor``: Maximum frequency factor (default=1)
 - ``cutoff``: Eigenvalue cutoff for dimensionality reduction
+- ``method`` (single-pulsar ``makegp_fftcov*`` only): ``'root'`` (the default,
+  ``signals.FFTCOV_METHOD``) factors the covariance as :math:`\Phi = R^T R` and builds the GP
+  from the basis :math:`B R^T` with a unit prior; ``'inverse'`` uses :math:`\Phi` as the prior.
+  The common and global GPs use :math:`\Phi`.
 
 The FFTCov approach computes the time-domain covariance function from the PSD via inverse FFT,
 then uses time-interpolated basis functions to construct the GP efficiently.

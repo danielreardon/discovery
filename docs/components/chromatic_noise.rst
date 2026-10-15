@@ -647,6 +647,15 @@ turns a power law into a time-domain GP — the node spacing of the interpolatio
 the lag spacing of the covariance are both :math:`T/(N-1)`, so they line up by
 construction.
 
+The single-pulsar factories do not invert this matrix by default. With
+``method='root'`` (``signals.FFTCOV_METHOD``), :func:`~discovery.signals.make_rootbasis`
+factors it as :math:`\Phi = R^T R`, with :math:`R` the :math:`N \times N` triangular factor of
+a QR decomposition of its real Fourier factor (:func:`~discovery.signals.psd2factor`), and the
+GP uses the basis :math:`B R^T` with a unit prior. The coefficients are then whitened
+coordinates, not amplitudes at the nodes: the process at the TOAs is the basis, evaluated at
+the same hyperparameters, times the coefficients. ``method='inverse'`` uses :math:`\Phi` as
+the prior.
+
 .. plot::
    :include-source:
 

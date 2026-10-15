@@ -159,29 +159,42 @@ def test_make_dmtimeinterpbasis_deprecated(psr):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_makegp_fftcov_dm(psr):
+@pytest.mark.parametrize("method", ["inverse", "root"])
+def test_makegp_fftcov_dm(psr, method):
     """makegp_fftcov_dm builds a DM GP with the expected name and parameters."""
-    gp = signals.makegp_fftcov_dm(psr, signals.powerlaw, components=5)
+    gp = signals.makegp_fftcov_dm(psr, signals.powerlaw, components=5, method=method)
+    psd = sorted([f"{psr.name}_dm_gp_log10_A", f"{psr.name}_dm_gp_gamma"])
     assert gp.gpname == "dm_gp"
-    assert np.asarray(gp.F).shape[0] == len(psr.toas)
-    # fixed chromatic index -> static design matrix, no alpha parameter
-    assert not callable(gp.F)
-    assert sorted(gp.Phi.params) == sorted(
-        [f"{psr.name}_dm_gp_log10_A", f"{psr.name}_dm_gp_gamma"]
-    )
-    # default name resolves against the standard DM-GP priors
-    for par in gp.Phi.params:
+    if method == 'inverse':
+        # fixed chromatic index -> static design matrix, no alpha parameter
+        assert not callable(gp.F)
+        assert np.asarray(gp.F).shape == (len(psr.toas), 5)
+        assert sorted(gp.Phi.params) == psd
+    else:
+        # the PSD enters the basis, so the design matrix is callable in it alone
+        assert callable(gp.F)
+        assert sorted(gp.F.params) == psd and gp.Phi.params == []
+        p = {f"{psr.name}_dm_gp_log10_A": -13.0, f"{psr.name}_dm_gp_gamma": 3.0}
+        assert np.asarray(gp.F(p)).shape == (len(psr.toas), 5)
+        assert np.all(np.asarray(gp.Phi.getN(p)) == 1.0)
+    # default name resolves against the standard DM-GP priors, wherever the parameter sits
+    allpars = list(gp.Phi.params) + (list(gp.F.params) if callable(gp.F) else [])
+    assert sorted(allpars) == psd
+    for par in allpars:
         assert prior.getprior_uniform(par) is not None
 
 
 @pytest.mark.unit
-def test_makegp_fftcov_chrom(psr):
+@pytest.mark.parametrize("method", ["inverse", "root"])
+def test_makegp_fftcov_chrom(psr, method):
     """makegp_fftcov_chrom builds a chromatic GP with a free alpha parameter."""
-    gp = signals.makegp_fftcov_chrom(psr, signals.powerlaw, components=5)
+    gp = signals.makegp_fftcov_chrom(psr, signals.powerlaw, components=5, method=method)
     assert gp.gpname == "chrom_gp"
-    # variable chromatic index -> callable design matrix exposing alpha
+    # variable chromatic index -> callable design matrix exposing alpha (first, under 'root')
     assert callable(gp.F)
-    assert gp.F.params == [f"{psr.name}_chrom_gp_alpha"]
+    psd = [f"{psr.name}_chrom_gp_log10_A", f"{psr.name}_chrom_gp_gamma"]
+    assert gp.F.params == [f"{psr.name}_chrom_gp_alpha"] + (psd if method == 'root' else [])
+    assert sorted(gp.Phi.params) == ([] if method == 'root' else sorted(psd))
     # default name resolves against the standard chromatic-GP alpha prior
     assert prior.getprior_uniform(f"{psr.name}_chrom_gp_alpha") == [2.5, 14]
 
