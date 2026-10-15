@@ -381,10 +381,11 @@ def test_common_noise_refuses_a_chain_missing_profile_columns(j0030):
         mpta.common_noise([j0030], [df], fftInt=False, fd=False, noise_point='median')
 
 
-def test_common_noise_stacked_path_matches_the_global_path(j0030):
+@pytest.mark.parametrize("fftInt", [False, True])
+def test_common_noise_stacked_path_matches_the_global_path(j0030, fftInt):
     from discovery.models import mpta
     j0030.telescope = np.array(['meerkat'] * len(j0030.toas))
-    kw = dict(fftInt=False, fd=False, noise_point='median', fix_chrom_alpha=True)
+    kw = dict(fftInt=fftInt, fd=False, noise_point='median', fix_chrom_alpha=True)
     glob = mpta.common_noise([j0030], [_chain(j0030, 3, 2)], **kw)
     stack = mpta.common_noise([j0030], [_chain(j0030, 3, 2)], use_commongp=True, **kw)
     x = _point(glob)

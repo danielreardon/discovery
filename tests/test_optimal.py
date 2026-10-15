@@ -814,7 +814,7 @@ def test_two_d_gw_phi_is_rejected():
         ds.PulsarLikelihood([psr.residuals,
                              ds.makenoise_measurement(psr, psr.noisedict),
                              ds.makegp_timing(psr, svd=True),
-                             ds.makegp_fftcov(psr, ds.powerlaw, 21, T=T,
+                             ds.makegp_fftcov(psr, ds.powerlaw, 21, T=T, method='inverse',
                                               common=['gw_log10_A', 'gw_gamma'], name='gw')])
         for psr in psrs])
     o = OS(gbl)

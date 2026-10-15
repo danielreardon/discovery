@@ -1,4 +1,5 @@
 import numpy as np
+import functools
 import jax.numpy as jnp
 import re
 
@@ -716,7 +717,7 @@ def single_pulsar_noise(psr, fftint=True, max_cadence_days=14, Tspan=None, noise
     
     return m
 
-def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
+def _common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
                  psr_cadence_days=None,  # {psrname: cadence} overriding the PER-PULSAR GP cadence only; the common basis stays on max_cadence_days, since the common process is one signal sampled at the array's cadence
                  chrom_poly=True, fix_chrom_alpha=True, chrom_fref=1400.0, noise_point='median', hd=False, hd_fixed_gamma=False,
                  hd_components=None,  # HD Fourier bins; None -> common_components (i.e. tied to max_cadence_days)
@@ -1179,3 +1180,9 @@ def common_noise(psrs, chain_dfs, fftInt=True, max_cadence_days=14, Tspan=None,
         return likelihood.ArrayLikelihood(psls, commongp=cgp, globalgp=globalgp)
 
     return likelihood.GlobalLikelihood(psls, globalgp=globalgp)
+
+
+@functools.wraps(_common_noise)
+def common_noise(*args, **kwargs):
+    with signals.fftcov_method('inverse'):
+        return _common_noise(*args, **kwargs)

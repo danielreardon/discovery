@@ -116,28 +116,43 @@ def test_fourierbasis_band_alpha_scales(psr, fcenter):
 # FFT-covariance band GPs
 # ---------------------------------------------------------------------------
 
+def _expected_split(basis, psd, method):
+    """(F.params, sorted Phi.params) for an fftint GP under each method.
+
+    'inverse' keeps the PSD parameters on the dense prior; 'root' moves them into the
+    basis, after the basis's own parameters, and leaves a unit prior with none.
+    """
+    if method == 'root':
+        return list(basis) + list(psd), []
+    return list(basis), sorted(psd)
+
+
 @pytest.mark.unit
-def test_makegp_fftcov_band(psr):
+@pytest.mark.parametrize("method", ["inverse", "root"])
+def test_makegp_fftcov_band(psr, method):
     """makegp_fftcov_band builds a band GP parametrised by (fcenter, log10_bw)."""
-    gp = signals.makegp_fftcov_band(psr, signals.powerlaw, components=5)
+    gp = signals.makegp_fftcov_band(psr, signals.powerlaw, components=5, method=method)
     assert gp.gpname == "band_gp"
     assert callable(gp.F)
-    assert gp.F.params == [f"{psr.name}_band_gp_fcenter", f"{psr.name}_band_gp_log10_bw"]
-    assert sorted(gp.Phi.params) == sorted(
-        [f"{psr.name}_band_gp_log10_A", f"{psr.name}_band_gp_gamma"]
-    )
+    fparams, phiparams = _expected_split(
+        [f"{psr.name}_band_gp_fcenter", f"{psr.name}_band_gp_log10_bw"],
+        [f"{psr.name}_band_gp_log10_A", f"{psr.name}_band_gp_gamma"], method)
+    assert gp.F.params == fparams
+    assert sorted(gp.Phi.params) == phiparams
 
 
 @pytest.mark.unit
-def test_makegp_fftcov_band_alpha(psr):
+@pytest.mark.parametrize("method", ["inverse", "root"])
+def test_makegp_fftcov_band_alpha(psr, method):
     """The alpha variant additionally exposes a free chromatic index."""
-    gp = signals.makegp_fftcov_band_alpha(psr, signals.powerlaw, components=5)
+    gp = signals.makegp_fftcov_band_alpha(psr, signals.powerlaw, components=5, method=method)
     assert gp.gpname == "bandalpha_gp"
-    assert gp.F.params == [
-        f"{psr.name}_bandalpha_gp_fcenter",
-        f"{psr.name}_bandalpha_gp_log10_bw",
-        f"{psr.name}_bandalpha_gp_alpha",
-    ]
+    fparams, phiparams = _expected_split(
+        [f"{psr.name}_bandalpha_gp_fcenter", f"{psr.name}_bandalpha_gp_log10_bw",
+         f"{psr.name}_bandalpha_gp_alpha"],
+        [f"{psr.name}_bandalpha_gp_log10_A", f"{psr.name}_bandalpha_gp_gamma"], method)
+    assert gp.F.params == fparams
+    assert sorted(gp.Phi.params) == phiparams
 
 
 @pytest.mark.unit

@@ -22,6 +22,7 @@ The mean solar-wind density (``n_earth``) is off by default; it is expected to
 be fitted in the par file and marginalised with the timing model.
 """
 
+import functools
 import numpy as np
 import re
 import scipy.interpolate as si
@@ -1220,7 +1221,7 @@ def detect_ppta_components(psrname, columns):
     }
 
 
-def common_noise(psrs, chain_dfs, fftint=True, max_cadence_days=30, Tspan=None,
+def _common_noise(psrs, chain_dfs, fftint=True, max_cadence_days=30, Tspan=None,
                  chrom_poly=True, fix_chrom_alpha=True, chrom_fref=1400.0,
                  noise_point='median',
                  hd=False, hd_fixed_gamma=False, hd_components=None,
@@ -1449,3 +1450,9 @@ def _check_white_noise_names_match(psr, df, white_selection):
               f"{' ...' if len(orphans) > 4 else ''}. This rebuild splits the white "
               f"noise as white_selection={white_selection!r}.")
     return orphans
+
+
+@functools.wraps(_common_noise)
+def common_noise(*args, **kwargs):
+    with signals.fftcov_method('inverse'):
+        return _common_noise(*args, **kwargs)
